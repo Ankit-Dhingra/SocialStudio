@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: socialstudio-backend
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: AUTOMATION_TOKEN
+        value: change-me-in-local-dev
+      - key: START_WORKER
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false

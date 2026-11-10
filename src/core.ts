@@ -5,8 +5,19 @@ import { Queue } from 'bullmq';
 import { z } from 'zod';
 import { StoryboardSchema, type Storyboard } from './modules/contracts/storyboard.js';
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: null });
+const dbUrl = process.env.DATABASE_URL;
+const needsSsl = dbUrl?.includes('sslmode=require') || dbUrl?.includes('neon.tech') || dbUrl?.includes('supabase');
+
+export const pool = new Pool({
+  connectionString: dbUrl,
+  ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+});
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+export const connection = new Redis(redisUrl, {
+  maxRetriesPerRequest: null,
+  tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+});
 export const queue = new Queue('shorts', { connection });
 
 export { StoryboardSchema, type Storyboard };

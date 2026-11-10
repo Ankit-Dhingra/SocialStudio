@@ -42,6 +42,9 @@ const TOPIC_PRESETS = [
 
 const SCRIPT_PROMPT_TEMPLATE = `Write one complete Hinglish tech lesson for a 9:16 reel and short. Start with a concrete prediction. Trace one example with a labelled diagram, show the observed outcome, explain why it happened, and end with the practical rule. For each scene provide narration, the visible values and the phrase that triggers each change.`;
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const toApiUrl = (p) => (p && p.startsWith('http') ? p : `${API_BASE}${p || ''}`);
+
 function App() {
   const [videos, setVideos] = useState([]);
   const [mode, setMode] = useState('topic'); // 'script' | 'topic'
@@ -57,7 +60,7 @@ function App() {
 
   async function refresh() {
     try {
-      const res = await fetch('/api/videos');
+      const res = await fetch(toApiUrl('/api/videos'));
       if (res.ok) {
         const data = await res.json();
         setVideos(data);
@@ -80,7 +83,7 @@ function App() {
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(url, {
+      const res = await fetch(toApiUrl(url), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,7 +111,7 @@ function App() {
     setBusy(true);
     setError('');
     try {
-      const response = await fetch('/api/previews', {
+      const response = await fetch(toApiUrl('/api/previews'), {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'x-automation-token': token},
         body: inputKey,
@@ -391,7 +394,7 @@ function App() {
                       </button>
                     </div>
 
-                    <audio className="preview-audio-player" controls src={currentPreview.audioUrl} />
+                    <audio className="preview-audio-player" controls src={toApiUrl(currentPreview.audioUrl)} />
                     {currentPreview.storyboard.sourceBrief && (
                       <div className="preview-claim-box">
                         <strong>Source Claim:</strong> {currentPreview.storyboard.sourceBrief.claim}
@@ -581,7 +584,7 @@ function App() {
                       <video
                         controls
                         preload="metadata"
-                        src={activeVideo.media_path}
+                        src={toApiUrl(activeVideo.media_path)}
                         className="preview-video"
                       />
                     </div>

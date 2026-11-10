@@ -7,6 +7,7 @@ import cors from 'cors';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import fs from 'node:fs';
 import { z } from 'zod';
 import { pool, queue, connection } from './core.js';
 
@@ -247,12 +248,32 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
-const port = Number(process.env.API_PORT || 4000);
+const port = Number(process.env.PORT || process.env.API_PORT || 4000);
 export const server =
   process.env.NODE_ENV === 'test'
     ? null
     : app.listen(port, () => {
-        console.log(`🚀 TechContent Studio API running at http://localhost:${port}`);
+        console.log(`🚀 SocialStudio API running at http://localhost:${port}`);
+
+        // Auto-initialize DB schema if needed on startup
+        try {
+          const schemaPath = path.resolve('db/schema.sql');
+          if (fs.existsSync(schemaPath)) {
+            const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+            pool.query(schemaSql)
+              .then(() => console.log('✔ [DB] Schema verified.'))
+              .catch((err) => console.warn('[DB AutoInit Warning]:', err.message));
+          }
+        } catch (e: any) {
+          console.warn('[DB AutoInit Warning]:', e.message);
+        }
+
+        // In single-container cloud deployment, start the worker in-process
+        if (process.env.START_WORKER !== 'false') {
+          import('./worker.js')
+            .then(() => console.log('⚡ [Worker] Background BullMQ worker active in-process.'))
+            .catch((err) => console.error('❌ [Worker] Failed to start worker:', err));
+        }
       });
 
 export default app;
