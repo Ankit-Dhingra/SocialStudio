@@ -1,0 +1,7 @@
+{
+ "name":"TechContent MVP - Daily Queue Trigger",
+ "nodes":[
+  {"parameters":{"rule":{"interval":[{"field":"days","triggerAtHour":9}]}},"id":"daily","name":"Daily Schedule","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[250,300]},
+  {"parameters":{"method":"POST","url":"http://host.docker.internal:4000/api/videos","sendHeaders":true,"headerParameters":{"parameters":[{"name":"x-automation-token","value":"change-me-in-local-dev"}]},"sendBody":true,"specifyBody":"json","jsonBody":"={\"topic\":\"How does Node.js handle concurrent requests?\"}"},"id":"submit","name":"Queue educational Short","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[500,300]}
+ ],"connections":{"Daily Schedule":{"main":[[{"node":"Queue educational Short","type":"main","index":0}]]}},"settings":{"executionOrder":"v1"},"active":false
+}

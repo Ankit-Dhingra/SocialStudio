@@ -1,0 +1,7 @@
+{
+  "error": {
+    "message": "multipart: NextPart: EOF",
+    "type": "invalid_request_error",
+    "code": "invalid_multipart_form"
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "topic": "React state snapshots and updater queues",
+  "title": "Three increments, one click",
+  "hook": "Counter zero pe hai. Ek button dabaya, aur teen baar plus one kiya. Screen pe teen aayega?",
+  "learningObjective": "Predict the result of queued state updates",
+  "format": "short",
+  "estimatedDurationSec": 55,
+  "scenes": [
+    {
+      "id": "scene-1",
+      "sceneIndex": 0,
+      "type": "hook",
+      "narration": "Counter zero pe hai. Ek button dabaya, aur teen baar plus one kiya. Screen pe teen aayega?",
+      "onScreenText": "One click. Three updates.",
+      "technicalKeyPoint": "Predict the next count.",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "headline": "0 + three updates = ?",
+        "subtext": "What will the next render show?",
+        "badgeText": "REACT INTERNALS"
+      }
+    },
+    {
+      "id": "scene-2",
+      "sceneIndex": 1,
+      "type": "code",
+      "narration": "Ye teen lines ek hi click handler mein chalti hain. Har line mein count plus one likha hai. Guess kar liya? Jawab hai ek.",
+      "onScreenText": "Read the handler",
+      "technicalKeyPoint": "The handler sees count from this render.",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "filename": "Counter.jsx",
+        "code": "function handleClick() {\n  setCount(count + 1);\n  setCount(count + 1);\n  setCount(count + 1);\n}",
+        "highlightLines": [
+          2,
+          3,
+          4
+        ],
+        "explanationCallout": "Initial render: count = 0"
+      }
+    },
+    {
+      "id": "scene-3",
+      "sceneIndex": 2,
+      "type": "requestFlow",
+      "narration": "Kyun? Is render mein count zero hai. Pehli line zero plus one calculate karti hai. Baaki dono bhi usi zero ko padhti hain. React ko teen baar ek hi value mili. Agle render mein count ek dikhta hai.",
+      "onScreenText": "Trace the values",
+      "technicalKeyPoint": "All three replacements request 1.",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "title": "One render, one snapshot",
+        "steps": [
+          {
+            "label": "Render snapshot",
+            "description": "count = 0",
+            "cue": "count zero"
+          },
+          {
+            "label": "Queued replacements",
+            "description": "set 1  →  set 1  →  set 1",
+            "cue": "Pehli line"
+          },
+          {
+            "label": "Next render",
+            "description": "count = 1",
+            "cue": "Agle render"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-4",
+      "sceneIndex": 3,
+      "type": "requestFlow",
+      "narration": "Ab teeno calls mein updater function do. Pehle function ko zero mila, usne ek lautaya. Doosre ko wahi ek mila, usne do lautaya. Teesre ko do mila, usne teen lautaya.",
+      "onScreenText": "Replay the click",
+      "technicalKeyPoint": "Each updater receives the pending state.",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "title": "setCount(c => c + 1) × 3",
+        "steps": [
+          {
+            "label": "First updater",
+            "description": "0 + 1 = 1",
+            "cue": "Pehle function"
+          },
+          {
+            "label": "Second updater",
+            "description": "1 + 1 = 2",
+            "cue": "Doosre ko"
+          },
+          {
+            "label": "Third updater",
+            "description": "2 + 1 = 3",
+            "cue": "Teesre ko"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-5",
+      "sceneIndex": 4,
+      "type": "summary",
+      "narration": "Toh pehle example mein teenon ne zero padha, isliye jawab ek. Doosre mein har function ne pichhla result liya, isliye teen. Jab nayi state pichhli state se nikalti hai, updater function likho.",
+      "onScreenText": "Same click, different queue",
+      "technicalKeyPoint": "Use an updater when the next state depends on the pending state.",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "headline": "Why one became three",
+        "takeaways": [
+          "Three replacements → 1",
+          "Three increments → 3",
+          "Depends on pending state? Use an updater."
+        ]
+      }
+    }
+  ],
+  "sourceBrief": {
+    "url": "https://react.dev/learn/queueing-a-series-of-state-updates",
+    "claim": "Starting at zero in one click handler, three replacements using the captured count request 1. Three successive updater functions receive the pending results and yield 3."
+  }
+}

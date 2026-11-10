@@ -1,0 +1,121 @@
+{
+  "topic": "Conditional stock update with concurrent PostgreSQL buyers",
+  "title": "Prevent Overselling: PostgreSQL Conditional Stock Update Demo",
+  "hook": "Do you think two buyers can buy the last item at the same time? Let's see why it happens and how to stop it!",
+  "learningObjective": "Understand how to write a conditional UPDATE in PostgreSQL that returns affected rows and prevents overselling under concurrency.",
+  "targetAudience": "Final‑year CS students & junior developers (1‑4 years experience)",
+  "format": "short",
+  "estimatedDurationSec": 55,
+  "scenes": [
+    {
+      "id": "scene-0",
+      "sceneIndex": 0,
+      "type": "hook",
+      "narration": "Kya aapne kabhi dekha ki do buyers ek hi product ko ek saath kharidne ki koshish karte hain aur stock negative ho jata hai? Aaj is bug ko fix karte hain!",
+      "onScreenText": "Two buyers, one item? 😱",
+      "visualProps": {
+        "headline": "Two buyers, one item?",
+        "subtext": "Watch the fix"
+      },
+      "durationTargetSec": 6,
+      "technicalKeyPoint": "Concurrent purchases can oversell without a guard."
+    },
+    {
+      "id": "scene-1",
+      "sceneIndex": 1,
+      "type": "code",
+      "narration": "Is query mein condition aur stock ghatana ek saath hota hai. Item bayalees ka stock zero se zyada hai, tabhi ek ghatega. Returning clause batata hai kaunsi row badli.",
+      "onScreenText": "Conditional UPDATE",
+      "visualProps": {
+        "filename": "purchase.sql",
+        "code": "UPDATE items SET stock = stock - 1 WHERE id = 42 AND stock > 0 RETURNING stock;",
+        "highlightLines": [
+          1
+        ],
+        "explanationCallout": "Decrement only if stock > 0"
+      },
+      "durationTargetSec": 8,
+      "technicalKeyPoint": "WHERE stock > 0 ensures stock never goes negative."
+    },
+    {
+      "id": "scene-2",
+      "sceneIndex": 2,
+      "type": "requestFlow",
+      "narration": "Jab Buyer A request aata hai, DB stock 1 check karta hai, condition true, row update hoti hai, 1 row return hoti hai. Phir Buyer B aata hai, ab stock 0, condition false, 0 rows return.",
+      "onScreenText": "Flow of two purchases",
+      "visualProps": {
+        "title": "Concurrent Purchase Flow",
+        "steps": [
+          {
+            "label": "Buyer A request",
+            "description": "stock 1 → 0, UPDATE succeeds",
+            "cue": "Jab Buyer A request aata hai"
+          },
+          {
+            "label": "Buyer B request",
+            "description": "stock 0, condition fails, UPDATE 0 rows",
+            "cue": "Buyer B ke baad"
+          }
+        ]
+      },
+      "durationTargetSec": 10,
+      "technicalKeyPoint": "Second transaction sees the updated stock and fails safely."
+    },
+    {
+      "id": "scene-3",
+      "sceneIndex": 3,
+      "type": "requestFlow",
+      "narration": "Lekin dono queries saath aayen toh? PostgreSQL ke default Read Committed mode mein doosri update wait karti hai. Pehli commit hoti hai. Ab doosri query stock ki condition dobara check karti hai. Stock zero hai, isliye zero rows update hoti hain.",
+      "onScreenText": "What if both arrive together?",
+      "visualProps": {
+        "title": "Same row, two writers",
+        "steps": [
+          {
+            "label": "Buyer B waits",
+            "description": "Buyer A holds the row lock",
+            "cue": "wait karti"
+          },
+          {
+            "label": "A commits",
+            "description": "Committed stock = 0",
+            "cue": "Pehli commit"
+          },
+          {
+            "label": "B rechecks",
+            "description": "0 > 0 is false",
+            "cue": "dobara check"
+          }
+        ]
+      },
+      "durationTargetSec": 8,
+      "technicalKeyPoint": "Read Committed rechecks the row after waiting."
+    },
+    {
+      "id": "scene-4",
+      "sceneIndex": 4,
+      "type": "summary",
+      "narration": "Ek item tha, toh reservation sirf ek ko mili. Check aur decrement ek hi update mein rakho. Ek row badli toh reservation mili. Zero rows badli toh sold out. Order record aur stock update ko ek hi transaction mein commit karo.",
+      "onScreenText": "Key takeaway",
+      "visualProps": {
+        "headline": "One item, one reservation",
+        "takeaways": [
+          "1 row changed → reservation",
+          "0 rows changed → sold out",
+          "Commit the order and reservation together"
+        ]
+      },
+      "durationTargetSec": 7,
+      "technicalKeyPoint": "Confirm only after reservation and order commit."
+    }
+  ],
+  "hashtags": [
+    "#PostgreSQL",
+    "#SQL",
+    "#Concurrency",
+    "#Shorts"
+  ],
+  "sourceBrief": {
+    "url": "https://www.postgresql.org/docs/current/transaction-iso.html",
+    "claim": "At Read Committed, competing updates to the same row wait. After the first commits, PostgreSQL rechecks the WHERE condition against the updated row. With initial stock 1 the second conditional decrement changes zero rows."
+  }
+}

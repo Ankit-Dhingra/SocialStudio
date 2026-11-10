@@ -1,0 +1,132 @@
+{
+  "topic": "RAG retrieval and chunk boundaries",
+  "title": "Why the right chunk can still miss the answer",
+  "hook": "Policy PDF mein likha hai refund tees din tak milta hai. Lekin sale items pe refund milta hai kya? Dekho AI itna confident hoke bhi galat kaise bol sakta hai.",
+  "learningObjective": "Debug a missing condition by inspecting retrieved evidence",
+  "format": "short",
+  "estimatedDurationSec": 55,
+  "scenes": [
+    {
+      "id": "scene-1",
+      "sceneIndex": 0,
+      "type": "hook",
+      "narration": "Policy PDF mein likha hai refund tees din tak milta hai. Lekin sale items pe refund milta hai kya? Dekho AI itna confident hoke bhi galat kaise bol sakta hai.",
+      "onScreenText": "Can a sale item be refunded?",
+      "technicalKeyPoint": "Can a sale item be refunded?",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "headline": "Refund in 30 days?",
+        "subtext": "One line changes the answer.",
+        "badgeText": "RETRIEVAL"
+      }
+    },
+    {
+      "id": "scene-2",
+      "sceneIndex": 1,
+      "type": "code",
+      "narration": "Document ki do lines dekho. Pehli kehti hai refund tees din tak. Doosri kehti hai sale items final hain. Index banate waqt ye lines do alag chunks mein chali gayin. Chunk matlab document ka chhota hissa.",
+      "onScreenText": "The policy and its exception",
+      "technicalKeyPoint": "The policy and its exception",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "filename": "policy.txt",
+        "code": "[chunk A]\nRefunds within 30 days.\n\n[chunk B]\nSale items are final.",
+        "highlightLines": [
+          2,
+          5
+        ],
+        "explanationCallout": "The exception lives in the next chunk."
+      }
+    },
+    {
+      "id": "scene-3",
+      "sceneIndex": 2,
+      "type": "collection",
+      "narration": "Ab sawaal aaya. Search system relevant chunks rank karta hai. Maan lo top teen mein refund wali line aayi, sale ki exception nahi aayi. Model ko jo context mila usmein aadha rule tha. Galti answer likhne se pehle ho chuki thi.",
+      "onScreenText": "Inspect the retrieved passages",
+      "technicalKeyPoint": "Inspect the retrieved passages",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "title": "Which chunks reached the model?",
+        "items": [
+          {
+            "label": "A · Refund window",
+            "selected": true
+          },
+          {
+            "label": "B · Sale exception",
+            "selected": false
+          },
+          {
+            "label": "C · Return address",
+            "selected": true
+          },
+          {
+            "label": "D · Exchanges",
+            "selected": true
+          },
+          {
+            "label": "E · Warranty",
+            "selected": false
+          },
+          {
+            "label": "F · Shipping",
+            "selected": false
+          }
+        ],
+        "cue": "top teen",
+        "result": "Exception B is missing from the context."
+      }
+    },
+    {
+      "id": "scene-4",
+      "sceneIndex": 3,
+      "type": "requestFlow",
+      "narration": "Fix kaise test karein? Policy aur uski exception ko ek hi section mein rakho. Ya matched chunk ka agla hissa bhi lao. Wahi sawaal dobara chalao. Ab evidence mein dono lines hain, toh sale item ka answer hai no.",
+      "onScreenText": "Replay the same question",
+      "technicalKeyPoint": "Replay the same question",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "title": "Keep the rule with its exception",
+        "steps": [
+          {
+            "label": "Group the section",
+            "description": "Refund window + exception",
+            "cue": "ek hi section"
+          },
+          {
+            "label": "Retrieve again",
+            "description": "Inspect both lines",
+            "cue": "dobara"
+          },
+          {
+            "label": "Answer",
+            "description": "Sale items are final.",
+            "cue": "answer hai"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scene-5",
+      "sceneIndex": 4,
+      "type": "summary",
+      "narration": "RAG mein pehle search se evidence aata hai, phir model usse answer likhta hai. Galat jawab mile toh retrieved text kholo. Zaroori line gayab hai? Chunk boundary badlo aur wahi sawaal phir test karo.",
+      "onScreenText": "Debug retrieval first",
+      "technicalKeyPoint": "Debug retrieval first",
+      "durationTargetSec": 10,
+      "visualProps": {
+        "headline": "Check what the model actually saw",
+        "takeaways": [
+          "Inspect the returned text",
+          "Keep the condition with its rule",
+          "Repeat the same query"
+        ]
+      }
+    }
+  ],
+  "sourceBrief": {
+    "url": "https://learn.microsoft.com/en-us/azure/search/retrieval-augmented-generation-overview",
+    "claim": "The retrieved passages become context for generation. An omitted exception can lead to an incorrect answer. Chunk size and overlap should be tested against representative questions."
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "name": "TechContent AI Studio - Automated Daily Discovery & Queue",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Morning at 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Order this backlog before activating the schedule. Append new topics as episodes are reviewed.\nconst backlog = ['react-state', 'checkout', 'retrieval'];\nconst state = $getWorkflowStaticData('global');\nconst day = $now.setZone('Asia/Kolkata').toISODate();\nif (state.lastDay === day) return [];\nconst index = state.nextIndex || 0;\nif (index >= backlog.length) return [];\nstate.lastDay = day;\nstate.nextIndex = index + 1;\nreturn [{json: {example: backlog[index], scheduleKey: 'reviewed-episode-' + backlog[index]}}];"
+      },
+      "id": "topic-picker",
+      "name": "Select High-Retention Topic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:4000/api/videos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-automation-token",
+              "value": "change-me-in-local-dev"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({example: $json.example, scheduleKey: $json.scheduleKey}) }}"
+      },
+      "id": "enqueue-job",
+      "name": "Queue in BullMQ Studio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every Morning at 09:00": {
+      "main": [
+        [
+          {
+            "node": "Select High-Retention Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select High-Retention Topic": {
+      "main": [
+        [
+          {
+            "node": "Queue in BullMQ Studio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "active": false
+}

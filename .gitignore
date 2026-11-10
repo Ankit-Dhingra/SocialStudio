@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+dashboard/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Local Database & Storage
+local_pgdata/
+dump.rdb
+*.rdb
+pg.log
+*.log
+
+# Dashboard Build
+dashboard/dist/
+
+# Generated Media & Render Runs
+media/*.mp4
+media/*.mp3
+media/runs/
+media/previews/
+!media/.gitkeep
+!media/music/
+!media/raw_assets/
+
+# Remotion Audio & Cache
+remotion/public/audio/*.mp3
+remotion/public/audio/*.wav
+remotion/public/audio/runs/
+!remotion/public/audio/.gitkeep
+.remotion/
+remotion/.cache/
+
+# Reference Media Downloads (Keep transcripts & metadata)
+reference_reels/*.mp4
+reference_reels/*.mp3
+reference_reels/frames/
+
+# Binary Debug Symbols & System Artifacts
+*.pdb
+.DS_Store
+Thumbs.db
+*.tmp
+.idea/
+.vscode/
