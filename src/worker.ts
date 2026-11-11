@@ -155,6 +155,10 @@ export const worker = new Worker<VideoJobData>(
   {
     connection,
     concurrency: 1, // Single video at a time for deterministic GPU/CPU allocation
+    lockDuration: 300000, // 5 minutes lock duration for video rendering
+    lockRenewTime: 60000, // Renew lock every 60s
+    stalledInterval: 120000, // 2 minutes check interval
+    maxStalledCount: 3,
   }
 );
 
