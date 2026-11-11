@@ -34,35 +34,47 @@ export class EdgeTTSProvider implements TTSProvider {
       .replace(/\s+/g, ' ')
       .trim();
 
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const tts = new MsEdgeTTS();
+        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
-    // Pass rate and pitch options to toStream
-    const { audioStream } = tts.toStream(spokenText, { rate, pitch });
+        const { audioStream } = tts.toStream(spokenText, { rate, pitch });
 
-    await new Promise<void>((resolve, reject) => {
-      const fileStream = fs.createWriteStream(outputFilePath);
-      audioStream.pipe(fileStream);
-      fileStream.on('finish', () => resolve());
-      fileStream.on('error', (err) => reject(err));
-      audioStream.on('error', (err: any) => reject(err));
-    });
+        await new Promise<void>((resolve, reject) => {
+          const fileStream = fs.createWriteStream(outputFilePath);
+          audioStream.pipe(fileStream);
+          fileStream.on('finish', () => resolve());
+          fileStream.on('error', (err) => reject(err));
+          audioStream.on('error', (err: any) => reject(err));
+        });
 
-    const buffer = fs.readFileSync(outputFilePath);
-    const durationMs = getMp3Duration(buffer);
-    const fileSizeBytes = buffer.length;
+        const buffer = fs.readFileSync(outputFilePath);
+        const durationMs = getMp3Duration(buffer);
+        const fileSizeBytes = buffer.length;
 
-    if (fileSizeBytes < 1000 || durationMs <= 0) {
-      throw new Error(`Synthesized audio file invalid or empty: size=${fileSizeBytes}B, duration=${durationMs}ms`);
+        if (fileSizeBytes < 1000 || durationMs <= 0) {
+          throw new Error(`Synthesized audio file invalid or empty: size=${fileSizeBytes}B, duration=${durationMs}ms`);
+        }
+
+        return {
+          sceneId: options?.sceneId || 'scene-0',
+          sceneIndex: options?.sceneIndex ?? 0,
+          filePath: outputFilePath,
+          durationMs,
+          format: 'mp3',
+          fileSizeBytes,
+        };
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[EdgeTTS] Attempt ${attempt}/3 failed: ${err.message}. Retrying in 1s...`);
+        if (attempt < 3) {
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      }
     }
 
-    return {
-      sceneId: options?.sceneId || 'scene-0',
-      sceneIndex: options?.sceneIndex ?? 0,
-      filePath: outputFilePath,
-      durationMs,
-      format: 'mp3',
-      fileSizeBytes,
-    };
+    throw lastError || new Error('Edge TTS synthesis failed after 3 attempts');
   }
 }
