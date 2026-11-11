@@ -12,7 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Remotion & Puppeteer container flags
 ENV CHROME_EXECUTABLE=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu"
 ENV PORT=4000
+ENV NODE_OPTIONS="--max-old-space-size=300"
 
 WORKDIR /app
 

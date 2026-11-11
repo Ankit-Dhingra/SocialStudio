@@ -56,6 +56,10 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     browserExecutable: process.env.CHROME_EXECUTABLE || undefined,
     serveUrl: bundleLocation,
     id: 'StudioShort',
+    chromiumOptions: {
+      enableMultiProcessOnLinux: false,
+      gl: 'swiftshader',
+    },
     inputProps: {
       storyboard,
       timeline,
@@ -75,6 +79,12 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     serveUrl: bundleLocation,
     codec: 'h264',
     outputLocation: outputFilePath,
+    concurrency: 1,
+    enforceAudioTrack: true,
+    chromiumOptions: {
+      enableMultiProcessOnLinux: false,
+      gl: 'swiftshader',
+    },
     inputProps: {
       storyboard,
       timeline,
