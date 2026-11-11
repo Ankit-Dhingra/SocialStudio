@@ -4,7 +4,7 @@ services:
     env: docker
     plan: free
     region: oregon
-    healthCheckPath: /api/health
+    healthCheckPath: /health
     dockerfilePath: ./Dockerfile
     envVars:
       - key: PORT

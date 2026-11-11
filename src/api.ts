@@ -18,7 +18,17 @@ app.use(cors({ origin: '*' })); // Allow dashboard, n8n, and local dev clients
 // Serve rendered videos and media assets
 app.use('/media', express.static(path.resolve('media')));
 
-// Health check endpoint
+// Lightweight health ping for UptimeRobot / Render keep-alive (fast, zero-overhead)
+app.get(['/health', '/ping', '/'], (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'SocialStudio API',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Deep health check endpoint (validates Postgres & Redis connectivity)
 app.get('/api/health', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -29,6 +39,7 @@ app.get('/api/health', async (_req, res) => {
         database: 'connected',
         redis: redisPong === 'PONG' ? 'connected' : 'error',
       },
+      uptime: Math.floor(process.uptime()),
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
