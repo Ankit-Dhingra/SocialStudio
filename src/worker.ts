@@ -71,14 +71,22 @@ export const worker = new Worker<VideoJobData>(
       const audioResult = await synthesizeStoryboardNarration(storyboard, runDir);
       console.log(`[Worker:${id}] Audio synthesized: ${audioResult.totalDurationSec}s total across ${audioResult.clips.length} scenes.`);
 
-      // Copy audio clips to remotion public dir for browser serving
-      const publicAudioDir = path.resolve('remotion/public/audio/runs', id);
-      if (!fs.existsSync(publicAudioDir)) {
-        fs.mkdirSync(publicAudioDir, { recursive: true });
+      // Copy audio clips to remotion public dir and pre-bundled dist-remotion dir for browser serving
+      const targetDirs = [
+        path.resolve('remotion/public/audio/runs', id),
+        path.resolve('dist-remotion/public/audio/runs', id),
+        path.resolve('dist-remotion/audio/runs', id),
+      ];
+      for (const dir of targetDirs) {
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
       }
       for (const clip of audioResult.clips) {
-        const dest = path.join(publicAudioDir, path.basename(clip.filePath));
-        fs.copyFileSync(clip.filePath, dest);
+        for (const dir of targetDirs) {
+          const dest = path.join(dir, path.basename(clip.filePath));
+          fs.copyFileSync(clip.filePath, dest);
+        }
       }
 
       const fullNarrationText = storyboard.scenes.map((s) => s.narration).join(' ');

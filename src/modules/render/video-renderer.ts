@@ -72,6 +72,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     browserExecutable: process.env.CHROME_EXECUTABLE || undefined,
     serveUrl: bundleLocation,
     id: 'StudioShort',
+    timeoutInMilliseconds: 300000,
     chromiumOptions: {
       enableMultiProcessOnLinux: false,
       gl: 'swiftshader',
@@ -99,6 +100,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     outputLocation: outputFilePath,
     concurrency: 1,
     enforceAudioTrack: true,
+    timeoutInMilliseconds: 300000,
     chromiumOptions: {
       enableMultiProcessOnLinux: false,
       gl: 'swiftshader',

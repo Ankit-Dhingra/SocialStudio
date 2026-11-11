@@ -160,17 +160,6 @@ export const Root: React.FC = () => {
         }}
         defaultProps={defaultPreviewProps as any}
       />
-
-      {/* Legacy composition kept for backward compatibility */}
-      <Composition
-        id="TechShort"
-        component={TechShort}
-        fps={30}
-        width={1080}
-        height={1920}
-        durationInFrames={90}
-        defaultProps={legacyDemo as any}
-      />
     </>
   );
 };
