@@ -275,7 +275,6 @@ app.post('/api/videos/:id/retry', async (req, res) => {
     try {
       const existingJob = await queue.getJob(req.params.id);
       if (existingJob) {
-        await existingJob.moveToFailed(new Error('Superseded by user retry'), '0', true);
         await existingJob.remove();
       }
     } catch {}
@@ -288,9 +287,11 @@ app.post('/api/videos/:id/retry', async (req, res) => {
       'generate',
       { id: req.params.id },
       {
-        jobId: req.params.id,
+        jobId: `${req.params.id}-${Date.now()}`,
         attempts: 2,
         backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: 100,
+        removeOnFail: 100,
       }
     );
 

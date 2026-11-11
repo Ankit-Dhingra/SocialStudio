@@ -163,29 +163,14 @@ export const worker = new Worker<VideoJobData>(
   {
     connection,
     concurrency: 1, // Single video at a time for deterministic GPU/CPU allocation
-    lockDuration: 600000, // 10 minutes lock duration for video rendering
-    lockRenewTime: 30000, // Renew lock every 30s
-    stalledInterval: 120000, // 2 minutes check interval
-    maxStalledCount: 3,
+    lockDuration: 300000, // 5 minutes lock duration for video rendering
+    stalledInterval: 60000, // 1 minute check interval
+    maxStalledCount: 2,
   }
 );
 
-worker.waitUntilReady().then(async () => {
+worker.waitUntilReady().then(() => {
   console.log('🚀 [Worker] BullMQ Worker ready to process video jobs (Queue: "shorts", Concurrency: 1)');
-  try {
-    worker.resume();
-    const activeJobs = await queue.getActive();
-    for (const j of activeJobs) {
-      console.log(`[Worker Startup] Clearing orphaned active job ${j.id} from previous container`);
-      try {
-        await j.moveToFailed(new Error('Job interrupted by container restart'), '0', true);
-      } catch (e: any) {
-        console.warn(`[Worker Startup] Could not fail job ${j.id}:`, e.message);
-      }
-    }
-  } catch (err: any) {
-    console.warn('[Worker Startup] Failed to check active jobs:', err.message);
-  }
 }).catch((err) => {
   console.error('❌ [Worker] Failed to initialize worker:', err);
 });
