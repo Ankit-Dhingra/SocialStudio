@@ -37,6 +37,7 @@ remotion/public/audio/runs/
 !remotion/public/audio/.gitkeep
 .remotion/
 remotion/.cache/
+dist-remotion/
 
 # Reference Media Downloads (Keep transcripts & metadata)
 reference_reels/*.mp4

@@ -23,6 +23,39 @@ export interface RenderResult {
   renderTimeMs: number;
 }
 
+let cachedBundlePromise: Promise<string> | null = null;
+
+async function getOrCreateBundle(): Promise<string> {
+  const prebuilt = path.resolve('dist-remotion');
+  if (fs.existsSync(path.join(prebuilt, 'index.html'))) {
+    return prebuilt;
+  }
+
+  if (cachedBundlePromise) {
+    return cachedBundlePromise;
+  }
+
+  cachedBundlePromise = (async () => {
+    console.log('[Renderer] Bundling Remotion project (in-memory cached)...');
+    const entryPoint = path.resolve('remotion/index.ts');
+    return bundle({
+      entryPoint,
+      publicDir: path.resolve('remotion/public'),
+      webpackOverride: (config) => ({
+        ...config,
+        resolve: {
+          ...config.resolve,
+          extensionAlias: {
+            '.js': ['.ts', '.tsx', '.js'],
+          },
+        },
+      }),
+    });
+  })();
+
+  return cachedBundlePromise;
+}
+
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
   const { storyboard, timeline, outputFilePath, onProgress } = options;
 
@@ -32,24 +65,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
   }
 
   const startTime = Date.now();
-  console.log(`[Renderer] Bundling Remotion project...`);
-
-  const entryPoint = path.resolve('remotion/index.ts');
-  const bundleLocation = await bundle({
-    entryPoint,
-    publicDir: path.resolve('remotion/public'),
-    webpackOverride: (config) => {
-      return {
-        ...config,
-        resolve: {
-          ...config.resolve,
-          extensionAlias: {
-            '.js': ['.ts', '.tsx', '.js'],
-          },
-        },
-      };
-    },
-  });
+  const bundleLocation = await getOrCreateBundle();
 
   console.log(`[Renderer] Selecting composition 'StudioShort'...`);
   const composition = await selectComposition({
@@ -78,6 +94,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     browserExecutable: process.env.CHROME_EXECUTABLE || undefined,
     serveUrl: bundleLocation,
     codec: 'h264',
+    crf: 26,
+    pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
     concurrency: 1,
     enforceAudioTrack: true,

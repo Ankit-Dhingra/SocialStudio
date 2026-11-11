@@ -550,16 +550,20 @@ function App() {
                   </h4>
 
                   {/* ACTIVE WORKER PROGRESS */}
-                  {['SCRIPTING', 'NARRATING', 'RENDERING'].includes(activeVideo.status) && (
+                  {['QUEUED', 'SCRIPTING', 'NARRATING', 'RENDERING'].includes(activeVideo.status) && (
                     <div className="worker-progress-box">
                       <div className="worker-progress-label">
                         <span>Stage: <strong>{activeVideo.status}</strong></span>
                         <span>
-                          {activeVideo.status === 'SCRIPTING'
+                          {activeVideo.job_progress != null
+                            ? `${activeVideo.job_progress}%`
+                            : activeVideo.status === 'QUEUED'
+                            ? '10%'
+                            : activeVideo.status === 'SCRIPTING'
                             ? '25%'
                             : activeVideo.status === 'NARRATING'
                             ? '50%'
-                            : '85%'}
+                            : '75%'}
                         </span>
                       </div>
                       <div className="progress-track-sleek">
@@ -567,14 +571,49 @@ function App() {
                           className="progress-bar-sleek"
                           style={{
                             width:
-                              activeVideo.status === 'SCRIPTING'
+                              activeVideo.job_progress != null
+                                ? `${activeVideo.job_progress}%`
+                                : activeVideo.status === 'QUEUED'
+                                ? '10%'
+                                : activeVideo.status === 'SCRIPTING'
                                 ? '25%'
                                 : activeVideo.status === 'NARRATING'
                                 ? '50%'
-                                : '85%',
+                                : '75%',
                           }}
                         ></div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* FAILED STATUS BANNER & RETRY */}
+                  {activeVideo.status === 'FAILED' && (
+                    <div
+                      style={{
+                        padding: '16px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: 'var(--radius-sm)',
+                        marginBottom: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                      }}
+                    >
+                      <div style={{ color: '#ef4444', fontWeight: 600, fontSize: 13 }}>
+                        ⚠️ Generation Failed or Stalled
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                        {activeVideo.error || 'The render process was interrupted or timed out.'}
+                      </div>
+                      <button
+                        onClick={() => post(`/api/videos/${activeVideo.id}/retry`)}
+                        disabled={busy}
+                        className="btn btn-primary"
+                        style={{ alignSelf: 'flex-start', marginTop: 4, fontSize: 12, padding: '6px 14px' }}
+                      >
+                        🔄 Retry Video Generation
+                      </button>
                     </div>
                   )}
 

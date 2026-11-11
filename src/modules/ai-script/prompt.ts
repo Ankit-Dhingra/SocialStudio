@@ -1,10 +1,14 @@
 import { z } from 'zod';
 import { StoryboardSchema } from '../contracts/storyboard.js';
 
-export function buildHinglishScriptPrompt(topic: string, targetDurationSec = 65): string {
+export function buildHinglishScriptPrompt(topic: string, targetDurationSec = 45): string {
   return `Write one complete vertical engineering lesson for Instagram Reels and YouTube Shorts.
-Topic: ${JSON.stringify(topic)}. Target spoken duration: ${targetDurationSec} seconds.
+Topic: ${JSON.stringify(topic)}. Target spoken duration: strictly 40–50 seconds.
 Audience: final-year students and developers with 1–4 years of experience.
+IMPORTANT CONSTRAINTS FOR VIRAL HIGH-RETENTION SHORTS:
+- Total spoken narration across ALL scenes combined MUST be strictly under 110 words (around 40-50 seconds total spoken audio).
+- Keep each scene narration to 1 to 2 short, punchy sentences (maximum 20-25 words per scene).
+- Do not ramble. Fast-paced, concise, punchy engineering delivery.
 Choose ONE concrete question narrow enough to answer fully. Open with a prediction or observed bug.
 Use one worked example throughout. Show the initial values, operations in order, resulting values,
 the reason for the result, and when the viewer would use this knowledge. Check each transition.

@@ -8,6 +8,7 @@
     "dev:dashboard": "npm --prefix dashboard run dev",
     "db:init": "tsx src/init-db.ts",
     "check": "tsc --noEmit",
+    "bundle:remotion": "tsx scripts/bundle-remotion.ts",
     "start": "tsx src/api.ts"
   },
   "dependencies": {

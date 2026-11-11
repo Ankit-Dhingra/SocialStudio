@@ -51,7 +51,45 @@ app.get('/api/health', async (_req, res) => {
 app.get('/api/videos', async (_req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM videos ORDER BY created_at DESC LIMIT 100');
-    res.json(rows);
+
+    // Attach live BullMQ progress and detect stalled/interrupted jobs
+    const enriched = await Promise.all(
+      rows.map(async (row) => {
+        if (['QUEUED', 'SCRIPTING', 'NARRATING', 'RENDERING'].includes(row.status)) {
+          try {
+            const job = await queue.getJob(row.id);
+            if (job) {
+              const state = await job.getState();
+              if (state === 'failed') {
+                const failReason = job.failedReason || 'Job failed in queue';
+                await pool.query('UPDATE videos SET status=$1, error=$2, updated_at=now() WHERE id=$3', [
+                  'FAILED',
+                  failReason,
+                  row.id,
+                ]);
+                return { ...row, status: 'FAILED', error: failReason, job_progress: job.progress };
+              }
+              return { ...row, job_progress: job.progress };
+            } else {
+              // If status is in-flight but no job exists in Redis after 3 minutes
+              const ageSec = (Date.now() - new Date(row.updated_at || row.created_at).getTime()) / 1000;
+              if (ageSec > 180) {
+                const errorMsg = 'Process was interrupted or container restarted. Click Retry to re-run.';
+                await pool.query('UPDATE videos SET status=$1, error=$2, updated_at=now() WHERE id=$3', [
+                  'FAILED',
+                  errorMsg,
+                  row.id,
+                ]);
+                return { ...row, status: 'FAILED', error: errorMsg };
+              }
+            }
+          } catch {}
+        }
+        return row;
+      })
+    );
+
+    res.json(enriched);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

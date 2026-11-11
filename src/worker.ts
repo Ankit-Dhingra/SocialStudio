@@ -155,8 +155,8 @@ export const worker = new Worker<VideoJobData>(
   {
     connection,
     concurrency: 1, // Single video at a time for deterministic GPU/CPU allocation
-    lockDuration: 300000, // 5 minutes lock duration for video rendering
-    lockRenewTime: 60000, // Renew lock every 60s
+    lockDuration: 600000, // 10 minutes lock duration for video rendering
+    lockRenewTime: 30000, // Renew lock every 30s
     stalledInterval: 120000, // 2 minutes check interval
     maxStalledCount: 3,
   }
@@ -170,6 +170,16 @@ worker.on('error', (err) => {
   console.error('❌ [Worker] Worker level error:', err);
 });
 
-worker.on('failed', (job, err) => {
+worker.on('failed', async (job, err) => {
   console.error(`❌ [Worker] Job ${job?.id} failed with error:`, err.message);
+  if (job?.data?.id) {
+    try {
+      await patch(job.data.id, {
+        status: 'FAILED',
+        error: err.message || 'Video generation job failed or stalled in queue',
+      });
+    } catch (e: any) {
+      console.error(`Failed to update DB on job failure:`, e.message);
+    }
+  }
 });

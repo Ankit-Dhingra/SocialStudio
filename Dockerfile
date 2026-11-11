@@ -14,7 +14,7 @@ ENV CHROME_EXECUTABLE=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu"
 ENV PORT=4000
-ENV NODE_OPTIONS="--max-old-space-size=300"
+ENV NODE_OPTIONS="--max-old-space-size=250"
 
 WORKDIR /app
 
@@ -24,6 +24,9 @@ RUN npm ci --include=dev
 
 # Copy codebase
 COPY . .
+
+# Pre-bundle Remotion composition at build time so runtime has 0% Webpack CPU load
+RUN npm run bundle:remotion
 
 ENV NODE_ENV=production
 
