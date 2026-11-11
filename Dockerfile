@@ -28,7 +28,7 @@ COPY . .
 RUN npm run bundle:remotion
 
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=320"
+ENV NODE_OPTIONS="--max-old-space-size=160"
 
 # Expose API port
 EXPOSE 4000

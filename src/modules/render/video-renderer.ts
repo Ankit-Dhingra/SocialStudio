@@ -72,6 +72,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     browserExecutable: process.env.CHROME_EXECUTABLE || undefined,
     serveUrl: bundleLocation,
     id: 'StudioShort',
+    chromeMode: 'chrome-for-testing',
     timeoutInMilliseconds: 300000,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
@@ -100,7 +101,9 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
     concurrency: 1,
+    disallowParallelEncoding: true,
     enforceAudioTrack: true,
+    chromeMode: 'chrome-for-testing',
     timeoutInMilliseconds: 300000,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
