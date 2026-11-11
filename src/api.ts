@@ -271,6 +271,15 @@ app.post('/api/videos/:id/retry', async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
+    // Clean any orphaned or active job for this video in queue
+    try {
+      const existingJob = await queue.getJob(req.params.id);
+      if (existingJob) {
+        await existingJob.moveToFailed(new Error('Superseded by user retry'), '0', true);
+        await existingJob.remove();
+      }
+    } catch {}
+
     await pool.query("UPDATE videos SET status='QUEUED', error=null, updated_at=now() WHERE id=$1", [
       req.params.id,
     ]);
@@ -279,13 +288,40 @@ app.post('/api/videos/:id/retry', async (req, res) => {
       'generate',
       { id: req.params.id },
       {
-        jobId: `${req.params.id}-retry-${Date.now()}`,
+        jobId: req.params.id,
         attempts: 2,
         backoff: { type: 'exponential', delay: 5000 },
       }
     );
 
     res.status(202).json({ id: req.params.id, status: 'QUEUED', message: 'Job re-enqueued' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset the entire queue and set abandoned in-flight videos to FAILED
+app.post('/api/queue/reset', async (req, res) => {
+  if (!checkAuth(req)) {
+    return res.status(401).json({ error: 'Invalid x-automation-token' });
+  }
+
+  try {
+    const activeJobs = await queue.getActive();
+    for (const j of activeJobs) {
+      try {
+        await j.moveToFailed(new Error('Queue reset by admin'), '0', true);
+      } catch {}
+    }
+    await queue.drain();
+    await queue.clean(0, 1000, 'failed');
+    await queue.clean(0, 1000, 'active');
+
+    await pool.query(
+      "UPDATE videos SET status='FAILED', error='Reset by user request', updated_at=now() WHERE status IN ('QUEUED', 'SCRIPTING', 'NARRATING', 'RENDERING')"
+    );
+
+    res.json({ ok: true, message: 'Queue and stuck in-flight videos have been reset successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Worker, Job } from 'bullmq';
-import { pool, connection, patch, StoryboardSchema, type Storyboard } from './core.js';
+import { pool, connection, queue, patch, StoryboardSchema, type Storyboard } from './core.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
 import { synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
@@ -170,8 +170,21 @@ export const worker = new Worker<VideoJobData>(
   }
 );
 
-worker.on('ready', () => {
+worker.on('ready', async () => {
   console.log('🚀 [Worker] BullMQ Worker ready to process video jobs (Queue: "shorts", Concurrency: 1)');
+  try {
+    const activeJobs = await queue.getActive();
+    for (const j of activeJobs) {
+      console.log(`[Worker Startup] Clearing orphaned active job ${j.id} from previous container`);
+      try {
+        await j.moveToFailed(new Error('Job interrupted by container restart'), '0', true);
+      } catch (e: any) {
+        console.warn(`[Worker Startup] Could not fail job ${j.id}:`, e.message);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Worker Startup] Failed to check active jobs:', err.message);
+  }
 });
 
 worker.on('error', (err) => {
