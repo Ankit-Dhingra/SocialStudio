@@ -1,18 +1,27 @@
 FROM node:20-slim
 
-# Install Chromium, FFmpeg, and TrueType fonts needed for Remotion rendering
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
+# Install system libraries for headless browser, FFmpeg, and TrueType fonts
+RUN apt-get update && apt-get install -y \
+    libnss3 \
+    libdbus-1-3 \
+    libatk1.0-0 \
+    libgbm-dev \
+    libasound2 \
+    libxrandr2 \
+    libxkbcommon-dev \
+    libxfixes3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libatk-bridge2.0-0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libcups2 \
     ffmpeg \
     fonts-noto-color-emoji \
     fonts-freefont-ttf \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Remotion & Puppeteer container flags
-ENV CHROME_EXECUTABLE=/usr/bin/chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu"
 ENV PORT=4000
 
 WORKDIR /app
@@ -20,6 +29,9 @@ WORKDIR /app
 # Copy package manifests & install
 COPY package*.json ./
 RUN npm ci --include=dev
+
+# Pre-download and cache Remotion headless browser binary at build time
+RUN node -e "require('@remotion/renderer').ensureBrowser().then(r => console.log('✔ [Build] Browser ensured:', r))"
 
 # Copy codebase
 COPY . .

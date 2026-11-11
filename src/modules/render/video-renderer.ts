@@ -69,10 +69,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
 
   console.log(`[Renderer] Selecting composition 'StudioShort'...`);
   const composition = await selectComposition({
-    browserExecutable: process.env.CHROME_EXECUTABLE || undefined,
     serveUrl: bundleLocation,
     id: 'StudioShort',
-    chromeMode: 'chrome-for-testing',
     timeoutInMilliseconds: 300000,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
@@ -94,7 +92,6 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
 
   await renderMedia({
     composition,
-    browserExecutable: process.env.CHROME_EXECUTABLE || undefined,
     serveUrl: bundleLocation,
     codec: 'h264',
     crf: 26,
@@ -103,7 +100,6 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     concurrency: 1,
     disallowParallelEncoding: true,
     enforceAudioTrack: true,
-    chromeMode: 'chrome-for-testing',
     timeoutInMilliseconds: 300000,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
