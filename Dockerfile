@@ -14,7 +14,6 @@ ENV CHROME_EXECUTABLE=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_CHROMIUM_FLAGS="--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu"
 ENV PORT=4000
-ENV NODE_OPTIONS="--max-old-space-size=250"
 
 WORKDIR /app
 
@@ -29,6 +28,7 @@ COPY . .
 RUN npm run bundle:remotion
 
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=320"
 
 # Expose API port
 EXPOSE 4000
