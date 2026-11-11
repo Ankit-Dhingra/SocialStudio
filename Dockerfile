@@ -12,17 +12,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Remotion & Puppeteer container flags
 ENV CHROME_EXECUTABLE=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV NODE_ENV=production
 ENV PORT=4000
 
 WORKDIR /app
 
 # Copy package manifests & install
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy codebase
 COPY . .
+
+ENV NODE_ENV=production
 
 # Expose API port
 EXPOSE 4000
