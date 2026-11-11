@@ -74,8 +74,9 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     id: 'StudioShort',
     timeoutInMilliseconds: 300000,
     chromiumOptions: {
-      enableMultiProcessOnLinux: false,
-      gl: 'swiftshader',
+      enableMultiProcessOnLinux: true,
+      gl: 'swangle',
+      disableWebSecurity: true,
     },
     inputProps: {
       storyboard,
@@ -102,8 +103,9 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     enforceAudioTrack: true,
     timeoutInMilliseconds: 300000,
     chromiumOptions: {
-      enableMultiProcessOnLinux: false,
-      gl: 'swiftshader',
+      enableMultiProcessOnLinux: true,
+      gl: 'swangle',
+      disableWebSecurity: true,
     },
     inputProps: {
       storyboard,

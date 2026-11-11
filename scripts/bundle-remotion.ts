@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { bundle } from '@remotion/bundler';
 
 async function main() {
@@ -21,6 +22,17 @@ async function main() {
       },
     }),
   });
+
+  // Ensure all static assets from remotion/public are copied to both root of outDir and outDir/public
+  if (fs.existsSync(publicDir)) {
+    console.log('[Build] Copying public directory assets into bundle output...');
+    fs.cpSync(publicDir, outDir, { recursive: true, force: true });
+    const distPublic = path.join(outDir, 'public');
+    if (!fs.existsSync(distPublic)) {
+      fs.mkdirSync(distPublic, { recursive: true });
+    }
+    fs.cpSync(publicDir, distPublic, { recursive: true, force: true });
+  }
 
   console.log(`[Build] Remotion composition pre-bundled successfully to: ${bundleLocation}`);
 }
