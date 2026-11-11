@@ -170,9 +170,10 @@ export const worker = new Worker<VideoJobData>(
   }
 );
 
-worker.on('ready', async () => {
+worker.waitUntilReady().then(async () => {
   console.log('🚀 [Worker] BullMQ Worker ready to process video jobs (Queue: "shorts", Concurrency: 1)');
   try {
+    worker.resume();
     const activeJobs = await queue.getActive();
     for (const j of activeJobs) {
       console.log(`[Worker Startup] Clearing orphaned active job ${j.id} from previous container`);
@@ -185,6 +186,8 @@ worker.on('ready', async () => {
   } catch (err: any) {
     console.warn('[Worker Startup] Failed to check active jobs:', err.message);
   }
+}).catch((err) => {
+  console.error('❌ [Worker] Failed to initialize worker:', err);
 });
 
 worker.on('error', (err) => {

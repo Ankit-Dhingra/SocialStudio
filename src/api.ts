@@ -300,6 +300,31 @@ app.post('/api/videos/:id/retry', async (req, res) => {
   }
 });
 
+// Inspect queue state
+app.get('/api/queue/status', async (req, res) => {
+  try {
+    const [activeCount, waitingCount, failedCount, completedCount, activeJobs, isPaused] = await Promise.all([
+      queue.getActiveCount(),
+      queue.getWaitingCount(),
+      queue.getFailedCount(),
+      queue.getCompletedCount(),
+      queue.getActive(),
+      queue.isPaused(),
+    ]);
+
+    res.json({
+      isPaused,
+      activeCount,
+      waitingCount,
+      failedCount,
+      completedCount,
+      activeJobs: activeJobs.map((j) => ({ id: j.id, name: j.name, progress: j.progress })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Reset the entire queue and set abandoned in-flight videos to FAILED
 app.post('/api/queue/reset', async (req, res) => {
   if (!checkAuth(req)) {
