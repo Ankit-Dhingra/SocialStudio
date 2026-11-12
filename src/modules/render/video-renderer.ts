@@ -94,13 +94,14 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     composition,
     serveUrl: bundleLocation,
     codec: 'h264',
+    x264Preset: 'veryfast',
     crf: 26,
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
     concurrency: 1,
     disallowParallelEncoding: true,
     enforceAudioTrack: true,
-    timeoutInMilliseconds: 300000,
+    timeoutInMilliseconds: 600000,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
       gl: 'swangle',
@@ -109,6 +110,24 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     inputProps: {
       storyboard,
       timeline,
+    },
+    ffmpegOverride: ({ type, args }) => {
+      // Limit FFmpeg to single-threaded decoding/encoding with constrained lookahead
+      // to strictly keep memory within 512MB RAM on free tier and prevent SIGKILL
+      if (type === 'stitcher') {
+        const outputIndex = args.length - 1;
+        const cloned = [...args];
+        cloned.splice(
+          outputIndex,
+          0,
+          '-threads',
+          '1',
+          '-x264-params',
+          'threads=1:lookahead_threads=1:rc_lookahead=10'
+        );
+        return ['-threads', '1', ...cloned];
+      }
+      return ['-threads', '1', ...args];
     },
     onProgress: ({ renderedFrames }) => {
       const percent = Math.floor((renderedFrames / totalFrames) * 100);

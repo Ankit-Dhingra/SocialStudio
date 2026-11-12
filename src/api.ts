@@ -1,4 +1,16 @@
 import 'dotenv/config';
+import path from 'node:path';
+import fs from 'node:fs';
+
+// Route OS temporary files to container disk rather than tmpfs (RAM)
+const diskTmpDir = path.resolve('media/tmp');
+if (!fs.existsSync(diskTmpDir)) {
+  fs.mkdirSync(diskTmpDir, { recursive: true });
+}
+process.env.TMPDIR = diskTmpDir;
+process.env.TEMP = diskTmpDir;
+process.env.TMP = diskTmpDir;
+
 import { parseCustomScriptToStoryboard } from './modules/ai-script/custom-script-parser.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
 import { getTTSProvider } from './modules/tts/tts-service.js';
@@ -6,8 +18,6 @@ import express from 'express';
 import cors from 'cors';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import fs from 'node:fs';
 import { z } from 'zod';
 import { pool, queue, connection } from './core.js';
 

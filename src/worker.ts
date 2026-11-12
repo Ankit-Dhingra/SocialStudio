@@ -1,6 +1,16 @@
 import 'dotenv/config';
 import path from 'node:path';
 import fs from 'node:fs';
+
+// Route OS temporary files to container disk rather than tmpfs (RAM)
+const diskTmpDir = path.resolve('media/tmp');
+if (!fs.existsSync(diskTmpDir)) {
+  fs.mkdirSync(diskTmpDir, { recursive: true });
+}
+process.env.TMPDIR = diskTmpDir;
+process.env.TEMP = diskTmpDir;
+process.env.TMP = diskTmpDir;
+
 import { Worker, Job } from 'bullmq';
 import { pool, connection, queue, patch, StoryboardSchema, type Storyboard } from './core.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
@@ -163,9 +173,9 @@ export const worker = new Worker<VideoJobData>(
   {
     connection,
     concurrency: 1, // Single video at a time for deterministic GPU/CPU allocation
-    lockDuration: 300000, // 5 minutes lock duration for video rendering
-    stalledInterval: 60000, // 1 minute check interval
-    maxStalledCount: 2,
+    lockDuration: 600000, // 10 minutes lock duration for video rendering
+    stalledInterval: 120000, // 2 minute check interval
+    maxStalledCount: 3,
   }
 );
 
