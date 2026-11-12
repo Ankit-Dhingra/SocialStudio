@@ -90,7 +90,7 @@ export async function generateHinglishScript(options: GenerateScriptOptions): Pr
     'You are a high-retention technical educator creating 9:16 viral tech shorts scripts with conversational Hinglish narration and strict JSON output.';
 
   let useGemini = provider === 'gemini' && Boolean(process.env.GEMINI_API_KEY);
-  let groqModel = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+  let groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
   async function requestDraft(draftPrompt: string): Promise<string> {
     if (useGemini) {
       const gemini = new GeminiProvider(process.env.GEMINI_API_KEY!, process.env.GEMINI_MODEL || 'gemini-2.5-flash');
@@ -107,10 +107,13 @@ export async function generateHinglishScript(options: GenerateScriptOptions): Pr
     try {
       return await new GroqProvider(key, groqModel).generateJSON(draftPrompt, systemInstruction);
     } catch (error) {
-      const fallback = process.env.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-120b';
-      if (fallback === groqModel || !(error instanceof Error) || !error.message.includes('[429]')) throw error;
-      groqModel = fallback;
-      return new GroqProvider(key, groqModel).generateJSON(draftPrompt, systemInstruction);
+      if (error instanceof Error && error.message.includes('[429]')) {
+        console.warn('[Groq RateLimit 429] Backing off 5s and switching to fallback model...');
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        groqModel = process.env.GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
+        return new GroqProvider(key, groqModel).generateJSON(draftPrompt, systemInstruction);
+      }
+      throw error;
     }
   }
 
