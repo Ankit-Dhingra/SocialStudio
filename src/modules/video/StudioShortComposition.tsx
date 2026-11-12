@@ -20,6 +20,7 @@ import { RequestFlowScene } from './scenes/RequestFlowScene.js';
 import { RaceConditionSimulatorScene } from './scenes/RaceConditionSimulatorScene.js';
 import { CollectionScene } from './scenes/CollectionScene.js';
 import { KineticCaptions } from './KineticCaptions.js';
+import { EclipseNeonRing, SpiralGlassRibbon, LayercutWordBehind } from './MotionStyles.js';
 
 export interface StudioShortProps {
   storyboard: Storyboard;
@@ -136,26 +137,32 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
 
                 case 'hook':
                   return (
-                    <DeepConceptHook
-                      headline={visualProps.headline || scene.onScreenText}
-                      questionKicker={visualProps.subtext || visualProps.questionKicker}
-                      badgeText={visualProps.badgeText || 'TECH EXPLAINED'}
-                      accentColor={visualProps.accentColor}
-                      misconceptionAlert={visualProps.misconceptionAlert}
-                      onScreenText={scene.onScreenText}
-                    />
+                    <>
+                      <EclipseNeonRing />
+                      <DeepConceptHook
+                        headline={visualProps.headline || scene.onScreenText}
+                        questionKicker={visualProps.subtext || visualProps.questionKicker}
+                        badgeText={visualProps.badgeText || 'TECH EXPLAINED'}
+                        accentColor={visualProps.accentColor}
+                        misconceptionAlert={visualProps.misconceptionAlert}
+                        onScreenText={scene.onScreenText}
+                      />
+                    </>
                   );
 
                 case 'code':
                   return (
-                    <InteractiveConsoleScene
-                      filename={visualProps.filename || 'Example'}
-                      code={visualProps.code || scene.technicalKeyPoint}
-                      highlightLines={visualProps.highlightLines || [1]}
-                      terminalOutputs={visualProps.terminalOutputs || []}
-                      explanationCallout={visualProps.explanationCallout || scene.technicalKeyPoint}
-                      onScreenText={scene.onScreenText}
-                    />
+                    <>
+                      <SpiralGlassRibbon topPercent={38} />
+                      <InteractiveConsoleScene
+                        filename={visualProps.filename || 'Example'}
+                        code={visualProps.code || scene.technicalKeyPoint}
+                        highlightLines={visualProps.highlightLines || [1]}
+                        terminalOutputs={visualProps.terminalOutputs || []}
+                        explanationCallout={visualProps.explanationCallout || scene.technicalKeyPoint}
+                        onScreenText={scene.onScreenText}
+                      />
+                    </>
                   );
 
                 case 'queueTimeline':
@@ -193,15 +200,23 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
                   );
 
                 case 'summary':
+                  const heroWord = (visualProps.headline || scene.technicalKeyPoint || 'RECAP')
+                    .replace(/[^a-zA-Z]/g, ' ')
+                    .trim()
+                    .split(/\s+/)[0]
+                    .toUpperCase();
                   return (
-                    <SummaryScene
-                      headline={visualProps.headline || scene.onScreenText}
-                      takeaways={visualProps.takeaways || visualProps.summaryBullets || [scene.technicalKeyPoint]}
-                      summaryBullets={visualProps.summaryBullets}
-                      callToAction={visualProps.callToAction || ''}
-                      cta={visualProps.cta}
-                      onScreenText={scene.onScreenText}
-                    />
+                    <>
+                      <LayercutWordBehind word={heroWord.slice(0, 10)} topPercent={16} />
+                      <SummaryScene
+                        headline={visualProps.headline || scene.onScreenText}
+                        takeaways={visualProps.takeaways || visualProps.summaryBullets || [scene.technicalKeyPoint]}
+                        summaryBullets={visualProps.summaryBullets}
+                        callToAction={visualProps.callToAction || ''}
+                        cta={visualProps.cta}
+                        onScreenText={scene.onScreenText}
+                      />
+                    </>
                   );
 
                 default:
