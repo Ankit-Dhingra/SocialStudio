@@ -120,16 +120,16 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
           </defs>
 
           {/* 1. Cable: App (280, 465) to Gateway (335, 465) */}
-          <line x1="280" y1="465" x2="335" y2="465" stroke="url(#readCableGrad)" strokeWidth="6" strokeDasharray="6 4" />
+          <line x1="280" y1="465" x2="335" y2="465" stroke="#38BDF8" strokeWidth="5" strokeDasharray="6 4" filter="drop-shadow(0 0 6px #38BDF8)" />
 
           {/* 2. Cable: Gateway (585, 465) to Redis (640, 465) */}
-          <line x1="585" y1="465" x2="640" y2="465" stroke="url(#readCableGrad)" strokeWidth="6" strokeDasharray="6 4" />
+          <line x1="585" y1="465" x2="640" y2="465" stroke="#10B981" strokeWidth="5" strokeDasharray="6 4" filter="drop-shadow(0 0 6px #10B981)" />
 
           {/* 3. Bypassed Database Cable: Gateway (460, 380) to DB (460, 210) */}
           <line x1="460" y1="380" x2="460" y2="210" stroke="#EF4444" strokeWidth="3" strokeDasharray="5 5" opacity="0.6" />
 
           {/* 4. Cable: Workers (765, 680) to Redis (765, 550) */}
-          <line x1="765" y1="680" x2="765" y2="550" stroke="url(#writeCableGrad)" strokeWidth="6" strokeDasharray="6 4" />
+          <line x1="765" y1="680" x2="765" y2="550" stroke="#C084FC" strokeWidth="5" strokeDasharray="6 4" filter="drop-shadow(0 0 6px #C084FC)" />
 
           {/* Sockets / Terminals (Glowing Dots exactly at the ports) */}
           <circle cx="280" cy="465" r="7" fill="#38BDF8" stroke="#FFFFFF" strokeWidth="2" filter="drop-shadow(0 0 6px #38BDF8)" />

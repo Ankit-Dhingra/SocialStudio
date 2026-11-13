@@ -65,7 +65,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
         display: 'flex',
         flexDirection: 'column',
         paddingTop: VideoDesignTokens.safeMargin.top,
-        paddingBottom: VideoDesignTokens.safeMargin.bottom,
+        paddingBottom: 340,
         paddingLeft: 40,
         paddingRight: 40,
         overflow: 'hidden',
@@ -208,7 +208,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-evenly', margin: '12px 0' }}>
             {interviewPoints.map((point, idx) => (
               <div
                 key={idx}
