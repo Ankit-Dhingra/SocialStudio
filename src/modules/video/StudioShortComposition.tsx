@@ -19,6 +19,10 @@ import { SummaryScene } from './scenes/SummaryScene.js';
 import { RequestFlowScene } from './scenes/RequestFlowScene.js';
 import { RaceConditionSimulatorScene } from './scenes/RaceConditionSimulatorScene.js';
 import { CollectionScene } from './scenes/CollectionScene.js';
+import { SmartphoneMockupScene } from './scenes/SmartphoneMockupScene.js';
+import { H3SpatialMapScene } from './scenes/H3SpatialMapScene.js';
+import { ArchitectureFlowPipelineScene } from './scenes/ArchitectureFlowPipelineScene.js';
+import { TradeoffDecisionHUDScene } from './scenes/TradeoffDecisionHUDScene.js';
 import { KineticCaptions } from './KineticCaptions.js';
 import { EclipseNeonRing, SpiralGlassRibbon, LayercutWordBehind } from './MotionStyles.js';
 
@@ -135,7 +139,22 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
                     />
                   );
 
+                case 'smartphoneMockup':
+                  return <SmartphoneMockupScene {...visualProps} headline={visualProps.headline || scene.onScreenText} subtext={visualProps.subtext || scene.technicalKeyPoint} />;
+
+                case 'h3SpatialMap':
+                  return <H3SpatialMapScene {...visualProps} title={visualProps.title || scene.onScreenText} subtitle={visualProps.subtitle || scene.technicalKeyPoint} />;
+
+                case 'architecturePipeline':
+                  return <ArchitectureFlowPipelineScene {...visualProps} title={visualProps.title || scene.onScreenText} subtitle={visualProps.subtitle || scene.technicalKeyPoint} />;
+
+                case 'tradeoffHUD':
+                  return <TradeoffDecisionHUDScene {...visualProps} title={visualProps.title || scene.onScreenText} subtitle={visualProps.subtitle || scene.technicalKeyPoint} />;
+
                 case 'hook':
+                  if (visualProps.type === 'smartphoneMockup' || /zomato|swiggy|uber|phonepe|blinkit|zepto/i.test(storyboard.topic)) {
+                    return <SmartphoneMockupScene {...visualProps} headline={visualProps.headline || scene.onScreenText} subtext={visualProps.subtext || scene.technicalKeyPoint} />;
+                  }
                   return (
                     <>
                       <EclipseNeonRing />
@@ -166,6 +185,9 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
                   );
 
                 case 'queueTimeline':
+                  if (visualProps.type === 'architecturePipeline' || /worker|stream|pipeline|redis/i.test(visualProps.title || scene.onScreenText || scene.technicalKeyPoint)) {
+                    return <ArchitectureFlowPipelineScene {...visualProps} title={visualProps.title || scene.onScreenText} subtitle={visualProps.subtitle || scene.technicalKeyPoint} />;
+                  }
                   return visualProps.items || visualProps.timelineSteps
                     ? <QueueTimelineScene {...visualProps} cueFrames={seg.cueFrames} onScreenText={scene.onScreenText} />
                     : /event loop|microtask/i.test(storyboard.topic)
@@ -176,6 +198,9 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
                   return <CollectionScene title={visualProps.title} items={visualProps.items}
                     result={visualProps.result} revealFrame={seg.cueFrames?.[0] ?? 0} />;
                 case 'requestFlow':
+                  if (visualProps.type === 'h3SpatialMap' || /h3|spatial|hex|map/i.test(visualProps.title || scene.onScreenText || scene.technicalKeyPoint)) {
+                    return <H3SpatialMapScene {...visualProps} title={visualProps.title || scene.onScreenText} subtitle={visualProps.subtitle || scene.technicalKeyPoint} />;
+                  }
                   return (
                     <RequestFlowScene
                       title={visualProps.title || scene.onScreenText}
@@ -200,6 +225,9 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
                   );
 
                 case 'summary':
+                  if (visualProps.type === 'tradeoffHUD' || /tradeoff|interview|decision/i.test(visualProps.headline || scene.onScreenText || scene.technicalKeyPoint)) {
+                    return <TradeoffDecisionHUDScene {...visualProps} title={visualProps.title || visualProps.headline || scene.onScreenText} subtitle={visualProps.subtitle || scene.technicalKeyPoint} />;
+                  }
                   const heroWord = (visualProps.headline || scene.technicalKeyPoint || 'RECAP')
                     .replace(/[^a-zA-Z]/g, ' ')
                     .trim()
