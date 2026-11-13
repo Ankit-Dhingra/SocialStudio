@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { bundle } from '@remotion/bundler';
@@ -98,10 +99,10 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     crf: 26,
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
-    concurrency: 1,
+    concurrency: Math.min(4, Math.max(1, Math.floor(os.cpus().length / 2))),
     disallowParallelEncoding: true,
     enforceAudioTrack: true,
-    timeoutInMilliseconds: 600000,
+    timeoutInMilliseconds: 1200000,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
       gl: 'swangle',

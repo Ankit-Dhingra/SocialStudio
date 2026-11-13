@@ -32,8 +32,8 @@ We are now ready to execute the **Full Reel Local Render** and build the **Autom
 | **Audio Synthesis & Ducking** | `src/modules/audio/` | 🟢 Complete | Edge-TTS (`hi-IN-MadhurNeural`) + continuous ambient tech synth track with -14dB speech ducking. |
 | **Remotion Webpack Bundler** | `scripts/bundle-remotion.ts` | 🟢 Complete | Pre-bundles composition into `dist-remotion` for fast, crash-free headless rendering. |
 | **Demo Scene Snapshot Renderer** | `scripts/preview-demo-scenes.ts` | 🟢 Complete | Generates 4 high-res snapshots into `output/demo_scenes/` in under 15 seconds. |
-| **Full Local Video Renderer** | `scripts/test-local-render.ts` | 🟡 Ready to Run | End-to-end pipeline (Audio synthesis ➔ Remotion render ➔ MP4 export). |
-| **Instagram / YouTube Upload Pipeline** | `scripts/publish-reel.ts` | ⚪ Next Phase | Automating direct upload via Instagram Graph API & YouTube Data API v3. |
+| **Full Local Video Renderer** | `scripts/test-local-render.ts` | 🟢 Complete | Verified: Rendered `output/zomato_surge_reel.mp4` (54s, 6.25MB, 1080x1920 @ 30fps) with Edge-TTS, BGM ducking, and kinetic subtitles. |
+| **Instagram / YouTube Upload Pipeline** | `scripts/publish-reel.ts` | 🟡 In Progress / Next | Automating direct upload via Instagram Graph API & YouTube Data API v3. |
 
 ---
 
@@ -53,8 +53,7 @@ We are now ready to execute the **Full Reel Local Render** and build the **Autom
 
 ## 4. Immediate Next Steps
 
-1. **Step 1: Execute Full Video Local Render**
-   - Run `scripts/test-local-render.ts` to synthesize the complete audio track, render the 60-second video composition, and verify audio-visual synchronization on the final MP4.
-2. **Step 2: Social Media Upload Pipeline**
-   - Create the automated publishing workflow for Instagram Reels (via Meta Graph API container flow) and YouTube Shorts (via Google OAuth / YouTube Data API v3).
-   - Generate automated publication packages (title, caption, 5 viral hashtags, thumbnail frame).
+1. **Build Social Media Upload Pipeline (`scripts/publish-reel.ts`)**:
+   - Implement Instagram Graph API Reels container upload flow (`POST /{ig-user-id}/media` ➔ poll container status ➔ `POST /{ig-user-id}/media_publish`).
+   - Implement YouTube Data API v3 Shorts upload with category, tags, and privacy settings.
+   - Generate full publication package: 5 High-CTR hooks, 1-line caption, 5 viral hashtags, cover frame timestamp.
