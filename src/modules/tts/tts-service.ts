@@ -50,12 +50,8 @@ export async function synthesizeStoryboardNarration(
         sceneIndex: i,
       });
     } catch (err: any) {
-      if (!(provider instanceof EdgeTTSProvider)) {
-        console.warn('[TTS] Primary voice unavailable. Regenerating the whole narration with Edge for a consistent voice.');
-        return synthesizeStoryboardNarration(storyboard, runDir, new EdgeTTSProvider(process.env.EDGE_TTS_VOICE));
-      } else {
-        throw err;
-      }
+      console.error(\n❌ [TTS Error] Provider '' failed on Scene :, err.message);
+      throw new Error(TTS generation failed with '': . If using ElevenLabs, check remaining credit quota at elevenlabs.io.);
     }
 
     clips.push(clip);
