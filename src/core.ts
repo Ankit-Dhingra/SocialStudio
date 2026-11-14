@@ -12,11 +12,20 @@ export const pool = new Pool({
   connectionString: dbUrl,
   ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
 });
+pool.on('error', (err) => {
+  // Gracefully log DB warnings without crashing the process
+  console.warn('[Postgres Warning]:', err.message);
+});
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 export const connection = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
+  retryStrategy: () => 5000,
   tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+});
+connection.on('error', (err) => {
+  // Gracefully log Redis warnings without crashing the process
+  console.warn('[Redis Warning]:', err.message);
 });
 export const queue = new Queue('shorts', { connection });
 

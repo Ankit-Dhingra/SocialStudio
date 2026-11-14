@@ -4,6 +4,7 @@ import { Storyboard } from '../contracts/storyboard.js';
 import { TTSProvider, SynthesizedAudioClip } from './tts-provider.js';
 import { EdgeTTSProvider } from './edge-tts-provider.js';
 import { ElevenLabsProvider } from './elevenlabs-provider.js';
+import { SarvamTTSProvider } from './sarvam-provider.js';
 
 dotenv.config();
 
@@ -14,7 +15,19 @@ export interface StoryboardAudioResult {
 }
 
 export function getTTSProvider(): TTSProvider {
-  const provider = process.env.TTS_PROVIDER || 'edge';
+  const provider = process.env.TTS_PROVIDER || 'sarvam';
+
+  if (provider === 'sarvam') {
+    const key = process.env.SARVAM_API_KEY;
+    if (key) {
+      return new SarvamTTSProvider(
+        key,
+        process.env.SARVAM_SPEAKER || 'sunny_hi_reels',
+        process.env.SARVAM_MODEL || 'bulbul:v4-flash'
+      );
+    }
+    console.warn('Sarvam API key missing in environment; falling back to edge-tts.');
+  }
 
   if (provider === 'elevenlabs') {
     const key = process.env.ELEVENLABS_API_KEY;
@@ -50,8 +63,8 @@ export async function synthesizeStoryboardNarration(
         sceneIndex: i,
       });
     } catch (err: any) {
-      console.error(\n❌ [TTS Error] Provider '' failed on Scene :, err.message);
-      throw new Error(TTS generation failed with '': . If using ElevenLabs, check remaining credit quota at elevenlabs.io.);
+      console.error(`\n❌ [TTS Error] Provider '${provider.name}' failed on Scene ${i + 1}:`, err.message);
+      throw new Error(`TTS generation failed with '${provider.name}': ${err.message}. Check your API keys and quotas.`);
     }
 
     clips.push(clip);

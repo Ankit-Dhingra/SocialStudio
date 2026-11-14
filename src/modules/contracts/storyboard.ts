@@ -9,6 +9,10 @@ export const SceneTypeEnum = z.enum([
   'collection',
   'raceCondition',
   'summary',
+  'smartphoneMockup',
+  'h3SpatialMap',
+  'architecturePipeline',
+  'tradeoffHUD',
 ]);
 
 export type SceneType = z.infer<typeof SceneTypeEnum>;

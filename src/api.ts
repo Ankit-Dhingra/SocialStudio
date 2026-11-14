@@ -13,7 +13,12 @@ process.env.TMP = diskTmpDir;
 
 import { parseCustomScriptToStoryboard } from './modules/ai-script/custom-script-parser.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
-import { getTTSProvider } from './modules/tts/tts-service.js';
+import { masterScriptService } from './modules/ai-script/master-script-service.js';
+import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
+import { buildVideoTimeline } from './modules/video/timeline.js';
+import { renderStudioShort } from './modules/render/video-renderer.js';
+import { performMediaQA } from './modules/qa/media-qa.js';
+import { execFileSync } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
 import { createHash, randomUUID } from 'node:crypto';
@@ -27,9 +32,17 @@ app.use(cors({ origin: '*' })); // Allow dashboard, n8n, and local dev clients
 
 // Serve rendered videos and media assets
 app.use('/media', express.static(path.resolve('media')));
+// Serve Remotion audio assets
+app.use('/audio', express.static(path.resolve('remotion/public/audio')));
+
+// Serve compiled Dashboard frontend
+const dashboardDist = path.resolve('dashboard/dist');
+if (fs.existsSync(dashboardDist)) {
+  app.use(express.static(dashboardDist));
+}
 
 // Lightweight health ping for UptimeRobot / Render keep-alive (fast, zero-overhead)
-app.get(['/health', '/ping', '/'], (_req, res) => {
+app.get(['/health', '/ping'], (_req, res) => {
   res.status(200).json({
     status: 'ok',
     service: 'SocialStudio API',
@@ -101,8 +114,268 @@ app.get('/api/videos', async (_req, res) => {
 
     res.json(enriched);
   } catch (err: any) {
+    // Graceful fallback when DB is offline during local development
+    res.json([]);
+  }
+});
+
+// ==============================================================================
+// MASTER SCRIPT PIPELINE ENDPOINTS (General Tech Reels & Chatbot Refinement)
+// ==============================================================================
+
+// 1. List pipeline sessions
+app.get('/api/pipeline/sessions', (_req, res) => {
+  try {
+    const list = masterScriptService.listSessions().map((s) => ({
+      id: s.id,
+      topic: s.topic,
+      angle: s.angle,
+      title: s.storyboard?.title || s.topic,
+      finalized: s.finalized || false,
+      hasAudio: Boolean(s.audioResult),
+      hasVideo: Boolean(s.renderState?.mediaUrl),
+      renderStatus: s.renderState?.status || 'idle',
+      updatedAt: s.updatedAt,
+      createdAt: s.createdAt,
+    }));
+    res.json(list);
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// 2. Start initial master script generation
+app.post('/api/pipeline/script/start', async (req, res) => {
+  const { topic, angle } = req.body;
+  if (!topic || typeof topic !== 'string' || topic.trim().length < 3) {
+    return res.status(400).json({ error: 'Please enter a valid technical topic.' });
+  }
+  try {
+    const session = await masterScriptService.startScriptSession(topic, angle);
+    res.status(201).json(session);
+  } catch (err: any) {
+    console.error('[API /pipeline/script/start Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. ChatGPT-style refinement chat
+app.post('/api/pipeline/script/chat', async (req, res) => {
+  const { sessionId, message } = req.body;
+  if (!sessionId || !message) {
+    return res.status(400).json({ error: 'sessionId and message are required.' });
+  }
+  try {
+    const session = await masterScriptService.chatRefine(sessionId, message);
+    res.json(session);
+  } catch (err: any) {
+    console.error('[API /pipeline/script/chat Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Get session state
+app.get('/api/pipeline/script/:sessionId', (req, res) => {
+  const session = masterScriptService.getSession(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  res.json(session);
+});
+
+// 5. Finalize script
+app.post('/api/pipeline/script/finalize', (req, res) => {
+  const { sessionId, customMarkdown } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required.' });
+  }
+  try {
+    const session = masterScriptService.finalizeScript(sessionId, customMarkdown);
+    res.json(session);
+  } catch (err: any) {
+    console.error('[API /pipeline/script/finalize Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Voiceover synthesis with Sarvam AI (strictly on-demand to protect credits)
+app.post('/api/pipeline/audio/synthesize', async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required.' });
+  }
+
+  const session = masterScriptService.getSession(sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  try {
+    console.log(`[Pipeline] Synthesizing audio for session ${sessionId}...`);
+    const runDir = path.resolve('remotion/public/audio/runs', sessionId);
+    if (!fs.existsSync(runDir)) {
+      fs.mkdirSync(runDir, { recursive: true });
+    }
+
+    const ttsProvider = getTTSProvider();
+    const audioResult = await synthesizeStoryboardNarration(session.storyboard, runDir, ttsProvider);
+
+    // Copy to media runs and dist-remotion so all clients can serve it
+    const mediaAudioDir = path.resolve('media/runs', sessionId, 'audio');
+    const distDirs = [
+      mediaAudioDir,
+      path.resolve('dist-remotion/public/audio/runs', sessionId),
+      path.resolve('dist-remotion/audio/runs', sessionId),
+    ];
+    for (const d of distDirs) {
+      if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+    }
+
+    for (const clip of audioResult.clips) {
+      for (const d of distDirs) {
+        fs.copyFileSync(clip.filePath, path.join(d, path.basename(clip.filePath)));
+      }
+    }
+
+    // Concatenate into full narration mp3
+    let fullAudioUrl = '';
+    try {
+      const concatListPath = path.join(runDir, 'concat_list.txt');
+      const lines = audioResult.clips.map((c) => `file '${path.resolve(c.filePath).replace(/\\/g, '/')}'`);
+      fs.writeFileSync(concatListPath, lines.join('\n'), 'utf8');
+
+      const fullNarrationPath = path.join(runDir, 'full-narration.mp3');
+      execFileSync('ffmpeg', [
+        '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatListPath,
+        '-c', 'copy',
+        fullNarrationPath,
+      ]);
+
+      for (const d of distDirs) {
+        fs.copyFileSync(fullNarrationPath, path.join(d, 'full-narration.mp3'));
+      }
+      fullAudioUrl = `/audio/runs/${sessionId}/full-narration.mp3`;
+    } catch (concatErr) {
+      console.warn('[Pipeline] Full narration concat warning:', concatErr);
+    }
+
+    // Build timeline
+    const timeline = buildVideoTimeline(session.storyboard, audioResult.clips, {
+      fps: 30,
+      scenePaddingFrames: 14,
+      audioSrcPrefix: `audio/runs/${sessionId}`,
+    });
+
+    // Update session
+    session.audioResult = {
+      ...audioResult,
+      fullAudioUrl,
+      clips: audioResult.clips.map((c) => ({
+        ...c,
+        url: `/audio/runs/${sessionId}/${path.basename(c.filePath)}`,
+      })),
+    };
+    session.timeline = timeline;
+    masterScriptService.updateSession(session);
+
+    res.json({
+      ok: true,
+      audioResult: session.audioResult,
+      timeline,
+      fullAudioUrl,
+    });
+  } catch (err: any) {
+    console.error(`[Pipeline Audio Synthesis Error]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Video rendering (1080x1920 MP4)
+app.post('/api/pipeline/render', async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required.' });
+  }
+
+  const session = masterScriptService.getSession(sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  if (!session.timeline || !session.audioResult) {
+    return res.status(400).json({
+      error: 'Audio not synthesized yet. Please synthesize voiceover before rendering the video.',
+    });
+  }
+
+  // Set rendering status
+  session.renderState = {
+    status: 'rendering',
+    progress: 5,
+  };
+  masterScriptService.updateSession(session);
+
+  const targetMp4Path = path.resolve('media/runs', sessionId, 'final-short.mp4');
+
+  // Trigger rendering asynchronously
+  (async () => {
+    try {
+      console.log(`[Pipeline] Rendering StudioShort for session ${sessionId}...`);
+      const renderResult = await renderStudioShort({
+        storyboard: session.storyboard,
+        timeline: session.timeline,
+        outputFilePath: targetMp4Path,
+        onProgress: (p) => {
+          session.renderState = {
+            status: 'rendering',
+            progress: Math.min(95, Math.round(5 + p.percent * 90)),
+          };
+          masterScriptService.updateSession(session);
+        },
+      });
+
+      console.log(`[Pipeline] Video render finished for session ${sessionId}. Running Media QA...`);
+      const qaReport = performMediaQA(renderResult, session.timeline);
+
+      const mediaUrl = `/media/runs/${sessionId}/final-short.mp4`;
+      session.renderState = {
+        status: 'completed',
+        progress: 100,
+        mediaUrl,
+        qa: qaReport,
+      };
+      masterScriptService.updateSession(session);
+      console.log(`🎉 [Pipeline] Video ready at ${mediaUrl}!`);
+    } catch (err: any) {
+      console.error(`❌ [Pipeline] Render failed for session ${sessionId}:`, err);
+      session.renderState = {
+        status: 'failed',
+        progress: 0,
+        error: err.message || String(err),
+      };
+      masterScriptService.updateSession(session);
+    }
+  })();
+
+  res.json({
+    ok: true,
+    message: 'Rendering started',
+    renderState: session.renderState,
+  });
+});
+
+// 8. Render status check
+app.get('/api/pipeline/render/status/:sessionId', (req, res) => {
+  const session = masterScriptService.getSession(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  res.json({
+    renderState: session.renderState || { status: 'idle', progress: 0 },
+  });
 });
 
 // Get single video by ID
@@ -363,6 +636,15 @@ app.post('/api/queue/reset', async (req, res) => {
   }
 });
 
+if (fs.existsSync(dashboardDist)) {
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/media') || req.path.startsWith('/audio')) {
+      return next();
+    }
+    res.sendFile(path.join(dashboardDist, 'index.html'));
+  });
+}
+
 // Error middleware
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('[API Error]:', err);
@@ -389,8 +671,8 @@ export const server =
           console.warn('[DB AutoInit Warning]:', e.message);
         }
 
-        // In single-container cloud deployment, start the worker in-process
-        if (process.env.START_WORKER !== 'false') {
+        // In single-container cloud deployment, start the worker in-process if requested
+        if (process.env.START_WORKER === 'true') {
           import('./worker.js')
             .then(() => console.log('⚡ [Worker] Background BullMQ worker active in-process.'))
             .catch((err) => console.error('❌ [Worker] Failed to start worker:', err));
