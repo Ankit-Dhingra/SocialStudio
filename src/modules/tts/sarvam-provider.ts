@@ -139,7 +139,12 @@ export class SarvamTTSProvider implements TTSProvider {
       .replace(/\b(uski|iski|meri|teri)\s+pe\s+bhi\b/gi, '$1 screen par bhi')
       .replace(/\bscreen\s+pe\b/gi, 'screen par')
       .replace(/\bpe\s+bhi\b/gi, 'par bhi')
-      .replace(/\b(meri|uski|iski)\s+pe\b/gi, '$1 screen par');
+      .replace(/\b(meri|uski|iski)\s+pe\b/gi, '$1 screen par')
+      // Ensure Hindi pronouns are capitalized so Sarvam decoder does not mistake them for English (e.g. 'maine' -> 'Main')
+      .replace(/\bmaine\b/gi, 'Maine')
+      .replace(/\bmeri\b/gi, 'Meri')
+      .replace(/\buski\b/gi, 'Uski')
+      .replace(/\biski\b/gi, 'Iski');
 
     // Standardize break tags: <break time="0.4s"/> or <break time="400ms"/> -> __BREAK_400ms__
     cleanText = cleanText.replace(/<break\s+time=["']([\d\.]+)(s|ms)["']\s*\/?>/gi, (_, val, unit) => {
