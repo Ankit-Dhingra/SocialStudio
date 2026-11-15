@@ -340,77 +340,15 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
           </Sequence>
         );
       })}
-            {seg.audioSrc && <Audio src={resolveAudioSource(seg.audioSrc)} />}
-
-            {/* Kinetic Dynamic Word-by-Word Subtitles */}
-            <KineticCaptions
-              wordFrames={seg.wordFrames}
-              narration={scene.narration}
-              durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * timeline.fps / 1000))}
-              highlightColor="#FACC15"
-            />
-          </Sequence>
-        );
-      })}
 
       {/* Continuous Tech Background Music with Audio Ducking */}
       {bgmTrack && (
         <Audio
           src={resolveAudioSource(bgmTrack)}
-          volume={(f) => {
-            // Duck volume to 0.07 when narration is playing; rise to 0.16 during pauses
-            return 0.08;
-          }}
+          volume={() => 0.08}
           loop
         />
       )}
-
-      {/* Segmented Top Progress Bar (Reels/Stories Style) */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 24,
-          left: 40,
-          right: 40,
-          display: 'flex',
-          gap: 8,
-          zIndex: 100,
-        }}
-      >
-        {storyboard.scenes.map((_, idx) => {
-          const seg = timeline.segments[idx];
-          let segFill = 0;
-          if (seg) {
-            if (frame >= seg.startFrame + seg.durationInFrames) {
-              segFill = 1;
-            } else if (frame >= seg.startFrame) {
-              segFill = (frame - seg.startFrame) / Math.max(1, seg.durationInFrames);
-            }
-          }
-          return (
-            <div
-              key={idx}
-              style={{
-                flex: 1,
-                height: 6,
-                borderRadius: 3,
-                background: 'rgba(255, 255, 255, 0.25)',
-                overflow: 'hidden',
-                backdropFilter: 'blur(4px)',
-              }}
-            >
-              <div
-                style={{
-                  height: '100%',
-                  width: `${Math.min(100, Math.max(0, segFill * 100))}%`,
-                  background: '#FACC15',
-                  boxShadow: '0 0 10px #FACC15',
-                }}
-              />
-            </div>
-          );
-        })}
-      </div>
     </AbsoluteFill>
   );
 };
