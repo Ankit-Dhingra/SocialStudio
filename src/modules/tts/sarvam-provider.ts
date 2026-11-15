@@ -134,7 +134,12 @@ export class SarvamTTSProvider implements TTSProvider {
       .replace(/\bSamjho\s+ek\b/gi, 'Samjho! <break time="450ms"/> Ek')
       .replace(/\bsurge\s+pricing\b/gi, 'surge-pricing')
       // Normalize introductory conversational clauses so acoustic decoder starts cleanly at token 0
-      .replace(/\b(Kal raat|Kal|Dekho|Maan lo|Sunno|Yaad rakho|Socho)\s*,\s*/gi, '$1 ');
+      .replace(/\b(Kal raat|Kal|Dekho|Maan lo|Sunno|Yaad rakho|Socho)\s*,\s*/gi, '$1 ')
+      // Normalize colloquial Hinglish prepositions that cause Sarvam neural decoder to merge syllables (e.g. "meri pe bhi" -> "meripebhi")
+      .replace(/\b(uski|iski|meri|teri)\s+pe\s+bhi\b/gi, '$1 screen par bhi')
+      .replace(/\bscreen\s+pe\b/gi, 'screen par')
+      .replace(/\bpe\s+bhi\b/gi, 'par bhi')
+      .replace(/\b(meri|uski|iski)\s+pe\b/gi, '$1 screen par');
 
     // Standardize break tags: <break time="0.4s"/> or <break time="400ms"/> -> __BREAK_400ms__
     cleanText = cleanText.replace(/<break\s+time=["']([\d\.]+)(s|ms)["']\s*\/?>/gi, (_, val, unit) => {

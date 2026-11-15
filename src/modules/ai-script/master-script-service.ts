@@ -144,56 +144,140 @@ export function buildStoryboardFromParsed(
     for (let i = 0; i < jsonScenes.length; i++) {
       const js = jsonScenes[i];
       
-      const toStr = (v: any, fallback: string): string => {
+      // Clean readable text extractor that NEVER leaks raw JSON braces or key-value objects
+      const extractCleanText = (v: any, fallback = ''): string => {
         if (!v) return fallback;
-        if (Array.isArray(v)) return v.map((item) => (typeof item === 'object' ? JSON.stringify(item) : String(item))).join(' • ');
-        if (typeof v === 'object') return JSON.stringify(v);
+        if (typeof v === 'string') {
+          let s = v.trim();
+          if (s.startsWith('[') || s.startsWith('{')) {
+            try {
+              return extractCleanText(JSON.parse(s), fallback);
+            } catch {
+              s = s.replace(/[\{\}\[\]"']/g, '').replace(/\b(text|position|color|size|delay|type|id|side)\b\s*:\s*/gi, '').trim();
+            }
+          }
+          return s || fallback;
+        }
+        if (Array.isArray(v)) {
+          const items = v
+            .map((item) => {
+              if (!item) return '';
+              if (typeof item === 'string') return extractCleanText(item, '');
+              if (typeof item === 'object') {
+                return (
+                  item.text ||
+                  item.headline ||
+                  item.label ||
+                  item.title ||
+                  item.screen_content ||
+                  item.name ||
+                  item.value ||
+                  ''
+                );
+              }
+              return String(item).trim();
+            })
+            .filter(Boolean);
+          return items.length > 0 ? items.slice(0, 3).join(' • ') : fallback;
+        }
+        if (typeof v === 'object') {
+          return (
+            v.text ||
+            v.headline ||
+            v.label ||
+            v.title ||
+            v.screen_content ||
+            v.name ||
+            v.value ||
+            fallback
+          );
+        }
         return String(v).trim() || fallback;
       };
 
-      let actNarration = toStr(js.narration || actChunks[i] || js.visual || js.text, `Scene ${i + 1} engineering explanation.`);
+      const extractVisualSummary = (v: any, fallback: string): string => {
+        if (!v) return fallback;
+        if (typeof v === 'string') {
+          let s = v.trim();
+          if (s.startsWith('[') || s.startsWith('{')) {
+            try {
+              return extractVisualSummary(JSON.parse(s), fallback);
+            } catch {
+              s = s.replace(/[\{\}\[\]"']/g, '').replace(/\b(type|id|position|visible|action|element)\b\s*:\s*/gi, '').trim();
+            }
+          }
+          return s || fallback;
+        }
+        if (Array.isArray(v)) {
+          const tags = v
+            .map((item) => {
+              if (!item) return '';
+              if (typeof item === 'string') return item.trim();
+              if (typeof item === 'object') {
+                return item.id || item.type || item.action || item.element || '';
+              }
+              return '';
+            })
+            .filter(Boolean);
+          return tags.length > 0 ? tags.slice(0, 4).join(' → ') : fallback;
+        }
+        if (typeof v === 'object') {
+          return v.type || v.id || v.name || fallback;
+        }
+        return String(v).trim() || fallback;
+      };
+
+      let actNarration = extractCleanText(js.narration || actChunks[i] || js.visual || js.text, `Scene ${i + 1} engineering explanation.`);
       if (actNarration.length < 10) actNarration = `${actNarration} - core distributed architecture breakdown.`;
 
-      // Map AI type names to registered Remotion visual components
-      let sceneType = 'hook';
+      // Map AI type names to registered Remotion visual components with Act semantic roles
       const rawType = (js.type || '').toLowerCase();
-      if (/price|phone|mockup|zomato|order|mobile/i.test(rawType)) {
-        sceneType = 'smartphoneMockup';
-      } else if (/hex|h3|spatial|map|geo/i.test(rawType)) {
-        sceneType = 'h3SpatialMap';
-      } else if (/pipeline|architecture|redis|queue|cache|flow/i.test(rawType)) {
+      let sceneType = 'hook';
+      
+      if (i === 0) {
+        // Act 1: The Hook
+        if (/race|concurrency|lock|seat|ticket|booking|flight/i.test(topic + ' ' + rawType)) {
+          sceneType = 'raceCondition';
+        } else if (/phone|mockup|zomato|swiggy|order|price|surge/i.test(topic + ' ' + rawType)) {
+          sceneType = 'smartphoneMockup';
+        } else {
+          sceneType = 'hook';
+        }
+      } else if (i === 1) {
+        // Act 2: The Paradox / Parallel Execution Reality
+        if (/compare|diff|vs/i.test(rawType)) {
+          sceneType = 'comparison';
+        } else {
+          sceneType = 'architecturePipeline';
+        }
+      } else if (i === 2) {
+        // Act 3: Core Architecture Engine
+        if (/hex|h3|spatial|map|geo/i.test(topic + ' ' + rawType)) {
+          sceneType = 'h3SpatialMap';
+        } else if (/code|terminal|query|command/i.test(rawType)) {
+          sceneType = 'code';
+        } else {
+          sceneType = 'architecturePipeline';
+        }
+      } else if (i === 3) {
+        // Act 4: Production Edge Case (Crash / Failure / TTL)
         sceneType = 'architecturePipeline';
-      } else if (/tradeoff|dilemma|hud|decision|split/i.test(rawType)) {
+      } else if (i === 4) {
+        // Act 5: Senior SDE Tradeoff & Recap
         sceneType = 'tradeoffHUD';
-      } else if (/code|terminal|syntax/i.test(rawType)) {
-        sceneType = 'code';
-      } else if (/race|concurrency|lock/i.test(rawType)) {
-        sceneType = 'raceCondition';
-      } else if (/summary|recap/i.test(rawType)) {
-        sceneType = 'summary';
       }
 
-      const validTypes = new Set([
-        'hook',
-        'code',
-        'requestFlow',
-        'queueTimeline',
-        'comparison',
-        'collection',
-        'raceCondition',
-        'summary',
-        'smartphoneMockup',
-        'h3SpatialMap',
-        'architecturePipeline',
-        'tradeoffHUD',
-      ]);
-      if (!validTypes.has(sceneType)) {
-        sceneType = 'hook';
-      }
+      const defaultActTitles = [
+        '1 SEAT • 2 BOOKINGS',
+        'THE PARALLEL EXECUTION TRAP',
+        'REDIS DISTRIBUTED LOCK ENGINE',
+        'EDGE CASE: SERVER CRASH & TTL',
+        'SENIOR SDE TRADEOFF MATRIX'
+      ];
 
-      const rawOnScreen = toStr(js.onScreenText || js.text, topic.toUpperCase());
-      const onScreenText = rawOnScreen.length > 115 ? rawOnScreen.slice(0, 112) + '...' : (rawOnScreen.length < 3 ? `${rawOnScreen} SYS` : rawOnScreen);
-      const technicalKeyPoint = toStr(js.visualElements || js.visual, 'Core Engineering Concept');
+      const rawOnScreen = extractCleanText(js.onScreenText || js.text, defaultActTitles[i] || topic.toUpperCase());
+      const onScreenText = rawOnScreen.length > 80 ? rawOnScreen.slice(0, 77) + '...' : (rawOnScreen.length < 3 ? `${rawOnScreen} SYS` : rawOnScreen);
+      const technicalKeyPoint = extractVisualSummary(js.visualElements || js.visual, 'Core Architecture Flow');
 
       scenes.push({
         id: `scene-${i + 1}`,
@@ -207,7 +291,8 @@ export function buildStoryboardFromParsed(
           type: sceneType,
           headline: onScreenText,
           subtext: technicalKeyPoint,
-          ...js,
+          title: onScreenText,
+          subtitle: technicalKeyPoint,
         },
       });
     }

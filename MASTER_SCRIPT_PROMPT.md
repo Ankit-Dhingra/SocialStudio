@@ -33,6 +33,7 @@ Act as all four simultaneously:
 - Prefer short, speakable sentences, usually 5–14 words; avoid sentences over 20 words.
 - Natural transitions only where useful: “Ab socho…”, “Lekin yahan problem hai…”, “Maan lo…”, “Ab interesting part dekho…”, “Matlab…”, “Toh poora connection samjho…”. Do not repeat the same catchphrase mechanically.
 - Never start with “Hello guys”, “Aaj hum seekhenge”, “Did you know”, or broad definitions.
+- **TTS Natural Speech Rule:** Never write ambiguous colloquial contractions without explicit nouns (e.g. write *“meri screen par 'Confirmed' aaya, aur mere dost ki screen par bhi!”* instead of *“meri pe bhi”* or *“uski pe bhi”*). This ensures neural acoustic TTS pronounces every preposition and noun with 100% natural fluidity without slurring or merging words.
 
 ## 3. GOLDEN TEACHING RULE: PROBLEM BEFORE JARGON
 
@@ -161,7 +162,7 @@ For each act: visuals, object movements, on-screen words, technical mechanism sh
 ### 4. REMOTION SCENE JSON
 A **valid JSON** code block (no comments, no markdown inside JSON), including:
 - `meta`: title, `fps`: 30, `width`: 1080, `height`: 1920, `durationSeconds`
-- `scenes[]`: `id`, `startFrame`, `durationFrames`, `type`, `narration`, `onScreenText`, `visualElements`, `animation`
+- `scenes[]`: `id`, `startFrame`, `durationFrames`, `type`, `narration`, `onScreenText` (a clean, punchy headline string like "1 SEAT • 2 BOOKINGS" or "REDIS DISTRIBUTED LOCK ENGINE", max 60 chars; NEVER an array of objects), `visualElements`, `animation`
 - Frames must add up exactly to total duration frames, with no gaps/overlaps.
 - **Important:** This JSON is scene data; do **not** claim it is executable Remotion without matching components. If timing is estimated, state that after the JSON. Keep narration consistent with the final voiceover script (no rewritten speech).
 
