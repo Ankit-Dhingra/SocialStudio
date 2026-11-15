@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
 import { Storyboard } from '../contracts/storyboard.js';
@@ -42,6 +43,38 @@ export function getTTSProvider(): TTSProvider {
   return new EdgeTTSProvider(defaultVoice);
 }
 
+export async function alignAudioWithGroq(
+  audioFilePath: string
+): Promise<Array<{ word: string; start: number; end: number }>> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || !fs.existsSync(audioFilePath)) return [];
+
+  try {
+    const buffer = fs.readFileSync(audioFilePath);
+    const blob = new Blob([buffer], { type: 'audio/mp3' });
+    const fd = new FormData();
+    fd.append('file', blob, path.basename(audioFilePath));
+    fd.append('model', 'whisper-large-v3');
+    fd.append('response_format', 'verbose_json');
+    fd.append('timestamp_granularities[]', 'word');
+
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: fd,
+    });
+    if (!res.ok) {
+      console.warn(`[Groq Whisper Alignment] HTTP ${res.status}`);
+      return [];
+    }
+    const data = (await res.json()) as any;
+    return data.words || [];
+  } catch (err: any) {
+    console.warn(`[Groq Whisper Alignment Error]:`, err.message);
+    return [];
+  }
+}
+
 export async function synthesizeStoryboardNarration(
   storyboard: Storyboard,
   runDir: string,
@@ -65,6 +98,19 @@ export async function synthesizeStoryboardNarration(
     } catch (err: any) {
       console.error(`\n❌ [TTS Error] Provider '${provider.name}' failed on Scene ${i + 1}:`, err.message);
       throw new Error(`TTS generation failed with '${provider.name}': ${err.message}. Check your API keys and quotas.`);
+    }
+
+    // High-precision alignment using Groq Whisper if available
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const words = await alignAudioWithGroq(outputPath);
+        if (words && words.length > 0) {
+          clip.wordTimestamps = words;
+          console.log(`  🎯 [Alignment] Aligned ${words.length} spoken words via Groq Whisper for Scene ${i + 1}`);
+        }
+      } catch {
+        // Fallback safely to duration interpolation
+      }
     }
 
     clips.push(clip);

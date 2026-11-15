@@ -40,6 +40,7 @@ export interface ScriptSession {
   finalized?: boolean;
   audioResult?: any;
   timeline?: any;
+  stillPreviews?: any[];
   renderState?: RenderState;
   createdAt: number;
   updatedAt: number;

@@ -16,7 +16,7 @@ import { generateHinglishScript } from './modules/ai-script/script-generator.js'
 import { masterScriptService } from './modules/ai-script/master-script-service.js';
 import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
-import { renderStudioShort } from './modules/render/video-renderer.js';
+import { renderStudioShort, renderStillPreviews } from './modules/render/video-renderer.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 import { execFileSync } from 'node:child_process';
 import express from 'express';
@@ -34,6 +34,8 @@ app.use(cors({ origin: '*' })); // Allow dashboard, n8n, and local dev clients
 app.use('/media', express.static(path.resolve('media')));
 // Serve Remotion audio assets
 app.use('/audio', express.static(path.resolve('remotion/public/audio')));
+// Serve Remotion visual stills and screenshots
+app.use('/previews', express.static(path.resolve('remotion/public/previews')));
 
 // Serve compiled Dashboard frontend
 const dashboardDist = path.resolve('dashboard/dist');
@@ -291,6 +293,60 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     console.error(`[Pipeline Audio Synthesis Error]:`, err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// 6.5. Generate Still Previews (fast 3-4s visual verification without full render)
+app.post('/api/pipeline/stills', async (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required.' });
+  }
+
+  const session = masterScriptService.getSession(sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  if (!session.timeline) {
+    session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
+      fps: 30,
+      scenePaddingFrames: 14,
+      audioSrcPrefix: `audio/runs/${sessionId}`,
+    });
+    masterScriptService.updateSession(session);
+  }
+
+  try {
+    const previewDir = path.resolve('remotion/public/previews', sessionId);
+    console.log(`[Pipeline] Generating still previews for session ${sessionId}...`);
+    const stills = await renderStillPreviews(
+      session.storyboard,
+      session.timeline,
+      previewDir,
+      `/previews/${sessionId}`
+    );
+
+    session.stillPreviews = stills;
+    masterScriptService.updateSession(session);
+
+    res.json({
+      ok: true,
+      stills,
+    });
+  } catch (err: any) {
+    console.error(`[Pipeline Stills Error]:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/pipeline/stills/:sessionId', (req, res) => {
+  const session = masterScriptService.getSession(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+  res.json({
+    stills: session.stillPreviews || [],
+  });
 });
 
 // 7. Video rendering (1080x1920 MP4)

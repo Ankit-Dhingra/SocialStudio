@@ -30,6 +30,10 @@ import {
   Zap,
   Volume2,
   Cpu,
+  Camera,
+  Maximize2,
+  Eye,
+  X,
 } from 'lucide-react';
 import './style.css';
 
@@ -90,6 +94,9 @@ function App() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [audioSynthesizing, setAudioSynthesizing] = useState(false);
   const [audioResult, setAudioResult] = useState(null);
+  const [stills, setStills] = useState([]);
+  const [generatingStills, setGeneratingStills] = useState(false);
+  const [selectedStill, setSelectedStill] = useState(null);
   const [renderProgress, setRenderProgress] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderedMediaUrl, setRenderedMediaUrl] = useState('');
@@ -132,6 +139,7 @@ function App() {
               setTopic(fullSession.topic || '');
               setAngle(fullSession.angle || '');
               if (fullSession.audioResult) setAudioResult(fullSession.audioResult);
+              if (fullSession.stillPreviews) setStills(fullSession.stillPreviews);
               if (fullSession.renderState?.mediaUrl) setRenderedMediaUrl(fullSession.renderState.mediaUrl);
               if (fullSession.renderState?.qa) setQaReport(fullSession.renderState.qa);
               if (fullSession.finalized) {
@@ -290,6 +298,26 @@ function App() {
     }
   }
 
+  // 4.5. Generate High-Res Visual Screenshots (Stills in 3-4s)
+  async function handleGenerateStills() {
+    if (!session?.id) return;
+    setGeneratingStills(true);
+    try {
+      const res = await fetch(toApiUrl('/api/pipeline/stills'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate visual stills');
+      setStills(data.stills || []);
+    } catch (err) {
+      alert(`Screenshot Generation Error: ${err.message}`);
+    } finally {
+      setGeneratingStills(false);
+    }
+  }
+
   // 5. Trigger Video Render
   async function handleRenderVideo() {
     if (!session?.id) return;
@@ -407,7 +435,7 @@ function App() {
                 onClick={() => audioResult && setStage(3)}
               >
                 <div className="step-num-badge">{stage > 3 ? <Check size={11} /> : '3'}</div>
-                <span className="step-label">3. Remotion Preview</span>
+                <span className="step-label">3. Visual Stills Review (3s)</span>
               </div>
 
               <div className="step-divider" />
@@ -858,10 +886,15 @@ function App() {
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() => setStage(3)}
+                        onClick={() => {
+                          setStage(3);
+                          if (!stills || stills.length === 0) {
+                            handleGenerateStills();
+                          }
+                        }}
                         style={{ padding: '8px 24px', fontSize: 13, gap: 8 }}
                       >
-                        <span>Proceed to Remotion Preview</span>
+                        <span>Proceed to Visual Preview</span>
                         <ArrowRight size={14} />
                       </button>
                     </div>
@@ -875,51 +908,148 @@ function App() {
               </section>
             )}
 
-            {/* STAGE 3: REMOTION PREVIEW & STORYBOARD TIMELINE */}
+            {/* STAGE 3: VISUAL REVIEW & SCREENSHOTS (INSTANT 3s REVIEW) */}
             {stage === 3 && (
               <section className="voiceover-hub-card">
                 <div className="voiceover-hero-header">
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                      🎬 Stage 3: Remotion Storyboard & Composition
+                      📸 Stage 3: Visual Verification & Screenshots (Instant 3s Review)
                     </h3>
                     <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                      Composition: <code>StudioShort</code> (1080×1920 @ 30 FPS Vertical). Word-level kinetic captions and animated scene components.
+                      Inspect high-resolution 1080×1920 frames of every scene before committing to full video export. Click any image to view in full size!
                     </p>
                   </div>
 
-                  <div className="badge-mono" style={{ background: '#3b82f6', color: '#fff' }}>
-                    {session?.storyboard?.scenes?.length || 5} Scenes • {audioResult?.totalDurationSec || 75}s
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleGenerateStills}
+                      disabled={generatingStills}
+                      style={{ gap: 6 }}
+                    >
+                      {generatingStills ? (
+                        <RefreshCw size={13} className="animate-spin" />
+                      ) : (
+                        <Camera size={13} />
+                      )}
+                      <span>
+                        {generatingStills
+                          ? 'Rendering Stills...'
+                          : stills.length > 0
+                          ? 'Regenerate Stills'
+                          : 'Generate Stills (3s)'}
+                      </span>
+                    </button>
+
+                    <div className="badge-mono" style={{ background: '#3b82f6', color: '#fff' }}>
+                      {session?.storyboard?.scenes?.length || 5} Scenes • {audioResult?.totalDurationSec || 75}s
+                    </div>
                   </div>
                 </div>
 
-                {/* SCENES BREAKDOWN */}
-                <div className="acts-cards-stream">
-                  {session?.storyboard?.scenes?.map((scene, idx) => (
-                    <div key={idx} className="act-card-item">
-                      <div className="act-card-top">
-                        <span className="act-card-badge" style={{ background: '#3b82f6', color: '#fff' }}>
-                          Scene {idx + 1}: {scene.type}
-                        </span>
-                        <span className="badge-mono" style={{ fontSize: 11 }}>
-                          Frame {idx * 210} → {(idx + 1) * 210} (~{scene.durationTargetSec || 14}s)
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {scene.onScreenText}
-                      </div>
-                      <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                        "{scene.narration}"
-                      </div>
-                      <div style={{ fontSize: 11.5, color: '#60a5fa', background: 'rgba(59, 130, 246, 0.08)', padding: '6px 10px', borderRadius: 4 }}>
-                        🎨 Visual Elements: {scene.technicalKeyPoint}
-                      </div>
+                {/* 1. VISUAL STILLS GALLERY */}
+                {stills && stills.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                        Scene Visual Frames (1080×1920 Vertical Screenshots)
+                      </span>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                        Click any frame to inspect full-size details & safe areas
+                      </span>
                     </div>
-                  ))}
+
+                    <div className="stills-gallery-grid">
+                      {stills.map((still, idx) => (
+                        <div
+                          key={idx}
+                          className="still-card-wrapper"
+                          onClick={() => setSelectedStill(still)}
+                          title="Click to zoom in"
+                        >
+                          <div className="still-thumbnail-box">
+                            <img src={toApiUrl(still.url)} alt={still.type} />
+                            <div className="still-thumbnail-badge">
+                              Act {idx + 1} • {still.type}
+                            </div>
+                            <div className="still-thumbnail-frame">F{still.frame}</div>
+                          </div>
+                          <div className="still-card-meta">
+                            <div className="still-card-title">
+                              {session?.storyboard?.scenes?.[idx]?.onScreenText || still.type}
+                            </div>
+                            <div className="still-card-sub">
+                              {session?.storyboard?.scenes?.[idx]?.technicalKeyPoint || `Frame ${still.frame}`}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="empty-placeholder" style={{ padding: '36px 16px' }}>
+                    <Camera size={26} style={{ margin: '0 auto 10px', color: '#3b82f6' }} />
+                    <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+                      No Visual Screenshots Generated Yet
+                    </h4>
+                    <p style={{ maxWidth: 440, margin: '0 auto 16px', color: 'var(--text-muted)', fontSize: 12.5 }}>
+                      Remotion can render representative frames for all scenes in ~3 seconds so you can verify typography, safe margins, and animations before rendering full MP4.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleGenerateStills}
+                      disabled={generatingStills}
+                      style={{ padding: '8px 22px', fontSize: 13, gap: 8 }}
+                    >
+                      {generatingStills ? <RefreshCw size={14} className="animate-spin" /> : <Camera size={14} />}
+                      <span>{generatingStills ? 'Rendering Stills (~3s)...' : 'Generate Scene Screenshots'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. SCENES BREAKDOWN */}
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-primary)' }}>
+                    Narration & Technical Animation Breakdown
+                  </div>
+                  <div className="acts-cards-stream">
+                    {session?.storyboard?.scenes?.map((scene, idx) => (
+                      <div key={idx} className="act-card-item">
+                        <div className="act-card-top">
+                          <span className="act-card-badge" style={{ background: '#3b82f6', color: '#fff' }}>
+                            Act {idx + 1}: {scene.type}
+                          </span>
+                          <span className="badge-mono" style={{ fontSize: 11 }}>
+                            ~{scene.durationTargetSec || 14}s
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {scene.onScreenText}
+                        </div>
+                        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                          "{scene.narration}"
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11.5,
+                            color: '#60a5fa',
+                            background: 'rgba(59, 130, 246, 0.08)',
+                            padding: '6px 10px',
+                            borderRadius: 4,
+                          }}
+                        >
+                          🎨 Visual Elements: {scene.technicalKeyPoint}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* ACTION BUTTONS */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
                   <button
                     type="button"
                     className="btn btn-secondary"
@@ -936,7 +1066,7 @@ function App() {
                     style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, gap: 10 }}
                   >
                     <Video size={16} />
-                    <span>Render Final Video (1080×1920 MP4)</span>
+                    <span>Approve Visuals & Render Video (Fast 2-Core MP4)</span>
                     <ArrowRight size={16} />
                   </button>
                 </div>
@@ -1145,6 +1275,38 @@ function App() {
             </aside>
           </div>
         </main>
+      )}
+
+      {/* STILL LIGHTBOX MODAL */}
+      {selectedStill && (
+        <div className="still-lightbox-overlay" onClick={() => setSelectedStill(null)}>
+          <div className="still-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <div className="still-lightbox-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span className="act-card-badge">
+                  Act {selectedStill.sceneIndex + 1} • {selectedStill.type}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {session?.storyboard?.scenes?.[selectedStill.sceneIndex]?.onScreenText}
+                </span>
+                <span className="badge-mono" style={{ fontSize: 11 }}>
+                  Frame {selectedStill.frame}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setSelectedStill(null)}
+                style={{ padding: '4px 8px' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="still-lightbox-body">
+              <img src={toApiUrl(selectedStill.url)} alt={selectedStill.type} />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

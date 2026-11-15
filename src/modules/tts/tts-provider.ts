@@ -1,5 +1,6 @@
 export interface SynthesizedAudioClip {
   alignment?: { text: string; starts: number[] };
+  wordTimestamps?: Array<{ word: string; start: number; end: number }>;
   sceneId: string;
   sceneIndex: number;
   filePath: string;

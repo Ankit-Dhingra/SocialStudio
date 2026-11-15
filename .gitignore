@@ -36,6 +36,8 @@ remotion/public/audio/*.mp3
 remotion/public/audio/*.wav
 remotion/public/audio/runs/
 !remotion/public/audio/.gitkeep
+remotion/public/previews/
+!remotion/public/previews/.gitkeep
 .remotion/
 remotion/.cache/
 dist-remotion/

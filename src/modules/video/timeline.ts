@@ -57,22 +57,47 @@ export function buildVideoTimeline(
       : '';
 
     const steps = scene.type === 'collection'
-      ? [{cue: scene.visualProps.cue}]
+      ? [{ cue: scene.visualProps.cue }]
       : scene.visualProps.steps ?? scene.visualProps.items;
+
     const cueFrames = Array.isArray(steps) ? steps.map((step, index) => {
-      const cue = typeof step?.cue === 'string' ? step.cue : '';
-      const offset = cue ? scene.narration.indexOf(cue) : -1;
-      if (offset < 0) return Math.round(index * audioFrames / steps.length);
+      const cue = typeof step?.cue === 'string' ? step.cue.toLowerCase().trim() : '';
+      if (cue && clip?.wordTimestamps && clip.wordTimestamps.length > 0) {
+        const found = clip.wordTimestamps.find((w) => w.word.toLowerCase().includes(cue));
+        if (found) return Math.round(found.start * fps);
+      }
+      const offset = cue ? scene.narration.toLowerCase().indexOf(cue) : -1;
+      if (offset < 0) return Math.round((index * audioFrames) / steps.length);
       const alignment = clip?.alignment;
       const alignedOffset = alignment?.text.indexOf(cue) ?? -1;
       const seconds = alignment?.starts[alignedOffset];
-      return seconds !== undefined ? Math.round(seconds * fps)
-        : Math.round(audioFrames * offset / scene.narration.length);
+      return seconds !== undefined
+        ? Math.round(seconds * fps)
+        : Math.round((audioFrames * offset) / scene.narration.length);
     }) : undefined;
-    const alignment = clip?.alignment;
-    const wordFrames = alignment?.text === scene.narration
-      ? Array.from(scene.narration.matchAll(/\S+/g), match => Math.round(alignment.starts[match.index!] * fps))
-      : undefined;
+
+    // Word frames mapped from Whisper timestamps or fallback alignment
+    const cleanWords = scene.narration
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    let wordFrames: number[] | undefined;
+    if (clip?.wordTimestamps && clip.wordTimestamps.length > 0 && cleanWords.length > 0) {
+      const wWords = clip.wordTimestamps;
+      wordFrames = cleanWords.map((_, idx) => {
+        const ratio = cleanWords.length > 1 ? idx / (cleanWords.length - 1) : 0;
+        const wIdx = Math.min(wWords.length - 1, Math.round(ratio * (wWords.length - 1)));
+        return Math.round(wWords[wIdx].start * fps);
+      });
+    } else if (clip?.alignment && clip.alignment.text === scene.narration) {
+      wordFrames = Array.from(scene.narration.matchAll(/\S+/g), (match) =>
+        Math.round(clip.alignment!.starts[match.index!] * fps)
+      );
+    }
+
     segments.push({
       wordFrames,
       cueFrames,
