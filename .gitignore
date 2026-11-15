@@ -27,6 +27,7 @@ media/*.mp3
 media/runs/
 media/previews/
 media/sessions/
+media/tmp/
 !media/.gitkeep
 !media/music/
 !media/raw_assets/
