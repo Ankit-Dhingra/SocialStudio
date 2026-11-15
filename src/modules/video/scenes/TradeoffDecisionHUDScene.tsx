@@ -65,7 +65,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
         display: 'flex',
         flexDirection: 'column',
         paddingTop: VideoDesignTokens.safeMargin.top,
-        paddingBottom: 340,
+        paddingBottom: VideoDesignTokens.safeMargin.bottom,
         paddingLeft: 40,
         paddingRight: 40,
         overflow: 'hidden',

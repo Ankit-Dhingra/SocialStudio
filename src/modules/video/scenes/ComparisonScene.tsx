@@ -59,8 +59,8 @@ export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
       style={{
         transform: `scale(${cameraZoom})`,
         transformOrigin: 'center center',
-        paddingTop: 90,
-        paddingBottom: 220,
+        paddingTop: 130,
+        paddingBottom: VideoDesignTokens.safeMargin.bottom,
         paddingLeft: 44,
         paddingRight: 44,
         display: 'flex',

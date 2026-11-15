@@ -11,227 +11,285 @@ import {
 } from 'remotion';
 import { VideoDesignTokens } from '../design-system.js';
 
-interface RaceConditionSimulatorProps {
+export interface RaceConditionSimulatorProps {
   title?: string;
   itemTitle?: string;
   user1Name?: string;
   user2Name?: string;
   atomicQuery?: string;
+  onScreenText?: string;
 }
 
 export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> = ({
-  title = 'SYSTEM DESIGN • CONCURRENCY',
-  itemTitle = 'iPhone 16 Pro (Stock: 1)',
-  user1Name = 'Aman',
-  user2Name = 'Riya',
-  atomicQuery = 'UPDATE products SET stock = stock - 1 WHERE id = 1 AND stock > 0;',
+  title = 'CONCURRENCY • RACE CONDITION',
+  itemTitle = 'Coldplay VIP Lounge (Seat A-12)',
+  user1Name = 'Aman (Client A)',
+  user2Name = 'Riya (Client B)',
+  atomicQuery = 'UPDATE seats SET stock = stock - 1 WHERE id = 101 AND stock > 0;',
+  onScreenText,
 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, durationInFrames } = useVideoConfig();
 
-  // Camera Punch-In Motion (Retention zoom: 1.00 -> 1.04)
-  const cameraZoom = interpolate(frame, [0, 80], [1.0, 1.03], {
-    extrapolateRight: 'clamp',
-  });
+  // Dynamic phase thresholds based on total duration (works for 10s, 15s, 20s+)
+  const totalFrames = Math.max(durationInFrames || 300, 180);
 
-  // Entrance spring for cards
+  // Keyframe Milestones:
+  // Step 1: 0% to 18% - Realistic Ticket card appears
+  // Step 2: 18% to 35% - Two concurrent users viewing the same seat
+  // Step 3: 35% to 50% - Both click "Book Now" (t=20:00:00.120 vs .124)
+  // Step 4: 50% to 66% - Network packets travel along SVG bezier paths
+  // Step 5: 66% to 80% - Both threads concurrently read stock = 1 (The Race Hazard)
+  // Step 6: 80% to 100% - Atomic update resolves: Aman confirms (1 row), Riya rejected (0 rows)
+
+  const fStep2 = Math.floor(totalFrames * 0.16);
+  const fClickAman = Math.floor(totalFrames * 0.33);
+  const fClickRiya = Math.floor(totalFrames * 0.36);
+  const fNetworkStart = Math.floor(totalFrames * 0.48);
+  const fReadDb = Math.floor(totalFrames * 0.65);
+  const fResolveAman = Math.floor(totalFrames * 0.79);
+  const fResolveRiya = Math.floor(totalFrames * 0.85);
+
+  // States
+  const isStep2 = frame >= fStep2;
+  const isAmanClicked = frame >= fClickAman;
+  const isRiyaClicked = frame >= fClickRiya;
+  const isDbReading = frame >= fReadDb;
+  const isAmanResolved = frame >= fResolveAman;
+  const isRiyaResolved = frame >= fResolveRiya;
+
+  // Spring animations
   const entrance = spring({
     frame,
     fps,
     config: { damping: 14, stiffness: 90 },
   });
 
-  // Timings for actions:
-  // Frame 0-15: Interviewer question appears
-  // Frame 15: Aman clicks "Buy Now" (t=18:00:00.412)
-  // Frame 22: Riya clicks "Buy Now" (t=18:00:00.415)
-  // Frame 15-45: Aman's packet travels along bezier curve down to DB
-  // Frame 22-55: Riya's packet travels along bezier curve down to DB
-  // Frame 45: DB decrements stock from 1 -> 0 (Aman succeeds!) -> Ding SFX
-  // Frame 55: Riya's request hits 0 rows -> Fails! -> Buzzer SFX
-  // Frame 65+: Solution / Atomic query highlight
-
-  const amanClickFrame = 15;
-  const riyaClickFrame = 22;
-  const amanArrivalFrame = 45;
-  const riyaArrivalFrame = 55;
-
-  const isAmanClicked = frame >= amanClickFrame;
-  const isRiyaClicked = frame >= riyaClickFrame;
-  const isAmanArrived = frame >= amanArrivalFrame;
-  const isRiyaArrived = frame >= riyaArrivalFrame;
-
-  // Aman packet progress: 0 to 1
-  const amanProgress = interpolate(frame, [amanClickFrame, amanArrivalFrame], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
+  const step2Entrance = spring({
+    frame: Math.max(0, frame - fStep2),
+    fps,
+    config: { damping: 15, stiffness: 100 },
   });
 
-  // Riya packet progress: 0 to 1
-  const riyaProgress = interpolate(frame, [riyaClickFrame, riyaArrivalFrame], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
+  const dbEntrance = spring({
+    frame: Math.max(0, frame - fNetworkStart),
+    fps,
+    config: { damping: 16, stiffness: 110 },
   });
 
-  // Bezier curve interpolation for packets:
-  // Left path: From (240, 480) down through control point (320, 680) to DB (480, 880)
-  const amanX = (1 - amanProgress) * 240 + amanProgress * 480;
-  const amanY =
-    (1 - amanProgress) * (1 - amanProgress) * 480 +
-    2 * (1 - amanProgress) * amanProgress * 680 +
-    amanProgress * amanProgress * 880;
+  // Network packet progress (0 to 1) along SVG bezier curves
+  const packetAProgress = interpolate(
+    frame,
+    [fNetworkStart, fReadDb],
+    [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+  );
 
-  // Right path: From (840, 480) down through control point (760, 680) to DB (600, 880)
-  const riyaX = (1 - riyaProgress) * 840 + riyaProgress * 600;
-  const riyaY =
-    (1 - riyaProgress) * (1 - riyaProgress) * 480 +
-    2 * (1 - riyaProgress) * riyaProgress * 680 +
-    riyaProgress * riyaProgress * 880;
+  const packetBProgress = interpolate(
+    frame,
+    [fNetworkStart + Math.floor(totalFrames * 0.02), fReadDb + Math.floor(totalFrames * 0.04)],
+    [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+  );
 
-  const currentStock = isAmanArrived ? 0 : 1;
+  // Precise Bezier curve coordinates inside the Stage box (992px wide)
+  // Path A: (250, 240) -> Control: (320, 440) -> DB Entrance: (440, 620)
+  const pA = packetAProgress;
+  const packetAX = (1 - pA) * (1 - pA) * 250 + 2 * (1 - pA) * pA * 320 + pA * pA * 440;
+  const packetAY = (1 - pA) * (1 - pA) * 240 + 2 * (1 - pA) * pA * 440 + pA * pA * 620;
 
-  // Typewriter effect for question
-  const questionText = '1 iPhone bacha hai. 2 log. Same second. Order kisko milega?';
-  const charsToShow = Math.min(questionText.length, Math.floor(frame * 1.5));
-  const displayedQuestion = questionText.slice(0, charsToShow);
+  // Path B: (742, 240) -> Control: (672, 440) -> DB Entrance: (552, 620)
+  const pB = packetBProgress;
+  const packetBX = (1 - pB) * (1 - pB) * 742 + 2 * (1 - pB) * pB * 672 + pB * pB * 552;
+  const packetBY = (1 - pB) * (1 - pB) * 240 + 2 * (1 - pB) * pB * 440 + pB * pB * 620;
+
+  // Inventory count: 1 until Aman resolves, then 0
+  const stockCount = isAmanResolved ? 0 : 1;
+
+  // Pulsing glow for single seat left indicator
+  const pulseOpacity = interpolate(
+    Math.sin((frame / fps) * 8),
+    [-1, 1],
+    [0.7, 1.0]
+  );
 
   return (
     <AbsoluteFill
       style={{
-        transform: `scale(${cameraZoom})`,
-        transformOrigin: 'center center',
-        paddingTop: 80,
-        paddingBottom: 220,
-        paddingLeft: 40,
-        paddingRight: 40,
+        paddingTop: 130, // Safe zone protection: 130px top padding
+        paddingBottom: 440, // Generous 440px bottom padding leaves subtitles completely unhindered
+        paddingLeft: 44,
+        paddingRight: 44,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
         color: '#FFFFFF',
+        boxSizing: 'border-box',
+        zIndex: 5,
       }}
     >
       {/* SFX Audio Triggers */}
-      {/* 1. Whoosh entrance at start */}
-      <Sequence from={0} durationInFrames={20}>
-        <Audio src={staticFile('sfx/whoosh.wav')} volume={0.5} />
+      {/* 1. Whoosh entrance */}
+      <Sequence from={0} durationInFrames={25}>
+        <Audio src={staticFile('sfx/whoosh.wav')} volume={0.45} />
       </Sequence>
 
       {/* 2. Pop when Aman clicks */}
-      <Sequence from={amanClickFrame} durationInFrames={15}>
+      <Sequence from={fClickAman} durationInFrames={18}>
         <Audio src={staticFile('sfx/pop.wav')} volume={0.7} />
       </Sequence>
 
       {/* 3. Pop when Riya clicks */}
-      <Sequence from={riyaClickFrame} durationInFrames={15}>
+      <Sequence from={fClickRiya} durationInFrames={18}>
         <Audio src={staticFile('sfx/pop.wav')} volume={0.7} />
       </Sequence>
 
-      {/* 4. Ding when Aman's order confirms */}
-      <Sequence from={amanArrivalFrame} durationInFrames={30}>
-        <Audio src={staticFile('sfx/ding.wav')} volume={0.8} />
+      {/* 4. Ding when Aman's booking succeeds */}
+      <Sequence from={fResolveAman} durationInFrames={35}>
+        <Audio src={staticFile('sfx/ding.wav')} volume={0.85} />
       </Sequence>
 
-      {/* 5. Buzzer when Riya's order fails */}
-      <Sequence from={riyaArrivalFrame} durationInFrames={30}>
-        <Audio src={staticFile('sfx/buzzer.wav')} volume={0.65} />
+      {/* 5. Buzzer when Riya's booking is rejected */}
+      <Sequence from={fResolveRiya} durationInFrames={35}>
+        <Audio src={staticFile('sfx/buzzer.wav')} volume={0.75} />
       </Sequence>
 
-      {/* Top Header Category Pill */}
-      <div style={{ textAlign: 'center', transform: `scale(${entrance})` }}>
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '8px 24px',
-            borderRadius: 30,
-            background: 'rgba(250, 204, 21, 0.12)',
-            border: '1.5px solid rgba(250, 204, 21, 0.6)',
-            boxShadow: '0 0 20px rgba(250, 204, 21, 0.25)',
-          }}
-        >
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#FACC15', boxShadow: '0 0 8px #FACC15' }} />
-          <span
-            style={{
-              color: '#FACC15',
-              fontSize: 22,
-              fontWeight: 900,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-            }}
-          >
-            {title}
-          </span>
-        </div>
-      </div>
-
-      {/* Interviewer Prompt Speech Card */}
-      <div
-        style={{
-          background: 'rgba(15, 23, 42, 0.92)',
-          border: '1.5px solid rgba(56, 189, 248, 0.4)',
-          borderRadius: 24,
-          padding: '20px 28px',
-          boxShadow: '0 15px 40px rgba(0, 0, 0, 0.6)',
-          marginTop: 10,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+      {/* ========================================================
+          ZONE 1: HUD HEADER & REALISTIC CONCERT TICKET
+          ======================================================== */}
+      <div style={{ transform: `scale(${entrance})`, transformOrigin: 'top center', marginBottom: 16 }}>
+        {/* Top category badge */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
           <div
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #00F2FE 0%, #38BDF8 100%)',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 20,
-              fontWeight: 900,
-              color: '#000',
+              gap: 10,
+              padding: '6px 20px',
+              borderRadius: 24,
+              background: 'rgba(250, 204, 21, 0.10)',
+              border: '1.5px solid rgba(250, 204, 21, 0.5)',
+              boxShadow: '0 0 16px rgba(250, 204, 21, 0.2)',
             }}
           >
-            💼
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#FACC15',
+                boxShadow: '0 0 8px #FACC15',
+              }}
+            />
+            <span
+              style={{
+                color: '#FACC15',
+                fontSize: 18,
+                fontWeight: 900,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+              }}
+            >
+              {title}
+            </span>
           </div>
-          <span
+        </div>
+
+        {/* Realistic Concert Ticket Card */}
+        <div
+          style={{
+            position: 'relative',
+            background: 'linear-gradient(135deg, #0F172A 0%, #0B1120 100%)',
+            border: '1.5px solid rgba(56, 189, 248, 0.35)',
+            borderRadius: 20,
+            padding: '16px 22px',
+            boxShadow: '0 12px 35px rgba(0, 0, 0, 0.65)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Holographic ticket badge */}
+          <div
             style={{
-              fontSize: 19,
-              fontWeight: 800,
-              letterSpacing: 1.5,
-              color: '#38BDF8',
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              background: 'linear-gradient(90deg, #38BDF8, #818CF8)',
+              padding: '4px 16px',
+              borderBottomLeftRadius: 14,
+              fontSize: 13,
+              fontWeight: 900,
+              letterSpacing: 1.2,
+              color: '#000000',
               textTransform: 'uppercase',
             }}
           >
-            Interviewer Ne Poocha
-          </span>
-        </div>
-        <div
-          style={{
-            fontSize: 34,
-            fontWeight: 800,
-            lineHeight: 1.35,
-            color: '#FFFFFF',
-          }}
-        >
-          {displayedQuestion}
+            LIVE EVENT PASS
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: 'rgba(56, 189, 248, 0.15)',
+                border: '1px solid rgba(56, 189, 248, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 26,
+              }}
+            >
+              🎟️
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF', letterSpacing: -0.3 }}>
+                {itemTitle}
+              </div>
+              <div style={{ fontSize: 15, color: '#94A3B8', marginTop: 3 }}>
+                DY Patil Stadium • Gate 4 • North Stand • ₹4,999
+              </div>
+            </div>
+
+            {/* Inventory Status Pill */}
+            <div
+              style={{
+                padding: '6px 14px',
+                borderRadius: 20,
+                background: stockCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(100, 116, 139, 0.2)',
+                border: stockCount > 0 ? '1.5px solid #EF4444' : '1.5px solid #64748B',
+                color: stockCount > 0 ? '#F87171' : '#94A3B8',
+                fontWeight: 900,
+                fontSize: 16,
+                letterSpacing: 0.5,
+                opacity: stockCount > 0 ? pulseOpacity : 1,
+                boxShadow: stockCount > 0 ? '0 0 16px rgba(239, 68, 68, 0.3)' : 'none',
+              }}
+            >
+              {stockCount > 0 ? '🔥 ONLY 1 SEAT LEFT' : '❌ SOLD OUT'}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Central Visual Stage: Aman vs Riya + Center Phone + Database */}
+      {/* ========================================================
+          ZONE 2 & 3: INTEGRATED INTERACTIVE SIMULATOR STAGE
+          (Dual Clients + SVG Bezier Highway + Database Engine)
+          ======================================================== */}
       <div
         style={{
           position: 'relative',
-          height: 820,
-          background: 'rgba(3, 7, 18, 0.75)',
-          borderRadius: 28,
-          border: '2px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: 'inset 0 0 60px rgba(0, 0, 0, 0.8)',
-          padding: 20,
+          height: 1060,
+          background: 'rgba(3, 7, 18, 0.88)',
+          borderRadius: 24,
+          border: '1.5px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: 'inset 0 0 40px rgba(0, 0, 0, 0.85)',
+          padding: '16px 20px',
           overflow: 'hidden',
         }}
       >
-        {/* SVG Bezier Connection Lines */}
+        {/* SVG Bezier Connection Lanes */}
         <svg
           style={{
             position: 'absolute',
@@ -242,25 +300,44 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
             zIndex: 1,
           }}
         >
-          {/* Aman line */}
+          {/* Path A (Left User -> DB Entrance) */}
           <path
-            d="M 240 220 Q 320 450 480 620"
+            d="M 250 240 Q 320 440 440 620"
             fill="none"
-            stroke="rgba(56, 189, 248, 0.4)"
-            strokeWidth="3"
+            stroke={isAmanClicked ? 'rgba(0, 242, 254, 0.7)' : 'rgba(0, 242, 254, 0.25)'}
+            strokeWidth={isAmanClicked ? '3.5' : '2'}
             strokeDasharray="6 6"
           />
-          {/* Riya line */}
+          {/* Path B (Right User -> DB Entrance) */}
           <path
-            d="M 760 220 Q 680 450 520 620"
+            d="M 742 240 Q 672 440 552 620"
             fill="none"
-            stroke="rgba(245, 158, 11, 0.4)"
-            strokeWidth="3"
+            stroke={isRiyaClicked ? 'rgba(245, 158, 11, 0.7)' : 'rgba(245, 158, 11, 0.25)'}
+            strokeWidth={isRiyaClicked ? '3.5' : '2'}
             strokeDasharray="6 6"
           />
         </svg>
 
-        {/* Top Row: Aman (Left) | Center iPhone (Stock:1) | Riya (Right) */}
+        {/* Section Headline */}
+        <div style={{ textAlign: 'center', marginBottom: 12, zIndex: 10, position: 'relative' }}>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: '#38BDF8',
+              letterSpacing: 1.5,
+              textTransform: 'uppercase',
+              background: 'rgba(56, 189, 248, 0.1)',
+              padding: '4px 14px',
+              borderRadius: 12,
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+            }}
+          >
+            STEPS 2–6: 2 CONCURRENT REQUESTS • 4ms DELTA • ATOMIC ENGINE
+          </span>
+        </div>
+
+        {/* Two User Phone Mockups */}
         <div
           style={{
             display: 'flex',
@@ -268,275 +345,394 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
             alignItems: 'flex-start',
             position: 'relative',
             zIndex: 10,
+            transform: `scale(${step2Entrance})`,
           }}
         >
-          {/* Aman User Card */}
+          {/* USER A (Aman) */}
           <div
             style={{
-              width: 300,
-              background: isAmanArrived ? 'rgba(16, 185, 129, 0.15)' : 'rgba(15, 23, 42, 0.95)',
-              border: isAmanArrived ? '2px solid #10B981' : '1.5px solid #38BDF8',
-              borderRadius: 22,
-              padding: 18,
-              boxShadow: isAmanArrived ? '0 0 30px rgba(16, 185, 129, 0.4)' : '0 10px 30px rgba(0,0,0,0.5)',
+              width: 440,
+              background: isAmanResolved
+                ? 'rgba(16, 185, 129, 0.18)'
+                : isAmanClicked
+                ? 'rgba(15, 23, 42, 0.96)'
+                : 'rgba(15, 23, 42, 0.90)',
+              border: isAmanResolved
+                ? '2.5px solid #10B981'
+                : isAmanClicked
+                ? '2px solid #00F2FE'
+                : '1.5px solid rgba(56, 189, 248, 0.4)',
+              borderRadius: 20,
+              padding: 16,
+              boxShadow: isAmanResolved
+                ? '0 0 35px rgba(16, 185, 129, 0.45)'
+                : '0 10px 25px rgba(0, 0, 0, 0.5)',
               transition: 'all 0.2s',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 26 }}>👤</span>
-                <span style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF' }}>{user1Name}</span>
+                <span style={{ fontSize: 24 }}>👤</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#FFFFFF' }}>{user1Name}</span>
               </div>
               <span
                 style={{
                   fontFamily: 'monospace',
-                  fontSize: 16,
-                  color: '#38BDF8',
-                  background: 'rgba(56, 189, 248, 0.15)',
-                  padding: '2px 8px',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: isAmanClicked ? '#00F2FE' : '#94A3B8',
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  padding: '3px 10px',
                   borderRadius: 6,
+                  border: isAmanClicked ? '1px solid #00F2FE' : '1px solid #334155',
                 }}
               >
-                18:00:00.412
+                {isAmanClicked ? '20:00:00.120' : 'Idle'}
               </span>
             </div>
 
-            {/* Mobile Phone Mockup Button */}
+            {/* User A Screen Preview */}
             <div
               style={{
-                marginTop: 16,
+                marginTop: 12,
                 background: '#0B0F19',
                 borderRadius: 14,
                 padding: '12px 14px',
-                textAlign: 'center',
                 border: '1px solid #1E293B',
               }}
             >
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94A3B8', marginBottom: 8 }}>
+                <span>Seat A-12</span>
+                <span style={{ color: stockCount > 0 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
+                  {isAmanResolved ? 'ALLOCATED' : '1 Available'}
+                </span>
+              </div>
+
+              {/* Action Button */}
               <div
                 style={{
-                  background: isAmanClicked ? '#10B981' : '#FACC15',
-                  color: '#000000',
+                  background: isAmanResolved
+                    ? '#10B981'
+                    : isAmanClicked
+                    ? '#0284C7'
+                    : '#FACC15',
+                  color: isAmanResolved ? '#FFFFFF' : '#000000',
                   fontWeight: 900,
-                  fontSize: 18,
-                  padding: '10px 14px',
+                  fontSize: 17,
+                  padding: '10px 12px',
                   borderRadius: 10,
-                  boxShadow: isAmanClicked ? '0 0 15px #10B981' : '0 0 15px rgba(250, 204, 21, 0.5)',
-                  transform: isAmanClicked ? 'scale(0.96)' : 'scale(1.0)',
+                  textAlign: 'center',
+                  boxShadow: isAmanResolved
+                    ? '0 0 20px #10B981'
+                    : isAmanClicked
+                    ? '0 0 15px #0284C7'
+                    : '0 0 15px rgba(250, 204, 21, 0.5)',
+                  transform: isAmanClicked && !isAmanResolved ? 'scale(0.95)' : 'scale(1.0)',
                   transition: 'all 0.15s',
                 }}
               >
-                {isAmanArrived ? '✅ ORDERED!' : isAmanClicked ? 'BUYING...' : '⚡ BUY NOW'}
+                {isAmanResolved
+                  ? '✅ CONFIRMED #8941'
+                  : isAmanClicked
+                  ? '⏳ PROCESSING...'
+                  : '⚡ BOOK NOW'}
               </div>
             </div>
+
+            {isAmanResolved && (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  color: '#10B981',
+                  textAlign: 'center',
+                  letterSpacing: 0.5,
+                }}
+              >
+                🎉 1 ROW UPDATED • WINNER
+              </div>
+            )}
           </div>
 
-          {/* Center Product Showcase */}
+          {/* USER B (Riya) */}
           <div
             style={{
-              width: 240,
-              background: 'rgba(2, 6, 23, 0.9)',
-              border: '2px dashed rgba(250, 204, 21, 0.6)',
-              borderRadius: 22,
-              padding: '16px 14px',
-              textAlign: 'center',
-              boxShadow: '0 0 25px rgba(250, 204, 21, 0.15)',
-            }}
-          >
-            <div style={{ fontSize: 44, marginBottom: 4 }}>📱</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>iPhone 16</div>
-            <div
-              style={{
-                marginTop: 8,
-                display: 'inline-block',
-                background: currentStock > 0 ? '#10B981' : '#EF4444',
-                color: '#FFFFFF',
-                fontWeight: 900,
-                fontSize: 18,
-                padding: '4px 16px',
-                borderRadius: 20,
-                boxShadow: currentStock > 0 ? '0 0 15px #10B981' : '0 0 15px #EF4444',
-              }}
-            >
-              {currentStock > 0 ? '🔥 1 LEFT' : '❌ SOLD OUT'}
-            </div>
-          </div>
-
-          {/* Riya User Card */}
-          <div
-            style={{
-              width: 300,
-              background: isRiyaArrived ? 'rgba(239, 68, 68, 0.15)' : 'rgba(15, 23, 42, 0.95)',
-              border: isRiyaArrived ? '2px solid #EF4444' : '1.5px solid #F59E0B',
-              borderRadius: 22,
-              padding: 18,
-              boxShadow: isRiyaArrived ? '0 0 30px rgba(239, 68, 68, 0.4)' : '0 10px 30px rgba(0,0,0,0.5)',
+              width: 440,
+              background: isRiyaResolved
+                ? 'rgba(239, 68, 68, 0.18)'
+                : isRiyaClicked
+                ? 'rgba(15, 23, 42, 0.96)'
+                : 'rgba(15, 23, 42, 0.90)',
+              border: isRiyaResolved
+                ? '2.5px solid #EF4444'
+                : isRiyaClicked
+                ? '2px solid #F59E0B'
+                : '1.5px solid rgba(245, 158, 11, 0.4)',
+              borderRadius: 20,
+              padding: 16,
+              boxShadow: isRiyaResolved
+                ? '0 0 35px rgba(239, 68, 68, 0.45)'
+                : '0 10px 25px rgba(0, 0, 0, 0.5)',
               transition: 'all 0.2s',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 26 }}>👤</span>
-                <span style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF' }}>{user2Name}</span>
+                <span style={{ fontSize: 24 }}>👤</span>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#FFFFFF' }}>{user2Name}</span>
               </div>
               <span
                 style={{
                   fontFamily: 'monospace',
-                  fontSize: 16,
-                  color: '#F59E0B',
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  padding: '2px 8px',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: isRiyaClicked ? '#F59E0B' : '#94A3B8',
+                  background: 'rgba(0, 0, 0, 0.6)',
+                  padding: '3px 10px',
                   borderRadius: 6,
+                  border: isRiyaClicked ? '1px solid #F59E0B' : '1px solid #334155',
                 }}
               >
-                18:00:00.415
+                {isRiyaClicked ? '20:00:00.124' : 'Idle'}
               </span>
             </div>
 
-            {/* Mobile Phone Mockup Button */}
+            {/* User B Screen Preview */}
             <div
               style={{
-                marginTop: 16,
+                marginTop: 12,
                 background: '#0B0F19',
                 borderRadius: 14,
                 padding: '12px 14px',
-                textAlign: 'center',
                 border: '1px solid #1E293B',
               }}
             >
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94A3B8', marginBottom: 8 }}>
+                <span>Seat A-12</span>
+                <span style={{ color: stockCount > 0 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
+                  {isRiyaResolved ? 'SOLD OUT' : '1 Available'}
+                </span>
+              </div>
+
+              {/* Action Button */}
               <div
                 style={{
-                  background: isRiyaArrived ? '#EF4444' : isRiyaClicked ? '#F59E0B' : '#FACC15',
-                  color: '#000000',
+                  background: isRiyaResolved
+                    ? '#EF4444'
+                    : isRiyaClicked
+                    ? '#D97706'
+                    : '#FACC15',
+                  color: isRiyaResolved ? '#FFFFFF' : '#000000',
                   fontWeight: 900,
-                  fontSize: 18,
-                  padding: '10px 14px',
+                  fontSize: 17,
+                  padding: '10px 12px',
                   borderRadius: 10,
-                  boxShadow: isRiyaArrived ? '0 0 15px #EF4444' : '0 0 15px rgba(250, 204, 21, 0.5)',
-                  transform: isRiyaClicked ? 'scale(0.96)' : 'scale(1.0)',
+                  textAlign: 'center',
+                  boxShadow: isRiyaResolved
+                    ? '0 0 20px #EF4444'
+                    : isRiyaClicked
+                    ? '0 0 15px #D97706'
+                    : '0 0 15px rgba(250, 204, 21, 0.5)',
+                  transform: isRiyaClicked && !isRiyaResolved ? 'scale(0.95)' : 'scale(1.0)',
                   transition: 'all 0.15s',
                 }}
               >
-                {isRiyaArrived ? '❌ OUT OF STOCK' : isRiyaClicked ? 'BUYING...' : '⚡ BUY NOW'}
+                {isRiyaResolved
+                  ? '❌ SOLD OUT'
+                  : isRiyaClicked
+                  ? '⏳ PROCESSING...'
+                  : '⚡ BOOK NOW'}
               </div>
             </div>
+
+            {isRiyaResolved && (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  color: '#EF4444',
+                  textAlign: 'center',
+                  letterSpacing: 0.5,
+                }}
+              >
+                ❌ 0 ROWS UPDATED • 4ms LATE
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Animated Traveling Request Packets */}
-        {isAmanClicked && !isAmanArrived && (
+        {/* Dynamic Request Packet A traveling down */}
+        {isAmanClicked && !isAmanResolved && (
           <div
             style={{
               position: 'absolute',
-              left: amanX,
-              top: amanY - 260,
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
+              left: packetAX,
+              top: packetAY,
+              padding: '6px 14px',
+              borderRadius: 14,
               background: '#00F2FE',
-              boxShadow: '0 0 25px #00F2FE, 0 0 50px #00F2FE',
+              boxShadow: '0 0 25px #00F2FE, 0 0 50px rgba(0, 242, 254, 0.6)',
+              color: '#000000',
+              fontWeight: 900,
+              fontSize: 14,
+              letterSpacing: 0.8,
+              transform: 'translate(-50%, -50%)',
+              zIndex: 30,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 20,
-              fontWeight: 900,
-              color: '#000',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 20,
+              gap: 6,
             }}
           >
-            A
+            <span>⚡ REQ_A (.120)</span>
           </div>
         )}
 
-        {isRiyaClicked && !isRiyaArrived && (
+        {/* Dynamic Request Packet B traveling down */}
+        {isRiyaClicked && !isRiyaResolved && (
           <div
             style={{
               position: 'absolute',
-              left: riyaX - 60,
-              top: riyaY - 260,
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
+              left: packetBX,
+              top: packetBY,
+              padding: '6px 14px',
+              borderRadius: 14,
               background: '#F59E0B',
-              boxShadow: '0 0 25px #F59E0B, 0 0 50px #F59E0B',
+              boxShadow: '0 0 25px #F59E0B, 0 0 50px rgba(245, 158, 11, 0.6)',
+              color: '#000000',
+              fontWeight: 900,
+              fontSize: 14,
+              letterSpacing: 0.8,
+              transform: 'translate(-50%, -50%)',
+              zIndex: 30,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 20,
-              fontWeight: 900,
-              color: '#000',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 20,
+              gap: 6,
             }}
           >
-            R
+            <span>⚡ REQ_B (.124)</span>
           </div>
         )}
 
-        {/* Bottom PostgreSQL Database Cylinder */}
+        {/* ========================================================
+            INTEGRATED DATABASE & ATOMIC RESOLUTION CONTAINER
+            ======================================================== */}
         <div
           style={{
             position: 'absolute',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '92%',
-            background: 'rgba(3, 7, 18, 0.96)',
-            border: '2px solid #38BDF8',
+            bottom: 20,
+            left: 20,
+            right: 20,
+            background: 'rgba(7, 12, 24, 0.98)',
+            border: '2px solid rgba(56, 189, 248, 0.45)',
             borderRadius: 22,
-            padding: '22px 28px',
-            boxShadow: '0 0 45px rgba(56, 189, 248, 0.3)',
-            zIndex: 10,
+            padding: '18px 22px',
+            boxShadow: '0 15px 45px rgba(0, 0, 0, 0.75)',
+            zIndex: 15,
+            transform: `scale(${dbEntrance})`,
           }}
         >
+          {/* DB Header with Real-time Stock Counter */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 32 }}>🗄️</span>
               <div>
-                <div style={{ fontSize: 26, fontWeight: 900, color: '#38BDF8' }}>
-                  PostgreSQL Database
+                <div style={{ fontSize: 23, fontWeight: 900, color: '#38BDF8', letterSpacing: -0.2 }}>
+                  PostgreSQL Transaction Engine
                 </div>
-                <div style={{ fontSize: 16, color: '#94A3B8' }}>
-                  Single Source of Truth
+                <div style={{ fontSize: 14, color: '#94A3B8' }}>
+                  Single Source of Truth • ACID Concurrency Guard
                 </div>
               </div>
             </div>
 
+            {/* Atomic Stock Pill */}
             <div
               style={{
                 fontFamily: 'monospace',
-                fontSize: 26,
+                fontSize: 22,
                 fontWeight: 900,
-                color: currentStock > 0 ? '#10B981' : '#EF4444',
+                color: stockCount > 0 ? '#10B981' : '#EF4444',
                 background: 'rgba(0, 0, 0, 0.8)',
                 padding: '6px 20px',
                 borderRadius: 14,
-                border: `2px solid ${currentStock > 0 ? '#10B981' : '#EF4444'}`,
-                boxShadow: currentStock > 0 ? '0 0 20px rgba(16, 185, 129, 0.3)' : '0 0 20px rgba(239, 68, 68, 0.3)',
+                border: `2px solid ${stockCount > 0 ? '#10B981' : '#EF4444'}`,
+                boxShadow: stockCount > 0 ? '0 0 20px rgba(16, 185, 129, 0.3)' : '0 0 20px rgba(239, 68, 68, 0.3)',
               }}
             >
-              STOCK: {currentStock}
+              INVENTORY: {stockCount}
             </div>
           </div>
 
-          {/* Real-world Atomic Query Box */}
+          {/* Step 5: Concurrency Read Inspection Box */}
+          {isDbReading && !isAmanResolved && (
+            <div
+              style={{
+                marginTop: 14,
+                background: 'rgba(245, 158, 11, 0.14)',
+                border: '1.5px solid rgba(245, 158, 11, 0.65)',
+                borderRadius: 14,
+                padding: '10px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20 }}>⚠️</span>
+                <span style={{ color: '#FACC15', fontWeight: 800, fontSize: 16 }}>
+                  STEP 5: BOTH THREADS INITIALLY READ STOCK = 1
+                </span>
+              </div>
+              <div style={{ fontFamily: 'monospace', fontSize: 14, color: '#E2E8F0' }}>
+                Thread A: 1 | Thread B: 1
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: Atomic Conditional Write Execution */}
           <div
             style={{
-              marginTop: 16,
+              marginTop: 12,
               background: '#000000',
-              padding: '14px 18px',
+              padding: '12px 18px',
               borderRadius: 14,
               fontFamily: 'monospace',
-              fontSize: 20,
+              fontSize: 16,
               color: '#FACC15',
               border: '1px solid rgba(250, 204, 21, 0.35)',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
+              overflow: 'hidden',
             }}
           >
             <span style={{ color: '#10B981', fontWeight: 900 }}>SQL &gt;</span>
-            <span>{atomicQuery}</span>
+            <span style={{ letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {atomicQuery}
+            </span>
+          </div>
+
+          {/* Bottom Educational Outcome */}
+          <div
+            style={{
+              marginTop: 10,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 14,
+              color: '#94A3B8',
+            }}
+          >
+            <span>
+              {isAmanResolved
+                ? '✅ Atomic conditional check prevents double-allocation!'
+                : '⚡ Reading rows without atomic update causes race conditions.'}
+            </span>
+            <span style={{ color: '#38BDF8', fontWeight: 700 }}>
+              {isAmanResolved ? 'Winner: Thread A (+4ms advantage)' : 'Awaiting Commit...'}
+            </span>
           </div>
         </div>
       </div>

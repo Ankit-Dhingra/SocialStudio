@@ -27,12 +27,12 @@ export const VideoDesignTokens = {
       number: '#B5CEA8',     // 0, 1000
     },
   },
-  // 9:16 vertical safe margins
+  // 9:16 vertical safe margins (bottom safe margin protects against Reels audio/caption bar and kinetic subtitles)
   safeMargin: {
     top: 170,
-    bottom: 250,
+    bottom: 420,
     left: 60,
-    right: 120,
+    right: 60,
   },
   typography: {
     fontFamilySans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',

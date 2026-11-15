@@ -16,7 +16,9 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
 }) => {
   const frame = useCurrentFrame();
 
-  const words = narration.trim().split(/\s+/).filter(Boolean);
+  // Strip any SSML tags (e.g. <break time="0.4s"/>) so only spoken words are displayed
+  const cleanNarration = narration.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = cleanNarration.split(/\s+/).filter(Boolean);
   if (!words.length) return null;
 
   // Group into chunks of 3-4 words for optimal mobile reading speed
