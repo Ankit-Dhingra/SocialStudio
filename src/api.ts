@@ -331,7 +331,7 @@ app.post('/api/pipeline/render', async (req, res) => {
         onProgress: (p) => {
           session.renderState = {
             status: 'rendering',
-            progress: Math.min(95, Math.round(5 + p.percent * 90)),
+            progress: Math.min(99, Math.max(1, Math.round(p.percent))),
           };
           masterScriptService.updateSession(session);
         },

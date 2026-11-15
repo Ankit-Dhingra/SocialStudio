@@ -34,7 +34,7 @@ export class SarvamTTSProvider implements TTSProvider {
     ]);
   }
 
-  // Core synthesis for an atomic text chunk with retry logic
+  // Core synthesis for an atomic text chunk with retry logic & duration guard
   private async synthAtomicChunk(
     text: string,
     outputWavPath: string,
@@ -51,7 +51,6 @@ export class SarvamTTSProvider implements TTSProvider {
     };
 
     const maxRetries = 3;
-    let data: { audios?: string[] } | null = null;
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -75,23 +74,39 @@ export class SarvamTTSProvider implements TTSProvider {
           throw new Error(`Sarvam AI error [${res.status}]: ${errText.slice(0, 300)}`);
         }
 
-        data = (await res.json()) as { audios?: string[] };
-        break;
+        const data = (await res.json()) as { audios?: string[] };
+        if (!data || !data.audios || !data.audios[0]) {
+          throw new Error('Sarvam AI returned no audio content');
+        }
+
+        const wavBuffer = Buffer.from(data.audios[0], 'base64');
+
+        // Protect against Sarvam AI prefix-drop / lead alignment slip bug
+        // 24kHz 16-bit mono PCM is 48,000 bytes per second (+ 44-byte WAV header)
+        const durationSec = Math.max(0, (wavBuffer.length - 44) / 48000);
+        const words = text.trim().split(/\s+/).filter(Boolean);
+        const minExpectedSec = Math.max(0.6, words.length * 0.18);
+
+        if (words.length >= 5 && durationSec < minExpectedSec && attempt < maxRetries) {
+          console.warn(
+            `[SarvamTTS] Detected dropped lead words on attempt ${attempt} (${durationSec.toFixed(2)}s < ${minExpectedSec.toFixed(2)}s for ${words.length} words). Retrying clean synthesis...`
+          );
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+
+        fs.writeFileSync(outputWavPath, wavBuffer);
+        return;
       } catch (err: any) {
         lastError = err;
         if (attempt < maxRetries) {
-          console.warn(`[SarvamTTS] Network error on attempt ${attempt}: ${err.message}. Retrying...`);
-          await new Promise((r) => setTimeout(r, attempt * 1500));
+          console.warn(`[SarvamTTS] Attempt ${attempt} error: ${err.message}. Retrying...`);
+          await new Promise((r) => setTimeout(r, attempt * 1200));
         }
       }
     }
 
-    if (!data || !data.audios || !data.audios[0]) {
-      throw lastError || new Error('Sarvam AI returned no audio content');
-    }
-
-    const wavBuffer = Buffer.from(data.audios[0], 'base64');
-    fs.writeFileSync(outputWavPath, wavBuffer);
+    throw lastError || new Error('Sarvam AI returned no audio content after retries');
   }
 
   async synthesizeClip(
@@ -117,7 +132,9 @@ export class SarvamTTSProvider implements TTSProvider {
       .replace(/\bH3\b|\bH-3\b/g, 'H-Three')
       .replace(/\bTTL\b/g, 'T-T-L')
       .replace(/\bSamjho\s+ek\b/gi, 'Samjho! <break time="450ms"/> Ek')
-      .replace(/\bsurge\s+pricing\b/gi, 'surge-pricing');
+      .replace(/\bsurge\s+pricing\b/gi, 'surge-pricing')
+      // Normalize introductory conversational clauses so acoustic decoder starts cleanly at token 0
+      .replace(/\b(Kal raat|Kal|Dekho|Maan lo|Sunno|Yaad rakho|Socho)\s*,\s*/gi, '$1 ');
 
     // Standardize break tags: <break time="0.4s"/> or <break time="400ms"/> -> __BREAK_400ms__
     cleanText = cleanText.replace(/<break\s+time=["']([\d\.]+)(s|ms)["']\s*\/?>/gi, (_, val, unit) => {

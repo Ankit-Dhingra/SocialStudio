@@ -17,15 +17,20 @@ pool.on('error', (err) => {
   console.warn('[Postgres Warning]:', err.message);
 });
 
+let hasLoggedRedisWarning = false;
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 export const connection = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
-  retryStrategy: () => 5000,
+  retryStrategy: () => 30000,
+  enableOfflineQueue: false,
   tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
 });
 connection.on('error', (err) => {
-  // Gracefully log Redis warnings without crashing the process
-  console.warn('[Redis Warning]:', err.message);
+  // Log once to keep console clean during local standalone development
+  if (!hasLoggedRedisWarning) {
+    console.log('[Redis] Local Redis offline (running in standalone file-storage mode).');
+    hasLoggedRedisWarning = true;
+  }
 });
 export const queue = new Queue('shorts', { connection });
 
