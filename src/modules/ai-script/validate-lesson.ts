@@ -1,7 +1,8 @@
+import type { ZodType } from 'zod';
 import { CollectionPropsSchema, HookPropsSchema, RequestFlowPropsSchema, QueueTimelinePropsSchema, CodeWalkthroughPropsSchema, ComparisonPropsSchema, SummaryPropsSchema } from '../contracts/storyboard.js';
 import type { Storyboard } from '../contracts/storyboard.js';
 
-const sceneSchemas = { collection: CollectionPropsSchema, hook: HookPropsSchema, code: CodeWalkthroughPropsSchema, requestFlow: RequestFlowPropsSchema,
+const sceneSchemas: Partial<Record<Storyboard['scenes'][number]['type'], ZodType>> = { collection: CollectionPropsSchema, hook: HookPropsSchema, code: CodeWalkthroughPropsSchema, requestFlow: RequestFlowPropsSchema,
   queueTimeline: QueueTimelinePropsSchema, comparison: ComparisonPropsSchema, summary: SummaryPropsSchema, raceCondition: undefined };
 
 export function validateLesson(storyboard: Storyboard): Storyboard {

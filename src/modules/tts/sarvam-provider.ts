@@ -1,229 +1,133 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import getMp3Duration from 'get-mp3-duration';
+import { setTimeout as delay } from 'node:timers/promises';
 import { TTSProvider, SynthesizedAudioClip } from './tts-provider.js';
+
+const sampleRate = 24000;
+
+function durationSeconds(filePath: string): number {
+  const result = execFileSync('ffprobe', [
+    '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath,
+  ], { encoding: 'utf8' });
+  const duration = Number(result.trim());
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error('Audio has no valid duration');
+  }
+  return duration;
+}
 
 export class SarvamTTSProvider implements TTSProvider {
   name = 'sarvam';
-  private apiKey: string;
-  private speaker: string;
-  private model: string;
-  private pace: number;
 
   constructor(
-    apiKey: string,
-    speaker = 'sunny_hi_reels',
-    model = 'bulbul:v4-flash',
-    pace = 1.0
-  ) {
-    this.apiKey = apiKey;
-    this.speaker = speaker;
-    this.model = model;
-    this.pace = pace;
-  }
+    private apiKey: string,
+    private speaker = 'sunny_hi_reels',
+    private model = 'bulbul:v4-flash',
+    private pace = 1.0,
+    private languageCode?: string,
+  ) {}
 
-  // Generates precise silent WAV audio using FFmpeg
-  private generateSilenceWav(durationSec: number, outPath: string) {
-    execFileSync('ffmpeg', [
-      '-y',
-      '-f', 'lavfi',
-      '-i', 'anullsrc=r=24000:cl=mono',
-      '-t', durationSec.toFixed(3),
-      outPath,
-    ]);
-  }
-
-  // Core synthesis for an atomic text chunk with retry logic & duration guard
-  private async synthAtomicChunk(
-    text: string,
-    outputWavPath: string,
-    speaker: string,
-    pace: number
-  ): Promise<void> {
-    const payload = {
-      text: text.trim(),
-      language_code: speaker.includes('en') ? 'en-IN' : 'hi-IN',
-      model: this.model,
-      speaker: speaker,
-      pace: pace,
-      speech_sample_rate: 24000,
-    };
-
-    const maxRetries = 3;
-    let lastError: Error | null = null;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  private async synthesizeChunk(text: string, filePath: string, speaker: string, pace: number) {
+    const languageCode = this.languageCode ?? (speaker.split('_')[1] === 'en' ? 'en-IN' : 'hi-IN');
+    for (let attempt = 1; ; attempt++) {
       try {
-        const res = await fetch('https://api.sarvam.ai/text-to-speech', {
+        const response = await fetch('https://api.sarvam.ai/text-to-speech', {
           method: 'POST',
           headers: {
             'api-subscription-key': this.apiKey,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            text, speaker, pace, model: this.model, language_code: languageCode,
+            speech_sample_rate: sampleRate, output_audio_codec: 'wav',
+          }),
+          signal: AbortSignal.timeout(30_000),
         });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          if (res.status >= 500 && attempt < maxRetries) {
-            console.warn(`[SarvamTTS] Attempt ${attempt} HTTP ${res.status}. Retrying in ${attempt * 1.5}s...`);
-            await new Promise((r) => setTimeout(r, attempt * 1500));
-            continue;
+        if (!response.ok) {
+          const error = new Error(`Sarvam AI error [${response.status}]: ${(await response.text()).slice(0, 300)}`);
+          if (response.status < 500 && response.status !== 429) {
+            throw Object.assign(error, { permanent: true });
           }
-          throw new Error(`Sarvam AI error [${res.status}]: ${errText.slice(0, 300)}`);
+          throw error;
         }
 
-        const data = (await res.json()) as { audios?: string[] };
-        if (!data || !data.audios || !data.audios[0]) {
-          throw new Error('Sarvam AI returned no audio content');
+        const { audios } = await response.json() as { audios?: string[] };
+        if (!audios?.[0]) throw new Error('Sarvam AI returned no audio');
+        fs.writeFileSync(filePath, Buffer.from(audios[0], 'base64'));
+        const duration = durationSeconds(filePath);
+        const wordCount = text.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length;
+        if (wordCount >= 5 && duration < wordCount * 0.15 / Math.max(1, pace)) {
+          throw new Error(`Sarvam returned only ${duration.toFixed(2)}s for ${wordCount} words`);
         }
-
-        const wavBuffer = Buffer.from(data.audios[0], 'base64');
-
-        // Protect against Sarvam AI prefix-drop / lead alignment slip bug
-        // 24kHz 16-bit mono PCM is 48,000 bytes per second (+ 44-byte WAV header)
-        const durationSec = Math.max(0, (wavBuffer.length - 44) / 48000);
-        const words = text.trim().split(/\s+/).filter(Boolean);
-        const minExpectedSec = Math.max(0.6, words.length * 0.18);
-
-        if (words.length >= 5 && durationSec < minExpectedSec && attempt < maxRetries) {
-          console.warn(
-            `[SarvamTTS] Detected dropped lead words on attempt ${attempt} (${durationSec.toFixed(2)}s < ${minExpectedSec.toFixed(2)}s for ${words.length} words). Retrying clean synthesis...`
-          );
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-
-        fs.writeFileSync(outputWavPath, wavBuffer);
         return;
-      } catch (err: any) {
-        lastError = err;
-        if (attempt < maxRetries) {
-          console.warn(`[SarvamTTS] Attempt ${attempt} error: ${err.message}. Retrying...`);
-          await new Promise((r) => setTimeout(r, attempt * 1200));
-        }
+      } catch (error) {
+        if (attempt >= 3 || (error as { permanent?: boolean }).permanent) throw error;
+        console.warn(`[SarvamTTS] Attempt ${attempt} failed, retrying: ${(error as Error).message}`);
+        await delay(attempt * 1000);
       }
     }
-
-    throw lastError || new Error('Sarvam AI returned no audio content after retries');
   }
 
   async synthesizeClip(
     text: string,
     outputFilePath: string,
-    options?: { voice?: string; sceneId?: string; sceneIndex?: number; pace?: number }
+    options?: { voice?: string; sceneId?: string; sceneIndex?: number; pace?: number },
   ): Promise<SynthesizedAudioClip> {
     const dir = path.dirname(outputFilePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
+    fs.mkdirSync(dir, { recursive: true });
     const speaker = options?.voice || this.speaker;
     const pace = options?.pace ?? this.pace;
 
-    // Sanitize Indian currency and numbers to prevent skipping or stretching
-    let cleanText = text
-      .replace(/₹\s*30\b|30\s*(rupaye|rupees)/gi, 'tees rupaye')
-      .replace(/₹\s*80\b|80\s*(rupaye|rupees)|\bassi\s+rupaye\b/gi, '80 rupaye')
-      .replace(/₹\s*(\d+)/g, '$1 rupaye')
-      .replace(/₹/g, 'rupaye')
-      // Technical acronyms and phrasing fixes
-      .replace(/\bH3\b|\bH-3\b/g, 'H-Three')
-      .replace(/\bTTL\b/g, 'T-T-L')
-      .replace(/\bSamjho\s+ek\b/gi, 'Samjho! <break time="450ms"/> Ek')
-      .replace(/\bsurge\s+pricing\b/gi, 'surge-pricing')
-      // Normalize introductory conversational clauses so acoustic decoder starts cleanly at token 0
-      .replace(/\b(Kal raat|Kal|Dekho|Maan lo|Sunno|Yaad rakho|Socho)\s*,\s*/gi, '$1 ')
-      // Normalize colloquial Hinglish prepositions that cause Sarvam neural decoder to merge syllables (e.g. "meri pe bhi" -> "meripebhi")
-      .replace(/\b(uski|iski|meri|teri)\s+pe\s+bhi\b/gi, '$1 screen par bhi')
-      .replace(/\bscreen\s+pe\b/gi, 'screen par')
-      .replace(/\bpe\s+bhi\b/gi, 'par bhi')
-      .replace(/\b(meri|uski|iski)\s+pe\b/gi, '$1 screen par')
-      // Ensure Hindi pronouns are capitalized so Sarvam decoder does not mistake them for English (e.g. 'maine' -> 'Main')
-      .replace(/\bmaine\b/gi, 'Maine')
-      .replace(/\bmeri\b/gi, 'Meri')
-      .replace(/\buski\b/gi, 'Uski')
-      .replace(/\biski\b/gi, 'Iski');
+    // Sarvam does not interpret SSML. Keep explicit breaks local, and leave
+    // punctuation and wording intact so the model can use sentence context.
+    const parts = text.split(/(<break\s+time=["']\d+(?:\.\d+)?(?:ms|s)["']\s*\/?>)/gi);
+    const workDir = fs.mkdtempSync(path.join(dir, 'sarvam-'));
+    try {
+      const files: string[] = [];
+      let speechParts = 0;
+      for (const part of parts) {
+        const token = part.trim();
+        if (!token) continue;
 
-    // Standardize break tags: <break time="0.4s"/> or <break time="400ms"/> -> __BREAK_400ms__
-    cleanText = cleanText.replace(/<break\s+time=["']([\d\.]+)(s|ms)["']\s*\/?>/gi, (_, val, unit) => {
-      const ms = unit === 's' ? Math.round(parseFloat(val) * 1000) : parseInt(val, 10);
-      return ` __BREAK_${ms}ms__ `;
-    });
-
-    const hasExplicitPauses = /__BREAK_\d+ms__/.test(cleanText);
-
-    if (hasExplicitPauses) {
-      // Split text into speech chunks and silence gaps
-      const tokens = cleanText.split(/(__BREAK_\d+ms__)/g).map((s) => s.trim()).filter(Boolean);
-      const concatFiles: string[] = [];
-      const prefix = `temp_clip_${Date.now()}`;
-      let partIdx = 0;
-
-      try {
-        for (const token of tokens) {
-          const breakMatch = token.match(/^__BREAK_(\d+)ms__$/);
-          if (breakMatch) {
-            const ms = parseInt(breakMatch[1], 10);
-            const silenceFile = path.join(dir, `${prefix}_sil_${partIdx}_${ms}ms.wav`);
-            this.generateSilenceWav(ms / 1000, silenceFile);
-            concatFiles.push(silenceFile);
-          } else {
-            const speechFile = path.join(dir, `${prefix}_spk_${partIdx}.wav`);
-            await this.synthAtomicChunk(token, speechFile, speaker, pace);
-            concatFiles.push(speechFile);
-          }
-          partIdx++;
+        const name = `${files.length}.wav`;
+        const filePath = path.join(workDir, name);
+        const pause = token.match(/^<break\s+time=["']([\d.]+)(ms|s)["']\s*\/?>$/i);
+        if (pause) {
+          const seconds = Number(pause[1]) / (pause[2].toLowerCase() === 'ms' ? 1000 : 1);
+          if (seconds === 0) continue;
+          execFileSync('ffmpeg', [
+            '-loglevel', 'error', '-f', 'lavfi', '-i', `anullsrc=r=${sampleRate}:cl=mono`,
+            '-t', String(seconds), filePath,
+          ]);
+        } else {
+          await this.synthesizeChunk(token, filePath, speaker, pace);
+          speechParts++;
         }
-
-        const concatListPath = path.join(dir, `${prefix}_list.txt`);
-        fs.writeFileSync(concatListPath, concatFiles.map((f) => `file '${path.resolve(f).replace(/\\/g, '/')}'`).join('\n'), 'utf8');
-
-        execFileSync('ffmpeg', [
-          '-y',
-          '-f', 'concat',
-          '-safe', '0',
-          '-i', concatListPath,
-          '-acodec', 'libmp3lame',
-          '-b:a', '192k',
-          outputFilePath,
-        ]);
-
-        if (fs.existsSync(concatListPath)) fs.unlinkSync(concatListPath);
-      } finally {
-        for (const f of concatFiles) {
-          if (fs.existsSync(f)) fs.unlinkSync(f);
-        }
+        files.push(name);
       }
-    } else {
-      // Single chunk synthesis
-      const tempWavPath = outputFilePath.replace(/\.mp3$/i, '') + `_temp_${Date.now()}.wav`;
-      try {
-        await this.synthAtomicChunk(cleanText, tempWavPath, speaker, pace);
-        execFileSync('ffmpeg', [
-          '-y',
-          '-i', tempWavPath,
-          '-acodec', 'libmp3lame',
-          '-b:a', '192k',
-          outputFilePath,
-        ]);
-      } finally {
-        if (fs.existsSync(tempWavPath)) fs.unlinkSync(tempWavPath);
-      }
+      if (!speechParts) throw new Error('No narration text to synthesize');
+
+      const listPath = path.join(workDir, 'concat.txt');
+      fs.writeFileSync(listPath, files.map(file => `file '${file}'`).join('\n'));
+      const stagedMp3 = path.join(workDir, 'narration.mp3');
+      execFileSync('ffmpeg', [
+        '-loglevel', 'error', '-f', 'concat', '-i', listPath,
+        '-c:a', 'libmp3lame', '-b:a', '192k', stagedMp3,
+      ]);
+      const durationMs = Math.round(durationSeconds(stagedMp3) * 1000);
+      const fileSizeBytes = fs.statSync(stagedMp3).size;
+      fs.renameSync(stagedMp3, outputFilePath);
+      return {
+        sceneId: options?.sceneId || 'scene-0',
+        sceneIndex: options?.sceneIndex ?? 0,
+        filePath: outputFilePath,
+        durationMs,
+        format: 'mp3',
+        fileSizeBytes,
+      };
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true });
     }
-
-    const mp3Buffer = fs.readFileSync(outputFilePath);
-    const durationMs = getMp3Duration(mp3Buffer);
-    const fileSizeBytes = mp3Buffer.length;
-
-    return {
-      sceneId: options?.sceneId || 'scene-0',
-      sceneIndex: options?.sceneIndex ?? 0,
-      filePath: outputFilePath,
-      durationMs,
-      format: 'mp3',
-      fileSizeBytes,
-    };
   }
 }

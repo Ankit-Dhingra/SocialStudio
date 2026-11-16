@@ -78,7 +78,7 @@ export const SceneRegistry: {
       appName={scene.visualProps?.appName || 'TicketMaster'}
       locationText={scene.visualProps?.locationText || 'Live Arena'}
       itemName={scene.visualProps?.itemName || 'VIP Ticket Pass'}
-      itemPrice={scene.visualProps?.itemPrice || 4999}
+      itemPrice={scene.visualProps?.itemPrice || '4999'}
       surgeAmount={scene.visualProps?.surgeAmount}
       surgeMultiplier={scene.visualProps?.surgeMultiplier}
     />
@@ -104,7 +104,7 @@ export const SceneRegistry: {
       filename={scene.visualProps?.filename || 'atomic_lock.sql'}
       code={scene.visualProps?.code || scene.technicalKeyPoint || 'UPDATE inventory SET stock = stock - 1 WHERE id = 101 AND stock > 0;'}
       highlightLines={scene.visualProps?.highlightLines || [1]}
-      terminalOutputs={scene.visualProps?.terminalOutputs || []}
+      terminalOutputs={scene.visualProps.terminalOutputs ?? []}
       explanationCallout={scene.visualProps?.explanationCallout || scene.technicalKeyPoint || 'Atomic conditional check'}
       onScreenText={scene.onScreenText}
     />

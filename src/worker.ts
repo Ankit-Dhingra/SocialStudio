@@ -113,7 +113,7 @@ export const worker = new Worker<VideoJobData>(
       console.log(`[Worker:${id}] [Stage 3] Calculating frame timeline...`);
       const timeline = buildVideoTimeline(storyboard, audioResult.clips, {
         fps: 30,
-        scenePaddingFrames: 14,
+        scenePaddingFrames: 5,
         audioSrcPrefix: `audio/runs/${id}`,
       });
 

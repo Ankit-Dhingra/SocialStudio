@@ -96,7 +96,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     serveUrl: bundleLocation,
     codec: 'h264',
     x264Preset: 'veryfast',
-    crf: 26,
+    crf: 20,
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
     // Strictly controlled concurrency: 2 workers keeps Chromium memory below 800MB RAM on 8GB host
@@ -108,7 +108,6 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
       enableMultiProcessOnLinux: true,
       gl: 'swangle',
       disableWebSecurity: true,
-      args: ['--disable-dev-shm-usage', '--disable-background-timer-throttling'],
     },
     inputProps: {
       storyboard,
@@ -195,7 +194,6 @@ export async function renderStillPreviews(
       enableMultiProcessOnLinux: true,
       gl: 'swangle',
       disableWebSecurity: true,
-      args: ['--disable-dev-shm-usage'],
     },
     inputProps: {
       storyboard,
@@ -226,7 +224,6 @@ export async function renderStillPreviews(
       chromiumOptions: {
         gl: 'swangle',
         disableWebSecurity: true,
-        args: ['--disable-dev-shm-usage'],
       },
     });
 

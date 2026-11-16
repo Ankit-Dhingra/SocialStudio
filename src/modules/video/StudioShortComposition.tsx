@@ -67,10 +67,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: '#080A0F',
-        backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.08) 1.5px, transparent 1.5px)',
-        backgroundSize: '36px 36px',
-        boxShadow: 'inset 0 0 220px rgba(0, 0, 0, 0.95)',
+        backgroundColor: '#090b0a',
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
         color: VideoDesignTokens.colors.textPrimary,
         overflow: 'hidden',
@@ -103,7 +100,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
         >
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 10px #10B981' }} />
           <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '1.5px', color: '#F1F5F9', textTransform: 'uppercase' }}>
-            SYSTEM DESIGN DEEP DIVE
+            TECH EXPLAINED
           </span>
         </div>
 
@@ -151,7 +148,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
               wordFrames={seg.wordFrames}
               narration={scene.narration}
               durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * timeline.fps / 1000))}
-              highlightColor="#FACC15"
+              highlightColor="#64E99A"
             />
           </Sequence>
         );
@@ -161,7 +158,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
       {bgmTrack && (
         <Audio
           src={resolveAudioSource(bgmTrack)}
-          volume={() => 0.08}
+          volume={Math.min(0.035, timeline.bgmVolumeDucked)}
           loop
         />
       )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { interpolate, useCurrentFrame } from 'remotion';
+import { useCurrentFrame } from 'remotion';
 
 interface KineticCaptionsProps {
   narration: string;
@@ -12,7 +12,7 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
   narration,
   wordFrames,
   durationInFrames,
-  highlightColor = '#FACC15', // Vibrant Gold / Yellow
+  highlightColor = '#64E99A',
 }) => {
   const frame = useCurrentFrame();
 
@@ -33,68 +33,44 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
   const firstIndex = Math.floor(activeIndex / CHUNK_SIZE) * CHUNK_SIZE;
   const activeChunk = words.slice(firstIndex, firstIndex + CHUNK_SIZE);
   const activeWordInChunkIndex = activeIndex - firstIndex;
-  const frameInChunk = frame - (timed ? wordFrames[firstIndex] : firstIndex * durationInFrames / words.length);
-
-  // Subtle entrance bounce for active chunk
-  const chunkScale = interpolate(frameInChunk, [0, 4], [0.95, 1.0], {
-    extrapolateRight: 'clamp',
-  });
-
   return (
     <div
       style={{
         position: 'absolute',
-        bottom: 240,
-        left: 40,
-        right: 40,
+        top: 1395,
+        left: 80,
+        right: 100,
         display: 'flex',
         justifyContent: 'center',
-        alignItems: 'center',
+        flexWrap: 'wrap',
+        alignContent: 'flex-start',
+        gap: '8px 10px',
         pointerEvents: 'none',
         zIndex: 50,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          gap: '12px 14px',
-          background: 'rgba(0, 0, 0, 0.65)',
-          padding: '16px 28px',
-          borderRadius: 24,
-          backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.8)',
-          transform: `scale(${chunkScale})`,
-          maxWidth: 960,
-        }}
-      >
-        {activeChunk.map((word, idx) => {
-          const isActive = idx === activeWordInChunkIndex;
-          return (
-            <span
-              key={idx}
-              style={{
-                fontFamily: 'Montserrat, system-ui, -apple-system, sans-serif',
-                fontSize: 48,
-                fontWeight: 900,
-                letterSpacing: '-0.5px',
-                textTransform: 'uppercase',
-                color: isActive ? highlightColor : '#FFFFFF',
-                textShadow: isActive
-                  ? `0 0 20px ${highlightColor}AA, 0 4px 10px rgba(0,0,0,0.9)`
-                  : '0 4px 10px rgba(0,0,0,0.9)',
-                transform: isActive ? 'scale(1.12)' : 'scale(1.0)',
-                transition: 'transform 0.08s ease, color 0.08s ease',
-                display: 'inline-block',
-              }}
-            >
-              {word}
-            </span>
-          );
-        })}
-      </div>
+      {activeChunk.map((word, idx) => {
+        const isActive = idx === activeWordInChunkIndex;
+        return (
+          <span
+            key={idx}
+            style={{
+              fontFamily: 'Inter, system-ui, sans-serif',
+              fontSize: 47,
+              fontWeight: 750,
+              lineHeight: 1.2,
+              padding: '3px 7px',
+              borderRadius: 8,
+              backgroundColor: isActive ? highlightColor : 'rgba(9, 11, 10, 0.76)',
+              color: isActive ? '#07110a' : '#f5f5f5',
+              overflowWrap: 'anywhere',
+              maxWidth: '100%',
+            }}
+          >
+            {word}
+          </span>
+        );
+      })}
     </div>
   );
 };

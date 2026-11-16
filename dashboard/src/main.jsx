@@ -94,6 +94,7 @@ function App() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [audioSynthesizing, setAudioSynthesizing] = useState(false);
   const [audioResult, setAudioResult] = useState(null);
+  const [voiceEdits, setVoiceEdits] = useState({});
   const [stills, setStills] = useState([]);
   const [generatingStills, setGeneratingStills] = useState(false);
   const [selectedStill, setSelectedStill] = useState(null);
@@ -283,7 +284,12 @@ function App() {
       const res = await fetch(toApiUrl('/api/pipeline/audio/synthesize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id }),
+        body: JSON.stringify({
+          sessionId: session.id,
+          spokenNarration: session.storyboard.scenes.map(scene =>
+            voiceEdits[session.id]?.[scene.id] ?? scene.spokenNarration ?? ''
+          ),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Audio synthesis failed');
@@ -834,6 +840,33 @@ function App() {
                     <span>{audioSynthesizing ? 'Synthesizing Audio...' : 'Synthesize Voiceover'}</span>
                   </button>
                 </div>
+
+
+                <details>
+                  <summary>Adjust pronunciation by scene</summary>
+                  <p>For Hinglish, write Hindi in Devanagari and keep English technical terms in English. Leave a field blank to use the original script.</p>
+                  {session?.storyboard?.scenes?.map((scene, index) => (
+                    <label key={scene.id} style={{ display: 'block', marginTop: 12 }}>
+                      Scene {index + 1}
+                      <textarea
+                        rows={2}
+                        maxLength={2500}
+                        className="input"
+                        style={{ display: 'block', width: '100%' }}
+                        placeholder={scene.narration}
+                        disabled={audioSynthesizing}
+                        value={voiceEdits[session.id]?.[scene.id] ?? scene.spokenNarration ?? ''}
+                        onChange={event => {
+                          const value = event.target.value;
+                          setVoiceEdits(edits => ({
+                            ...edits,
+                            [session.id]: { ...edits[session.id], [scene.id]: value },
+                          }));
+                        }}
+                      />
+                    </label>
+                  ))}
+                </details>
 
                 {/* AUDIO PLAYERS & DURATION STATS */}
                 {audioResult ? (

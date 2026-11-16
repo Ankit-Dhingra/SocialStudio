@@ -156,6 +156,7 @@ export const Root: React.FC = () => {
         calculateMetadata={({ props }: { props: any }) => {
           return {
             durationInFrames: props?.timeline?.totalDurationInFrames || 1080,
+            fps: props?.timeline?.fps || 30,
           };
         }}
         defaultProps={defaultPreviewProps as any}

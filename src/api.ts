@@ -202,7 +202,7 @@ app.post('/api/pipeline/script/finalize', (req, res) => {
 
 // 6. Voiceover synthesis with Sarvam AI (strictly on-demand to protect credits)
 app.post('/api/pipeline/audio/synthesize', async (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, spokenNarration } = req.body;
   if (!sessionId) {
     return res.status(400).json({ error: 'sessionId is required.' });
   }
@@ -212,6 +212,22 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     return res.status(404).json({ error: 'Session not found' });
   }
 
+  if (spokenNarration !== undefined && (
+    !Array.isArray(spokenNarration) ||
+    spokenNarration.length !== session.storyboard.scenes.length ||
+    spokenNarration.some(value => typeof value !== 'string' || value.length > 2500)
+  )) {
+    return res.status(400).json({ error: 'Voice text must contain one entry per scene, up to 2500 characters each.' });
+  }
+
+  const storyboard = spokenNarration === undefined ? session.storyboard : {
+    ...session.storyboard,
+    scenes: session.storyboard.scenes.map((scene, index) => ({
+      ...scene,
+      spokenNarration: spokenNarration[index].trim() || undefined,
+    })),
+  };
+
   try {
     console.log(`[Pipeline] Synthesizing audio for session ${sessionId}...`);
     const runDir = path.resolve('remotion/public/audio/runs', sessionId);
@@ -220,7 +236,7 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     }
 
     const ttsProvider = getTTSProvider();
-    const audioResult = await synthesizeStoryboardNarration(session.storyboard, runDir, ttsProvider);
+    const audioResult = await synthesizeStoryboardNarration(storyboard, runDir, ttsProvider);
 
     // Copy to media runs and dist-remotion so all clients can serve it
     const mediaAudioDir = path.resolve('media/runs', sessionId, 'audio');
@@ -265,13 +281,14 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     }
 
     // Build timeline
-    const timeline = buildVideoTimeline(session.storyboard, audioResult.clips, {
+    const timeline = buildVideoTimeline(storyboard, audioResult.clips, {
       fps: 30,
-      scenePaddingFrames: 14,
+      scenePaddingFrames: 5,
       audioSrcPrefix: `audio/runs/${sessionId}`,
     });
 
     // Update session
+    session.storyboard = storyboard;
     session.audioResult = {
       ...audioResult,
       fullAudioUrl,
@@ -310,7 +327,7 @@ app.post('/api/pipeline/stills', async (req, res) => {
   if (!session.timeline) {
     session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
       fps: 30,
-      scenePaddingFrames: 14,
+      scenePaddingFrames: 5,
       audioSrcPrefix: `audio/runs/${sessionId}`,
     });
     masterScriptService.updateSession(session);

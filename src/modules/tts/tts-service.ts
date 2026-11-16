@@ -24,7 +24,9 @@ export function getTTSProvider(): TTSProvider {
       return new SarvamTTSProvider(
         key,
         process.env.SARVAM_SPEAKER || 'sunny_hi_reels',
-        process.env.SARVAM_MODEL || 'bulbul:v4-flash'
+        process.env.SARVAM_MODEL || 'bulbul:v4-flash',
+        Number(process.env.SARVAM_PACE || '1'),
+        process.env.SARVAM_LANGUAGE_CODE || undefined
       );
     }
     console.warn('Sarvam API key missing in environment; falling back to edge-tts.');
@@ -91,7 +93,7 @@ export async function synthesizeStoryboardNarration(
     console.log(`[TTS] Synthesizing Scene ${i + 1}/${storyboard.scenes.length} (${scene.type})...`);
     let clip: SynthesizedAudioClip;
     try {
-      clip = await provider.synthesizeClip(scene.narration, outputPath, {
+      clip = await provider.synthesizeClip(scene.spokenNarration ?? scene.narration, outputPath, {
         sceneId: scene.id,
         sceneIndex: i,
       });

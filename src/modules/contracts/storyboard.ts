@@ -43,6 +43,12 @@ export const CodeWalkthroughPropsSchema = z.object({
   language: z.enum(['javascript', 'typescript', 'python', 'sql', 'bash', 'json']).default('typescript'),
   code: z.string().default('console.log("Hello, World!");'),
   highlightLines: z.array(z.number()).default([1]),
+  terminalOutputs: z.array(z.object({
+    text: z.string(),
+    badge: z.string().optional(),
+    delayFrames: z.number().optional(),
+    highlight: z.boolean().optional(),
+  })).optional(),
   explanationCallout: z.string().default('Key line execution'),
 });
 
@@ -53,14 +59,15 @@ export const RequestFlowPropsSchema = z.object({
       z.object({
         label: z.string(),
         description: z.string(),
+        cue: z.string().optional(),
         status: z.enum(['active', 'completed', 'bypassed', 'cached']).default('active'),
       })
     )
     .min(2)
     .max(5)
     .default([
-      { label: 'Client', description: 'Initial request' },
-      { label: 'Server', description: 'Execution' },
+      { label: 'Client', description: 'Initial request', status: 'active' },
+      { label: 'Server', description: 'Execution', status: 'active' },
     ]),
 });
 
@@ -72,6 +79,7 @@ export const QueueTimelinePropsSchema = z.object({
         name: z.string(),
         priority: z.enum(['high', 'medium', 'low', 'microtask', 'macrotask']).default('medium'),
         detail: z.string(),
+        cue: z.string().optional(),
       })
     )
     .min(2)
@@ -176,10 +184,11 @@ export const HookSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('hook'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(6),
-  visualProps: HookPropsSchema.default({}),
+  visualProps: HookPropsSchema.prefault({}),
 });
 
 export const CodeWalkthroughSceneSchema = z.object({
@@ -187,10 +196,11 @@ export const CodeWalkthroughSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('code'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: CodeWalkthroughPropsSchema.default({}),
+  visualProps: CodeWalkthroughPropsSchema.prefault({}),
 });
 
 export const RequestFlowSceneSchema = z.object({
@@ -198,10 +208,11 @@ export const RequestFlowSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('requestFlow'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: RequestFlowPropsSchema.default({}),
+  visualProps: RequestFlowPropsSchema.prefault({}),
 });
 
 export const QueueTimelineSceneSchema = z.object({
@@ -209,10 +220,11 @@ export const QueueTimelineSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('queueTimeline'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: QueueTimelinePropsSchema.default({}),
+  visualProps: QueueTimelinePropsSchema.prefault({}),
 });
 
 export const ComparisonSceneSchema = z.object({
@@ -220,10 +232,11 @@ export const ComparisonSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('comparison'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: ComparisonPropsSchema.default({}),
+  visualProps: ComparisonPropsSchema.prefault({}),
 });
 
 export const CollectionSceneSchema = z.object({
@@ -231,10 +244,11 @@ export const CollectionSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('collection'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: CollectionPropsSchema.default({}),
+  visualProps: CollectionPropsSchema.prefault({}),
 });
 
 export const RaceConditionSceneSchema = z.object({
@@ -242,10 +256,11 @@ export const RaceConditionSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('raceCondition'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: RaceConditionPropsSchema.default({}),
+  visualProps: RaceConditionPropsSchema.prefault({}),
 });
 
 export const SummarySceneSchema = z.object({
@@ -253,10 +268,11 @@ export const SummarySceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('summary'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: SummaryPropsSchema.default({}),
+  visualProps: SummaryPropsSchema.prefault({}),
 });
 
 export const SmartphoneMockupSceneSchema = z.object({
@@ -264,10 +280,11 @@ export const SmartphoneMockupSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('smartphoneMockup'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: SmartphoneMockupPropsSchema.default({}),
+  visualProps: SmartphoneMockupPropsSchema.prefault({}),
 });
 
 export const H3SpatialMapSceneSchema = z.object({
@@ -275,10 +292,11 @@ export const H3SpatialMapSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('h3SpatialMap'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: H3SpatialMapPropsSchema.default({}),
+  visualProps: H3SpatialMapPropsSchema.prefault({}),
 });
 
 export const ArchitecturePipelineSceneSchema = z.object({
@@ -286,10 +304,11 @@ export const ArchitecturePipelineSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('architecturePipeline'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: ArchitecturePipelinePropsSchema.default({}),
+  visualProps: ArchitecturePipelinePropsSchema.prefault({}),
 });
 
 export const TradeoffHUDSceneSchema = z.object({
@@ -297,10 +316,11 @@ export const TradeoffHUDSceneSchema = z.object({
   sceneIndex: z.number().int().min(0),
   type: z.literal('tradeoffHUD'),
   narration: z.string().min(10),
+  spokenNarration: z.string().trim().min(1).optional(),
   onScreenText: HumanReadableText,
   technicalKeyPoint: z.string(),
   durationTargetSec: z.number().min(1).max(60).default(8),
-  visualProps: TradeoffHUDPropsSchema.default({}),
+  visualProps: TradeoffHUDPropsSchema.prefault({}),
 });
 
 // The Discriminated Union
