@@ -252,40 +252,53 @@ export async function renderStillPreviews(
     },
   });
 
-  const renderTasks = storyboard.scenes.map(async (scene, i) => {
-    const seg = timeline.segments[i];
-    if (!seg) return null;
+  const results: StillPreviewResult[] = [];
+  // Render in controlled batches of 2 to avoid overwhelming headless Chrome memory & socket pools
+  const concurrency = 2;
 
-    // Capture representative frame at peak action (40% into the scene duration)
-    const frame = seg.startFrame + Math.min(120, Math.floor(seg.durationInFrames * 0.4));
-    const filename = `scene-${i}-${scene.type}.jpg`;
-    const targetPath = path.join(outputDir, filename);
+  for (let i = 0; i < storyboard.scenes.length; i += concurrency) {
+    const batch = storyboard.scenes.slice(i, i + concurrency);
+    const batchPromises = batch.map(async (scene, bIdx) => {
+      const idx = i + bIdx;
+      const seg = timeline.segments[idx];
+      if (!seg) return null;
 
-    await renderStill({
-      composition,
-      serveUrl: bundleLocation,
-      frame,
-      output: targetPath,
-      imageFormat: 'jpeg',
-      jpegQuality: 88,
-      browserExecutable,
-      inputProps: { storyboard, timeline },
-      chromiumOptions: {
-        gl,
-        disableWebSecurity: true,
-      },
+      // Capture representative frame at peak action (40% into the scene duration)
+      const frame = seg.startFrame + Math.min(120, Math.floor(seg.durationInFrames * 0.4));
+      const filename = `scene-${idx}-${scene.type}.jpg`;
+      const targetPath = path.join(outputDir, filename);
+
+      await renderStill({
+        composition,
+        serveUrl: bundleLocation,
+        frame,
+        output: targetPath,
+        imageFormat: 'jpeg',
+        jpegQuality: 85,
+        timeoutInMilliseconds: 120000,
+        browserExecutable,
+        inputProps: { storyboard, timeline },
+        chromiumOptions: {
+          gl,
+          disableWebSecurity: true,
+        },
+      });
+
+      return {
+        sceneIndex: idx,
+        sceneId: scene.id,
+        type: scene.type,
+        frame,
+        url: `${urlPrefix}/${filename}?t=${Date.now()}`,
+        filePath: targetPath,
+      };
     });
 
-    return {
-      sceneIndex: i,
-      sceneId: scene.id,
-      type: scene.type,
-      frame,
-      url: `${urlPrefix}/${filename}?t=${Date.now()}`,
-      filePath: targetPath,
-    };
-  });
+    const batchResults = await Promise.all(batchPromises);
+    for (const r of batchResults) {
+      if (r) results.push(r);
+    }
+  }
 
-  const settled = await Promise.all(renderTasks);
-  return settled.filter(Boolean) as StillPreviewResult[];
+  return results;
 }
