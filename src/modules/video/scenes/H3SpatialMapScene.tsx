@@ -105,10 +105,10 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
         style={{
           flex: 1,
           position: 'relative',
-          background: 'radial-gradient(ellipse at center, #0F172A 0%, #050914 85%)',
+          background: 'radial-gradient(ellipse at center, #0d0d12 0%, #050507 90%)',
           borderRadius: 32,
-          border: '2px solid rgba(56, 189, 248, 0.25)',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), inset 0 0 80px rgba(15, 23, 42, 0.8)',
+          border: '1.5px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.85)',
           overflow: 'hidden',
           display: 'flex',
           alignItems: 'center',

@@ -159,3 +159,90 @@ export const AuroraAccentFrame: React.FC<{
     </div>
   );
 };
+
+/**
+ * Premium Deep Black Canvas with Animated Delicate Cyber Grid
+ * Zero harsh blue - pure OLED black with subtle scrolling intersection dots & grid lines.
+ */
+export const AnimatedBlackCyberGrid: React.FC = () => {
+  const frame = useCurrentFrame();
+  const gridOffsetY = (frame * 0.7) % 64;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        backgroundColor: '#050507',
+        zIndex: 0,
+      }}
+    >
+      {/* Subtle scrolling vector grid */}
+      <svg
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '110%',
+          transform: `translateY(${gridOffsetY}px)`,
+        }}
+      >
+        <defs>
+          <pattern id="darkCyberPattern" width="64" height="64" patternUnits="userSpaceOnUse">
+            <path
+              d="M 64 0 L 0 0 0 64"
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.035)"
+              strokeWidth="1"
+            />
+            <circle cx="0" cy="0" r="1.5" fill="rgba(255, 255, 255, 0.14)" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="110%" y="-10%" fill="url(#darkCyberPattern)" />
+      </svg>
+
+      {/* Radial Vignette: keeps center clear and fades edges into pure black */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(circle at 50% 45%, transparent 30%, #050507 92%)',
+        }}
+      />
+    </div>
+  );
+};
+
+/**
+ * Eclipse Style: Cyber Tech HUD Chip that pops in on speech cues
+ */
+export const EclipseHUDChip: React.FC<{
+  label: string;
+  badge?: string;
+  accentColor?: string;
+}> = ({ label, badge = 'SYSTEM BEAT', accentColor = '#34D399' }) => {
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 20px',
+        background: 'rgba(9, 11, 15, 0.88)',
+        backdropFilter: 'blur(16px)',
+        border: `1.5px solid ${accentColor}44`,
+        borderRadius: 14,
+        boxShadow: `0 12px 30px rgba(0,0,0,0.7), 0 0 20px ${accentColor}22`,
+      }}
+    >
+      <span style={{ fontSize: 13, fontWeight: 900, letterSpacing: '2px', color: accentColor, textTransform: 'uppercase' }}>
+        ┌ {badge} ┐
+      </span>
+      <span style={{ fontSize: 17, fontWeight: 800, color: '#F1F5F9', letterSpacing: '-0.01em' }}>
+        {label}
+      </span>
+    </div>
+  );
+};

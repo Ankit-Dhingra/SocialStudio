@@ -79,7 +79,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
         paddingTop: VideoDesignTokens.safeMargin.top,
         paddingBottom: VideoDesignTokens.safeMargin.bottom,
         overflow: 'hidden',
-        background: 'radial-gradient(circle at 50% 40%, #151c2e 0%, #090b10 80%)',
+        background: 'transparent',
       }}
     >
       {/* Top Header Badge */}

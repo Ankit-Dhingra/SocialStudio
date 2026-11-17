@@ -12,7 +12,7 @@ import { VideoTimeline } from './timeline.js';
 import { VideoDesignTokens } from './design-system.js';
 import { renderRegisteredScene } from './SceneRegistry.js';
 import { KineticCaptions } from './KineticCaptions.js';
-import { EclipseNeonRing, SpiralGlassRibbon, LayercutWordBehind } from './MotionStyles.js';
+import { EclipseNeonRing, SpiralGlassRibbon, LayercutWordBehind, AnimatedBlackCyberGrid } from './MotionStyles.js';
 
 export interface StudioShortProps {
   storyboard: Storyboard;
@@ -116,12 +116,14 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: '#090b0a',
+        backgroundColor: '#050507',
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
         color: VideoDesignTokens.colors.textPrimary,
         overflow: 'hidden',
       }}
     >
+      {/* Root Animated Black Cyber Grid Background (Zero harsh blue) */}
+      <AnimatedBlackCyberGrid />
       {/* Top Header Safe Zone Status Bar */}
       <div
         style={{

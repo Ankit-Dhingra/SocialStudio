@@ -475,53 +475,71 @@ export function buildStoryboardFromParsed(
     }
   }
 
-  // Ensure High-Retention Pacing: If any scene's narration has > 22 words, split it into 2 rapid visual screens
+  // Ensure High-Retention Pacing: Decompose any long monologue into bite-sized 4-6 second visual screens (max 18 words each)
   const highRetentionScenes: any[] = [];
+  const visualSequence = ['smartphoneMockup', 'h3SpatialMap', 'architecturePipeline', 'queueTimeline', 'comparison', 'code', 'tradeoffHUD'];
+
   for (let s = 0; s < scenes.length; s++) {
     const sc = scenes[s];
-    const words = sc.narration.trim().split(/\s+/);
-    // If it's a long scene (> 24 words) and not the final summary, split into 2 rapid-cut visual screens
-    if (words.length > 24 && sc.type !== 'summary' && sc.type !== 'tradeoffHUD') {
-      const mid = Math.ceil(words.length / 2);
-      const part1Text = words.slice(0, mid).join(' ');
-      const part2Text = words.slice(mid).join(' ');
+    const words = sc.narration.trim().split(/\s+/).filter(Boolean);
 
-      // Sub-beat 1
+    // If scene is bite-sized (<= 20 words) or summary, keep as single scene
+    if (words.length <= 20 || sc.type === 'summary') {
       highRetentionScenes.push({
         ...sc,
         id: `scene-${highRetentionScenes.length + 1}`,
         sceneIndex: highRetentionScenes.length,
-        narration: part1Text,
-        durationTargetSec: Math.max(4, Math.round(sc.durationTargetSec / 2)),
       });
+      continue;
+    }
 
-      // Sub-beat 2 with complementary visual type
-      let nextType = sc.type;
-      if (sc.type === 'smartphoneMockup') nextType = 'h3SpatialMap';
-      else if (sc.type === 'h3SpatialMap') nextType = 'architecturePipeline';
-      else if (sc.type === 'architecturePipeline') nextType = 'comparison';
-      else if (sc.type === 'code') nextType = 'queueTimeline';
+    // Split long narration on sentence boundaries (।, ?, !, .)
+    const rawSentences = sc.narration
+      .split(/(?<=[।?!.\n])\s+/)
+      .map((str: string) => str.trim())
+      .filter(Boolean);
+
+    const chunks: string[] = [];
+    let currentWords: string[] = [];
+
+    for (const sent of rawSentences) {
+      const sWords = sent.split(/\s+/).filter(Boolean);
+      if (currentWords.length + sWords.length <= 18) {
+        currentWords.push(...sWords);
+      } else {
+        if (currentWords.length > 0) chunks.push(currentWords.join(' '));
+        if (sWords.length > 18) {
+          for (let i = 0; i < sWords.length; i += 18) {
+            chunks.push(sWords.slice(i, i + 18).join(' '));
+          }
+          currentWords = [];
+        } else {
+          currentWords = [...sWords];
+        }
+      }
+    }
+    if (currentWords.length > 0) chunks.push(currentWords.join(' '));
+
+    for (let cIdx = 0; cIdx < chunks.length; cIdx++) {
+      const chunk = chunks[cIdx];
+      const isFirst = cIdx === 0;
+      const sType = isFirst ? sc.type : (visualSequence[(highRetentionScenes.length + 1) % visualSequence.length] || sc.type);
+      const estSec = Math.max(3, Math.round(chunk.split(/\s+/).length / 2.6));
 
       highRetentionScenes.push({
         ...sc,
         id: `scene-${highRetentionScenes.length + 1}`,
         sceneIndex: highRetentionScenes.length,
-        type: nextType,
-        narration: part2Text,
-        onScreenText: sc.onScreenText ? `${sc.onScreenText} • DEEP DIVE` : 'ARCHITECTURE STEP',
+        type: sType,
+        narration: chunk,
+        durationTargetSec: estSec,
+        onScreenText: isFirst ? sc.onScreenText : `${sc.onScreenText || 'CORE ARCHITECTURE'} • BEAT ${cIdx + 1}`,
         technicalKeyPoint: 'Mechanism Breakdown',
-        durationTargetSec: Math.max(4, Math.round(sc.durationTargetSec / 2)),
         visualProps: {
           ...sc.visualProps,
-          type: nextType,
-          headline: `${sc.onScreenText} • DEEP DIVE`,
+          type: sType,
+          headline: isFirst ? sc.onScreenText : `${sc.onScreenText || 'SYSTEM DESIGN'} • PART ${cIdx + 1}`,
         },
-      });
-    } else {
-      highRetentionScenes.push({
-        ...sc,
-        id: `scene-${highRetentionScenes.length + 1}`,
-        sceneIndex: highRetentionScenes.length,
       });
     }
   }

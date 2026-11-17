@@ -91,9 +91,9 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
         style={{
           flex: 1,
           position: 'relative',
-          background: 'radial-gradient(ellipse at center, #0B132B 0%, #030712 90%)',
+          background: 'radial-gradient(ellipse at center, #0e0e14 0%, #050507 92%)',
           borderRadius: 32,
-          border: '2px solid rgba(56, 189, 248, 0.25)',
+          border: '1.5px solid rgba(255, 255, 255, 0.1)',
           boxShadow: '0 25px 70px rgba(0, 0, 0, 0.85)',
           overflow: 'hidden',
         }}
