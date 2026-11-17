@@ -25,21 +25,56 @@ export async function transliterateToPhoneticDevanagari(text: string): Promise<s
     return transliterationCache.get(clean)!;
   }
 
+  const groqKey = process.env.GROQ_API_KEY;
+  const groqModel = process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
+
+  // 1. Try Groq first (high speed, generous quota, no reasoning-token truncation)
+  if (groqKey) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a phonetic transliterator for Indian Hindi TTS (Sarvam AI). Transliterate the given Roman Hinglish text completely into pure Devanagari script so that an Indian acoustic TTS model pronounces every word with 100% native natural accuracy. Rules: 1. Transliterate all English technical terms phonetically (Redis -> रेडिस, GPS -> जीपीएस, H3 -> एच-थ्री, API -> एपीआई, TTL -> टी-टी-एल, Cache -> कैश, Server -> सर्वर, Zomato -> ज़ोमाटो, Swiggy -> स्विगी, CPU -> सीपीयू, RAM -> रैम, DB -> डीबी, SQL -> एसक्यूएल, OTP -> ओटीपी, HTTP -> एचटीटीपी). 2. Write common Hindi words accurately in Devanagari (sirf -> सिर्फ़, matlab -> मतलब, lekin -> लेकिन, pehle -> पहले, kyun -> क्यों, zyada -> ज़्यादा, paas -> पास, chala -> चला, hazaaron -> हज़ारों). 3. Transliterate ALL sentences completely from beginning to end without omitting or truncating anything. 4. Output ONLY the Devanagari text string.',
+            },
+            { role: 'user', content: clean },
+          ],
+          temperature: 0.1,
+          max_tokens: 3000,
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        const candidate = data.choices?.[0]?.message?.content?.trim();
+        // Safety check: ensure output is complete (at least 60% length of input)
+        if (candidate && candidate.length >= clean.length * 0.6) {
+          transliterationCache.set(clean, candidate);
+          return candidate;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[PhoneticService] Groq transliteration fallback:', err.message);
+    }
+  }
+
+  // 2. Try Gemini fallback if Groq was unavailable
   const geminiKey = process.env.GEMINI_API_KEY;
   const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
   if (geminiKey) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`;
-      const prompt = `You are a phonetic transliterator for Indian Hindi TTS (Sarvam AI).
-Transliterate the following Roman Hinglish text into pure Devanagari script so that an Indian acoustic TTS model pronounces every word with 100% native natural accuracy.
-Rules:
-1. Transliterate all English technical terms and abbreviations phonetically (e.g. Redis -> रेडिस, GPS -> जीपीएस, H3 -> एच-थ्री, API -> एपीआई, TTL -> टी-टी-एल, Cache -> कैश, Server -> सर्वर, Zomato -> ज़ोमाटो, Swiggy -> स्विगी, CPU -> सीपीयू, RAM -> रैम, DB -> डीबी, SQL -> एसक्यूएल, OTP -> ओटीपी, HTTP -> एचटीटीपी).
-2. Write common Hindi words accurately in Devanagari so they are never misread (e.g. sirf -> सिर्फ़, matlab -> मतलब, lekin -> लेकिन, pehle -> पहले, kyun -> क्यों, zyada -> ज़्यादा, paas -> पास, chala -> चला, hazaaron -> हज़ारों).
-3. Keep the exact sentence structure and numbers intact. Do NOT translate meanings or add any explanations.
-4. Output ONLY the Devanagari text string.
-
-Text: ${clean}`;
+      const prompt = `Transliterate this Roman Hinglish narration into pure Devanagari script for Sarvam AI Hindi TTS. Transliterate all English technical terms phonetically (e.g. Redis -> रेडिस, GPS -> जीपीएस, H3 -> एच-थ्री, API -> एपीआई, Cache -> कैश, Server -> सर्वर, Zomato -> ज़ोमाटो). Transliterate the ENTIRE paragraph completely without cutting off. Output ONLY the Devanagari text, nothing else:\n\n${clean}`;
 
       const res = await fetch(url, {
         method: 'POST',
@@ -48,16 +83,16 @@ Text: ${clean}`;
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 600,
+            maxOutputTokens: 8192,
           },
         }),
-        signal: AbortSignal.timeout(6000), // 6s timeout
+        signal: AbortSignal.timeout(8000),
       });
 
       if (res.ok) {
         const data = (await res.json()) as any;
         const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-        if (candidate && candidate.length > 5) {
+        if (candidate && candidate.length >= clean.length * 0.6) {
           transliterationCache.set(clean, candidate);
           return candidate;
         }
@@ -67,14 +102,14 @@ Text: ${clean}`;
     }
   }
 
-  // Fast Rule-Based Fallback if LLM is unavailable
+  // 3. Fast Safe Rule-Based Fallback if all LLMs are offline
   const fallback = applyRuleBasedPhonetics(clean);
   transliterationCache.set(clean, fallback);
   return fallback;
 }
 
 /**
- * Fallback regex normalizer for common collisions when LLM is offline
+ * Fallback regex normalizer for common collisions when LLMs are offline
  */
 function applyRuleBasedPhonetics(text: string): string {
   let s = text;

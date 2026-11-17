@@ -1003,7 +1003,7 @@ function App() {
                           title="Click to zoom in"
                         >
                           <div className="still-thumbnail-box">
-                            <img src={toApiUrl(still.url)} alt={still.type} />
+                            <img src={toApiUrl(still.url).includes('?t=') ? toApiUrl(still.url) : `${toApiUrl(still.url)}?t=${Date.now()}`} alt={still.type} />
                             <div className="still-thumbnail-badge">
                               Act {idx + 1} • {still.type}
                             </div>
@@ -1336,7 +1336,7 @@ function App() {
               </button>
             </div>
             <div className="still-lightbox-body">
-              <img src={toApiUrl(selectedStill.url)} alt={selectedStill.type} />
+              <img src={toApiUrl(selectedStill.url).includes('?t=') ? toApiUrl(selectedStill.url) : `${toApiUrl(selectedStill.url)}?t=${Date.now()}`} alt={selectedStill.type} />
             </div>
           </div>
         </div>

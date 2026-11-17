@@ -281,7 +281,7 @@ export async function renderStillPreviews(
       sceneId: scene.id,
       type: scene.type,
       frame,
-      url: `${urlPrefix}/${filename}`,
+      url: `${urlPrefix}/${filename}?t=${Date.now()}`,
       filePath: targetPath,
     };
   });

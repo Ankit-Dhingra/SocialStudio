@@ -94,7 +94,8 @@ export async function synthesizeStoryboardNarration(
     // If using Sarvam, ensure spoken text is in phonetic Devanagari for 100% pronunciation accuracy
     let textToSynthesize = scene.spokenNarration;
     if (provider.name === 'sarvam') {
-      if (!textToSynthesize || !/[\u0900-\u097F]/.test(textToSynthesize)) {
+      const isTruncated = textToSynthesize && textToSynthesize.length < scene.narration.length * 0.6;
+      if (!textToSynthesize || !/[\u0900-\u097F]/.test(textToSynthesize) || isTruncated) {
         console.log(`[TTS] Transliterating Scene ${i + 1} to universal phonetic Devanagari for Sarvam AI...`);
         textToSynthesize = await transliterateToPhoneticDevanagari(scene.narration);
         scene.spokenNarration = textToSynthesize;

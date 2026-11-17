@@ -26,7 +26,7 @@ for (const binDir of remotionBinDirs) {
 
 import { parseCustomScriptToStoryboard } from './modules/ai-script/custom-script-parser.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
-import { masterScriptService } from './modules/ai-script/master-script-service.js';
+import { masterScriptService, buildStoryboardFromParsed } from './modules/ai-script/master-script-service.js';
 import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort, renderStillPreviews } from './modules/render/video-renderer.js';
@@ -337,7 +337,16 @@ app.post('/api/pipeline/stills', async (req, res) => {
     return res.status(404).json({ error: 'Session not found' });
   }
 
-  if (!session.timeline) {
+  // Automatically re-sync storyboard from parsed script sections to reflect latest scene routing
+  if (session.sections && session.currentMarkdown) {
+    session.storyboard = buildStoryboardFromParsed(session.topic, session.sections, session.currentMarkdown);
+    session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
+      fps: 30,
+      scenePaddingFrames: 5,
+      audioSrcPrefix: `audio/runs/${sessionId}`,
+    });
+    masterScriptService.updateSession(session);
+  } else if (!session.timeline) {
     session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
       fps: 30,
       scenePaddingFrames: 5,
