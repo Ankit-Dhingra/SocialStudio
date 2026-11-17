@@ -337,25 +337,25 @@ app.post('/api/pipeline/stills', async (req, res) => {
     return res.status(404).json({ error: 'Session not found' });
   }
 
-  // Automatically re-sync storyboard from parsed script sections to reflect latest scene routing
-  if (session.sections && session.currentMarkdown) {
-    session.storyboard = buildStoryboardFromParsed(session.topic, session.sections, session.currentMarkdown);
-    session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
-      fps: 30,
-      scenePaddingFrames: 5,
-      audioSrcPrefix: `audio/runs/${sessionId}`,
-    });
-    masterScriptService.updateSession(session);
-  } else if (!session.timeline) {
-    session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
-      fps: 30,
-      scenePaddingFrames: 5,
-      audioSrcPrefix: `audio/runs/${sessionId}`,
-    });
-    masterScriptService.updateSession(session);
-  }
-
   try {
+    // Automatically re-sync storyboard from parsed script sections to reflect latest scene routing
+    if (session.sections && session.currentMarkdown) {
+      session.storyboard = buildStoryboardFromParsed(session.topic, session.sections, session.currentMarkdown);
+      session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
+        fps: 30,
+        scenePaddingFrames: 5,
+        audioSrcPrefix: `audio/runs/${sessionId}`,
+      });
+      masterScriptService.updateSession(session);
+    } else if (!session.timeline) {
+      session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
+        fps: 30,
+        scenePaddingFrames: 5,
+        audioSrcPrefix: `audio/runs/${sessionId}`,
+      });
+      masterScriptService.updateSession(session);
+    }
+
     const previewDir = path.resolve('remotion/public/previews', sessionId);
     console.log(`[Pipeline] Generating still previews for session ${sessionId}...`);
     const stills = await renderStillPreviews(
