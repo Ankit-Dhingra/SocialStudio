@@ -24,15 +24,64 @@ function resolveAudioSource(src: string): string {
   if (src.startsWith('http://') || src.startsWith('https://')) return src;
   const normalized = src.replace(/\\/g, '/');
   if (normalized.includes('/public/')) {
-    const rel = normalized.split('/public/')[1];
+    const rel = normalized.split('/public/')[1].replace(/^\/+/, '');
     return staticFile(rel);
+  }
+  if (normalized.startsWith('sfx/') || normalized.startsWith('music/') || normalized.startsWith('audio/')) {
+    return staticFile(normalized);
   }
   if (normalized.includes(':') || (normalized.startsWith('/') && !normalized.startsWith('/audio'))) {
     const filename = normalized.split('/').pop() || '';
     return staticFile(`audio/${filename}`);
   }
-  return staticFile(normalized);
+  return staticFile(normalized.replace(/^\/+/, ''));
 }
+
+const SceneSequenceRenderer: React.FC<{
+  scene: any;
+  seg: any;
+  fps: number;
+  isFirst: boolean;
+}> = ({ scene, seg, fps, isFirst }) => {
+  const sceneFrame = useCurrentFrame();
+
+  // Continuous Cinematic Push / Drift (1.00 -> 1.036 scale, -14px subtle upward drift)
+  const cameraScale = interpolate(sceneFrame, [0, seg.durationInFrames], [1.0, 1.036], {
+    extrapolateRight: 'clamp',
+  });
+  const cameraTranslateY = interpolate(sceneFrame, [0, seg.durationInFrames], [0, -14], {
+    extrapolateRight: 'clamp',
+  });
+
+  return (
+    <>
+      {/* Active Camera Perspective Drift */}
+      <AbsoluteFill
+        style={{
+          transform: `scale(${cameraScale}) translateY(${cameraTranslateY}px)`,
+          transformOrigin: '50% 45%',
+        }}
+      >
+        {renderRegisteredScene(scene, seg.cueFrames)}
+      </AbsoluteFill>
+
+      {/* Per-scene Narration Audio */}
+      {seg.audioSrc && <Audio src={resolveAudioSource(seg.audioSrc)} />}
+
+      {/* Cinematic Transition UI SFX */}
+      <Audio src={resolveAudioSource('sfx/whoosh.wav')} volume={0.15} />
+      {isFirst && <Audio src={resolveAudioSource('sfx/pop.wav')} volume={0.16} />}
+
+      {/* Kinetic Dynamic Word-by-Word Subtitles */}
+      <KineticCaptions
+        wordFrames={seg.wordFrames}
+        narration={scene.narration}
+        durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * fps / 1000))}
+        highlightColor="#64E99A"
+      />
+    </>
+  );
+};
 
 function safeClean(val: any, fallback = ''): string {
   if (!val) return fallback;
@@ -137,18 +186,11 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
             from={seg.startFrame}
             durationInFrames={seg.durationInFrames}
           >
-            {/* Render from typed scene component registry */}
-            {renderRegisteredScene(scene, seg.cueFrames)}
-
-            {/* Per-scene Narration Audio */}
-            {seg.audioSrc && <Audio src={resolveAudioSource(seg.audioSrc)} />}
-
-            {/* Kinetic Dynamic Word-by-Word Subtitles */}
-            <KineticCaptions
-              wordFrames={seg.wordFrames}
-              narration={scene.narration}
-              durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * timeline.fps / 1000))}
-              highlightColor="#64E99A"
+            <SceneSequenceRenderer
+              scene={scene}
+              seg={seg}
+              fps={timeline.fps}
+              isFirst={i === 0}
             />
           </Sequence>
         );

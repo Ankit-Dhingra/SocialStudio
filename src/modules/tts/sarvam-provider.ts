@@ -79,7 +79,7 @@ export class SarvamTTSProvider implements TTSProvider {
     private apiKey: string,
     private speaker = 'sunny_hi_reels',
     private model = 'bulbul:v4-flash',
-    private pace = 1.0,
+    private pace = 0.95,
     private languageCode?: string,
   ) {}
 
@@ -94,8 +94,13 @@ export class SarvamTTSProvider implements TTSProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            text, speaker, pace, model: this.model, language_code: languageCode,
-            speech_sample_rate: sampleRate, output_audio_codec: 'wav',
+            text,
+            speaker,
+            pace,
+            model: this.model,
+            language_code: languageCode,
+            speech_sample_rate: sampleRate,
+            output_audio_codec: 'wav',
           }),
           signal: AbortSignal.timeout(30_000),
         });
@@ -112,7 +117,7 @@ export class SarvamTTSProvider implements TTSProvider {
         fs.writeFileSync(filePath, Buffer.from(audios[0], 'base64'));
         const duration = durationSeconds(filePath);
         const wordCount = text.split(/\s+/).filter(word => /[\p{L}\p{N}]/u.test(word)).length;
-        if (wordCount >= 5 && duration < wordCount * 0.15 / Math.max(1, pace)) {
+        if (wordCount >= 5 && duration < wordCount * 0.12 / Math.max(1, pace)) {
           throw new Error(`Sarvam returned only ${duration.toFixed(2)}s for ${wordCount} words`);
         }
         return;
@@ -134,47 +139,56 @@ export class SarvamTTSProvider implements TTSProvider {
     const speaker = options?.voice || this.speaker;
     const pace = options?.pace ?? this.pace;
 
-    // Sarvam does not interpret SSML. Keep explicit breaks local, and leave
-    // punctuation and wording intact so the model can use sentence context.
-    const parts = text.split(/(<break\s+time=["']\d+(?:\.\d+)?(?:ms|s)["']\s*\/?>)/gi);
+    // Convert SSML breaks and tags into natural punctuation for smooth, human-like neural TTS flow.
+    // This prevents unnatural tempo jumps and dead silent gaps between sentence fragments.
+    let cleanText = text
+      .replace(/<break\s+time=["'](?:0\.[3-9]|[1-9]|\d{3,})s?["']\s*\/?>/gi, '... ')
+      .replace(/<break\s+time=["'](?:[3-9]\d{2}|\d{4})ms["']\s*\/?>/gi, '... ')
+      .replace(/<break\s+[^>]*\/?>/gi, ', ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleanText) throw new Error('No narration text to synthesize');
+
     const workDir = fs.mkdtempSync(path.join(dir, 'sarvam-'));
     try {
-      const files: string[] = [];
-      let speechParts = 0;
-      for (const part of parts) {
-        const token = part.trim();
-        if (!token) continue;
-
-        const name = `${files.length}.wav`;
-        const filePath = path.join(workDir, name);
-        const pause = token.match(/^<break\s+time=["']([\d.]+)(ms|s)["']\s*\/?>$/i);
-        if (pause) {
-          const seconds = Number(pause[1]) / (pause[2].toLowerCase() === 'ms' ? 1000 : 1);
-          if (seconds === 0) continue;
-          const ffmpegBin = findFfmpeg();
-          execFileSync(ffmpegBin, [
-            '-loglevel', 'error', '-f', 'lavfi', '-i', `anullsrc=r=${sampleRate}:cl=mono`,
-            '-t', String(seconds), filePath,
-          ]);
-        } else {
-          await this.synthesizeChunk(token, filePath, speaker, pace);
-          speechParts++;
-        }
-        files.push(name);
-      }
-      if (!speechParts) throw new Error('No narration text to synthesize');
-
-      const listPath = path.join(workDir, 'concat.txt');
-      fs.writeFileSync(listPath, files.map(file => `file '${file}'`).join('\n'));
-      const stagedMp3 = path.join(workDir, 'narration.mp3');
       const ffmpegBin = findFfmpeg();
-      execFileSync(ffmpegBin, [
-        '-loglevel', 'error', '-f', 'concat', '-i', listPath,
-        '-c:a', 'libmp3lame', '-b:a', '192k', stagedMp3,
-      ]);
-      const durationMs = Math.round(durationSeconds(stagedMp3) * 1000);
-      const fileSizeBytes = fs.statSync(stagedMp3).size;
-      fs.renameSync(stagedMp3, outputFilePath);
+
+      // If text fits in standard single neural request (< 1500 chars), synthesize directly in one pass
+      if (cleanText.length <= 1500) {
+        const rawWav = path.join(workDir, 'raw.wav');
+        await this.synthesizeChunk(cleanText, rawWav, speaker, pace);
+        execFileSync(ffmpegBin, [
+          '-loglevel', 'error', '-y', '-i', rawWav,
+          '-c:a', 'libmp3lame', '-b:a', '192k', outputFilePath,
+        ]);
+      } else {
+        // For very long text, split ONLY at natural sentence boundaries (।, ?, !)
+        const sentenceRegex = /([^।?!]+[।?!]+(?:\s+|$))/g;
+        const matches = cleanText.match(sentenceRegex) || [cleanText];
+        const files: string[] = [];
+
+        for (let i = 0; i < matches.length; i++) {
+          const chunk = matches[i].trim();
+          if (!chunk) continue;
+          const chunkName = `chunk-${i}.wav`;
+          const chunkPath = path.join(workDir, chunkName);
+          await this.synthesizeChunk(chunk, chunkPath, speaker, pace);
+          files.push(chunkName);
+        }
+
+        const listPath = path.join(workDir, 'concat.txt');
+        fs.writeFileSync(listPath, files.map(f => `file '${f}'`).join('\n'));
+        execFileSync(ffmpegBin, [
+          '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+          '-c:a', 'libmp3lame', '-b:a', '192k', outputFilePath,
+        ]);
+      }
+
+      const durationMs = Math.round(durationSeconds(outputFilePath) * 1000);
+      const fileSizeBytes = fs.statSync(outputFilePath).size;
+
       return {
         sceneId: options?.sceneId || 'scene-0',
         sceneIndex: options?.sceneIndex ?? 0,

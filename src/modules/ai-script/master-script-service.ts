@@ -496,38 +496,78 @@ export class MasterScriptService {
   }
 
   private async callLLM(prompt: string, systemInstruction: string): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.geminiKey}`;
+    // 1. Try Gemini first if key available
+    if (this.geminiKey) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.geminiKey}`;
 
-    const body = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
-      systemInstruction: {
-        parts: [{ text: systemInstruction }],
-      },
-      generationConfig: {
-        temperature: 0.7,
-      },
-    };
+        const body = {
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }],
+            },
+          ],
+          systemInstruction: {
+            parts: [{ text: systemInstruction }],
+          },
+          generationConfig: {
+            temperature: 0.7,
+          },
+        };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
 
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Gemini LLM error [${res.status}]: ${err.slice(0, 300)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) return text;
+        } else {
+          console.warn(`[MasterScript] Gemini returned HTTP ${res.status}, falling back to Groq...`);
+        }
+      } catch (err: any) {
+        console.warn(`[MasterScript] Gemini request failed (${err.message}), falling back to Groq...`);
+      }
     }
 
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Empty response from LLM');
-    return text;
+    // 2. High-speed Groq fallback with generous quota
+    const groqKey = process.env.GROQ_API_KEY;
+    if (groqKey) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${groqKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.7,
+            max_tokens: 4096,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.choices?.[0]?.message?.content;
+          if (text) return text;
+        } else {
+          console.warn(`[MasterScript] Groq returned HTTP ${res.status}`);
+        }
+      } catch (err: any) {
+        console.warn(`[MasterScript] Groq fallback failed: ${err.message}`);
+      }
+    }
+
+    throw new Error('All LLM providers (Gemini & Groq) failed or rate limits exceeded.');
   }
 
   async startScriptSession(topic: string, angle?: string): Promise<ScriptSession> {

@@ -63,6 +63,9 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
               borderRadius: 8,
               backgroundColor: isActive ? highlightColor : 'rgba(9, 11, 10, 0.76)',
               color: isActive ? '#07110a' : '#f5f5f5',
+              transform: isActive ? 'scale(1.08)' : 'scale(1.0)',
+              boxShadow: isActive ? '0 0 16px rgba(100, 233, 154, 0.45)' : 'none',
+              transition: 'transform 0.08s ease, box-shadow 0.08s ease',
               overflowWrap: 'anywhere',
               maxWidth: '100%',
             }}

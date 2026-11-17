@@ -26,7 +26,7 @@ export function getTTSProvider(): TTSProvider {
         key,
         process.env.SARVAM_SPEAKER || 'sunny_hi_reels',
         process.env.SARVAM_MODEL || 'bulbul:v4-flash',
-        Number(process.env.SARVAM_PACE || '1'),
+        Number(process.env.SARVAM_PACE || '0.95'),
         process.env.SARVAM_LANGUAGE_CODE || undefined
       );
     }
