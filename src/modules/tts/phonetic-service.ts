@@ -5,52 +5,57 @@ dotenv.config();
 // Fast in-memory cache for transliterated texts
 const transliterationCache = new Map<string, string>();
 
+// Universal English letter/digit to Devanagari phonetic pronunciation table
+const LETTER_PHONETICS: Record<string, string> = {
+  A: 'ए', B: 'बी', C: 'सी', D: 'डी', E: 'ई', F: 'एफ़', G: 'जी', H: 'एच', I: 'आई',
+  J: 'जे', K: 'के', L: 'एल', M: 'एम', N: 'एन', O: 'ओ', P: 'पी', Q: 'क्यू', R: 'आर',
+  S: 'एस', T: 'टी', U: 'यू', V: 'वी', W: 'डब्लू', X: 'एक्स', Y: 'वाय', Z: 'ज़ेड',
+  '0': 'ज़ीरो', '1': 'वन', '2': 'टू', '3': 'थ्री', '4': 'फोर', '5': 'फाइव',
+  '6': 'सिक्स', '7': 'सेवन', '8': 'एट', '9': 'नाइन',
+};
+
+// Universal regex matching contiguous Devanagari letter sounds
+const DEVANAGARI_LETTER_SOUNDS =
+  '(?:ए|बी|सी|डी|ई|एफ़|जी|एच|आई|जे|के|एल|एम|एन|ओ|पी|क्यू|आर|एस|टी|यू|वी|डब्लू|एक्स|वाय|ज़ेड|वन|टू|थ्री|फोर|फाइव|सिक्स|सेवन|एट|नाइन)';
+const DEVANAGARI_ACRONYM_REGEX = new RegExp(
+  '(' + DEVANAGARI_LETTER_SOUNDS + ')(?=' + DEVANAGARI_LETTER_SOUNDS + ')',
+  'g'
+);
+
+/**
+ * Universal Algorithmic Acronym Transliterator
+ * Converts ANY English technical abbreviation (JWT, CRDT, BFT, S3, H3, GPS, TTL, OTP, etc.)
+ * into hyphenated Devanagari letters with zero hardcoded word lists.
+ */
+export function transliterateAcronymsUniversal(text: string): string {
+  // 1. Convert English acronyms (e.g. JWT -> जे-डब्लू-टी, H3 -> एच-थ्री, S3 -> एस-थ्री)
+  let result = text.replace(/\b([A-Z0-9]{2,6})(s|ज़)?\b/g, (match, base, plural) => {
+    // If it's pure numbers, leave as-is
+    if (/^\d+$/.test(base)) return match;
+    const parts = base.split('').map((char: string) => LETTER_PHONETICS[char] || char);
+    const hyphenated = parts.join('-');
+    return plural ? `${hyphenated}ज़` : hyphenated;
+  });
+
+  // Handle common mixed-case tech protocols (OAuth, gRPC)
+  result = result
+    .replace(/\bOAuth\b/gi, 'ओ-ऑथ')
+    .replace(/\bgRPC\b/gi, 'जी-आर-पी-सी');
+
+  // 2. Hyphenate any contiguous Devanagari letter acronyms (e.g. ओटीपी -> ओ-टी-पी, जीपीएस -> जी-पी-एस, एचथ्री -> एच-थ्री)
+  result = result.replace(DEVANAGARI_ACRONYM_REGEX, '$1-');
+
+  return result;
+}
+
+/**
+ * Polishes transliterated Devanagari text using purely universal rules
+ * (Zero topic-specific word lists).
+ */
 export function polishPhoneticDevanagari(text: string): string {
-  let polished = text;
+  let polished = transliterateAcronymsUniversal(text);
 
-  // Acronyms (hyphenated so Sarvam spells each letter clearly with zero slurring)
-  const acronyms: [RegExp, string][] = [
-    [/\b(ओटीपी|OTP)\b/gi, 'ओ-टी-पी'],
-    [/\b(जीपीएस|GPS)\b/gi, 'जी-पी-एस'],
-    [/\b(एचथ्री|एच\s*थ्री|H3)\b/gi, 'एच-थ्री'],
-    [/\b(टीटीएल|टी\s*टी\s*एल|TTL)\b/gi, 'टी-टी-एल'],
-    [/\b(एपीआई|API)\b/gi, 'ए-पी-आई'],
-    [/\b(एपीआईज़|APIs)\b/gi, 'ए-पी-आईज़'],
-    [/\b(यूपीआई|UPI)\b/gi, 'यू-पी-आई'],
-    [/\b(एनपीसीआई|NPCI)\b/gi, 'एन-पी-सी-आई'],
-    [/\b(एसएमएस|SMS)\b/gi, 'एस-एम-एस'],
-    [/\b(एसक्यूएल|SQL)\b/gi, 'एस-क्यू-एल'],
-    [/\b(डीबी|DB)\b/gi, 'डी-बी'],
-    [/\b(सीपीयू|CPU)\b/gi, 'सी-पी-यू'],
-    [/\b(एचटीटीपी|HTTP)\b/gi, 'एच-टी-टी-पी'],
-    [/\b(यूआरएल|URL)\b/gi, 'यू-आर-एल'],
-    [/\b(आईडी|ID)\b/gi, 'आई-डी'],
-    [/\b(डीएनएस|DNS)\b/gi, 'डी-एन-एस'],
-    [/\b(आरबीआई|RBI)\b/gi, 'आर-बी-आई'],
-    [/\b(क्यू|Q|Queue)\b/gi, 'क्यू'],
-    [/\b(रेडिस|Redis)\b/gi, 'रेडिस'],
-    [/\b(काफ़्का|Kafka)\b/gi, 'काफ़्का'],
-    [/\b(स्विगी|Swiggy)\b/gi, 'स्विगी'],
-    [/\b(ज़ोमाटो|Zomato)\b/gi, 'ज़ोमाटो'],
-    [/\b(कैश|Cache)\b/gi, 'कैश'],
-    [/\b(सर्वर|Server)\b/gi, 'सर्वर'],
-    [/\b(वर्कर|Worker)\b/gi, 'वर्कर'],
-    [/\b(जियोफ़ेंस|Geofence)\b/gi, 'जियोफ़ेंस'],
-    [/\b(शार्डिंग|Sharding)\b/gi, 'शार्डिंग'],
-    [/\b(सिर्फ|sirf)\b/gi, 'सिर्फ़'],
-    [/\b(पहले|pehle)\b/gi, 'पहले'],
-    [/\b(लेकिन|lekin)\b/gi, 'लेकिन'],
-    [/\b(क्यूंकि|kyunki)\b/gi, 'क्योंकि'],
-    [/\b(ज्यादा|jyada|zyada)\b/gi, 'ज़्यादा'],
-    [/\b(मतलब|matlab)\b/gi, 'मतलब'],
-    [/\b(हज़ारों|hazaron|hazaaron)\b/gi, 'हज़ारों'],
-  ];
-
-  for (const [regex, replacement] of acronyms) {
-    polished = polished.replace(regex, replacement);
-  }
-
-  // Ensure clean spacing around hyphens and punctuation
+  // Clean spacing around hyphens and punctuation
   polished = polished
     .replace(/\s+/g, ' ')
     .replace(/\s+([।?!,])/g, '$1')

@@ -196,11 +196,19 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
         );
       })}
 
-      {/* Continuous Tech Background Music with Audio Ducking */}
+      {/* Continuous Tech Background Music with Audio Ducking & Smooth End Fade */}
       {bgmTrack && (
         <Audio
           src={resolveAudioSource(bgmTrack)}
-          volume={Math.min(0.035, timeline.bgmVolumeDucked)}
+          volume={(f) => {
+            const baseVol = Math.min(0.035, timeline.bgmVolumeDucked);
+            // Smooth 1.5s (45 frames) audio fade out at the end
+            const framesRemaining = timeline.totalDurationInFrames - f;
+            if (framesRemaining < 45 && framesRemaining > 0) {
+              return baseVol * (framesRemaining / 45);
+            }
+            return baseVol;
+          }}
           loop
         />
       )}

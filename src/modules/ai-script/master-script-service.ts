@@ -174,11 +174,16 @@ export function buildStoryboardFromParsed(
 
   const scenes = [];
 
-  // Parse acts from voiceover script
-  const voText = sections.voiceoverScript || '';
-  const actChunks = voText.split(/(?:Act\s*\d+\s*[-—:]|[#]+\s*Act\s*\d+)/i)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // Parse acts from voiceover script reliably
+  const voText = sections.voiceoverScript || fullMarkdown || '';
+  const actChunks: string[] = [];
+  for (let a = 1; a <= 6; a++) {
+    const actPattern = new RegExp(`(?:Act\\s*${a}|#+\\s*Act\\s*${a})\\s*[-—:]?\\s*([\\s\\S]*?)(?=(?:Act\\s*\\d|#+\\s*Act\\s*\\d|###|---|$)|\$)`, 'i');
+    const match = voText.match(actPattern);
+    if (match && match[1].trim()) {
+      actChunks.push(match[1].trim());
+    }
+  }
 
   if (jsonScenes.length > 0) {
     for (let i = 0; i < jsonScenes.length; i++) {
@@ -470,8 +475,86 @@ export function buildStoryboardFromParsed(
     }
   }
 
+  // Ensure High-Retention Pacing: If any scene's narration has > 22 words, split it into 2 rapid visual screens
+  const highRetentionScenes: any[] = [];
+  for (let s = 0; s < scenes.length; s++) {
+    const sc = scenes[s];
+    const words = sc.narration.trim().split(/\s+/);
+    // If it's a long scene (> 24 words) and not the final summary, split into 2 rapid-cut visual screens
+    if (words.length > 24 && sc.type !== 'summary' && sc.type !== 'tradeoffHUD') {
+      const mid = Math.ceil(words.length / 2);
+      const part1Text = words.slice(0, mid).join(' ');
+      const part2Text = words.slice(mid).join(' ');
+
+      // Sub-beat 1
+      highRetentionScenes.push({
+        ...sc,
+        id: `scene-${highRetentionScenes.length + 1}`,
+        sceneIndex: highRetentionScenes.length,
+        narration: part1Text,
+        durationTargetSec: Math.max(4, Math.round(sc.durationTargetSec / 2)),
+      });
+
+      // Sub-beat 2 with complementary visual type
+      let nextType = sc.type;
+      if (sc.type === 'smartphoneMockup') nextType = 'h3SpatialMap';
+      else if (sc.type === 'h3SpatialMap') nextType = 'architecturePipeline';
+      else if (sc.type === 'architecturePipeline') nextType = 'comparison';
+      else if (sc.type === 'code') nextType = 'queueTimeline';
+
+      highRetentionScenes.push({
+        ...sc,
+        id: `scene-${highRetentionScenes.length + 1}`,
+        sceneIndex: highRetentionScenes.length,
+        type: nextType,
+        narration: part2Text,
+        onScreenText: sc.onScreenText ? `${sc.onScreenText} • DEEP DIVE` : 'ARCHITECTURE STEP',
+        technicalKeyPoint: 'Mechanism Breakdown',
+        durationTargetSec: Math.max(4, Math.round(sc.durationTargetSec / 2)),
+        visualProps: {
+          ...sc.visualProps,
+          type: nextType,
+          headline: `${sc.onScreenText} • DEEP DIVE`,
+        },
+      });
+    } else {
+      highRetentionScenes.push({
+        ...sc,
+        id: `scene-${highRetentionScenes.length + 1}`,
+        sceneIndex: highRetentionScenes.length,
+      });
+    }
+  }
+
+  // Ensure smooth closing Outro CTA scene
+  const hasOutro = highRetentionScenes.some(
+    (s) => /follow|doston|share/i.test(s.narration) && s.type === 'summary'
+  );
+  if (!hasOutro) {
+    const outroIndex = highRetentionScenes.length;
+    highRetentionScenes.push({
+      id: `scene-${outroIndex + 1}`,
+      sceneIndex: outroIndex,
+      type: 'summary',
+      narration: 'Aise hi real-world system design seekhne ke liye follow karo aur doston ke sath share karo!',
+      onScreenText: 'FOLLOW FOR DEEP TECH',
+      technicalKeyPoint: 'Save & Share for Interviews',
+      durationTargetSec: 5,
+      visualProps: {
+        type: 'summary',
+        headline: 'Follow For More',
+        takeaways: [
+          'Save this reel for interview revision',
+          'Share with your engineering friends',
+        ],
+        callToAction: 'Aise hi seekhne ke liye follow karo!',
+      },
+    });
+  }
+
+  const finalScenes = highRetentionScenes;
   const safeTitle = (jsonMeta.title || topic).trim().slice(0, 95);
-  const safeHook = (scenes[0]?.narration || 'Engineering Hook in System Design').slice(0, 200);
+  const safeHook = (finalScenes[0]?.narration || 'Engineering Hook in System Design').slice(0, 200);
 
   return StoryboardSchema.parse({
     topic: topic.slice(0, 195),
@@ -482,7 +565,7 @@ export function buildStoryboardFromParsed(
     format: 'short',
     estimatedDurationSec: Math.max(20, Math.min(180, Number(jsonMeta.durationSeconds) || 78)),
     hashtags: ['#systemdesign', '#backend', '#softwareengineering', '#techshorts', '#coding'],
-    scenes,
+    scenes: finalScenes,
   });
 }
 

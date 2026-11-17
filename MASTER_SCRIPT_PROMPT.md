@@ -162,9 +162,17 @@ For each act: visuals, object movements, on-screen words, technical mechanism sh
 ### 4. REMOTION SCENE JSON
 A **valid JSON** code block (no comments, no markdown inside JSON), including:
 - `meta`: title, `fps`: 30, `width`: 1080, `height`: 1920, `durationSeconds`
-- `scenes[]`: `id`, `startFrame`, `durationFrames`, `type`, `narration`, `onScreenText` (a clean, punchy headline string like "1 SEAT • 2 BOOKINGS" or "REDIS DISTRIBUTED LOCK ENGINE", max 60 chars; NEVER an array of objects), `visualElements`, `animation`
+- `scenes[]`: Array of **10 to 14 distinct visual scenes/screens** (each lasting 4 to 7 seconds, roughly 120-210 frames each at 30fps).
+  **CRITICAL HIGH-RETENTION RULE:** On modern Instagram reels, viewers drop off if a screen stays static for > 6 seconds. Therefore, divide the script into **10 to 14 rapid-cut visual screens**! Each scene must have:
+  - `id`: e.g. `"scene-1"`, `"scene-2"`, ... `"scene-12"`
+  - `type`: one of `hook`, `smartphoneMockup`, `h3SpatialMap`, `architecturePipeline`, `queueTimeline`, `comparison`, `code`, `tradeoffHUD`, `summary`
+  - `narration`: exact 1-2 sentence spoken slice for this visual beat (12-22 words)
+  - `onScreenText`: clean, punchy headline string (max 60 chars; NEVER an object or array)
+  - `durationFrames`: 120 to 210 frames (4-7 seconds)
+  - `visualProps`: topic-relevant properties for that scene
+  - **Smooth Ending CTA:** The FINAL scene MUST be type `summary` with `onScreenText`: `"FOLLOW FOR SYSTEM DESIGN"` and spoken narration: `"Aise hi real-world system design seekhne ke liye follow karo aur doston ke sath share karo!"`
 - Frames must add up exactly to total duration frames, with no gaps/overlaps.
-- **Important:** This JSON is scene data; do **not** claim it is executable Remotion without matching components. If timing is estimated, state that after the JSON. Keep narration consistent with the final voiceover script (no rewritten speech).
+- Keep narration consistent with the final voiceover script (no rewritten speech).
 
 ### 5. INTERVIEW CHEAT-SHEET
 Four numbered takeaways: concept, how it works, why it matters, and its practical nuance. Extra engineering detail belongs here, not in voiceover.
