@@ -6,8 +6,63 @@ import { TTSProvider, SynthesizedAudioClip } from './tts-provider.js';
 
 const sampleRate = 24000;
 
+function findFfmpeg(): string {
+  const candidates = [
+    path.resolve('node_modules/@remotion/compositor-win32-x64-msvc/ffmpeg.exe'),
+    path.resolve('node_modules/@remotion/compositor-linux-x64-gnu/ffmpeg'),
+    path.resolve('node_modules/@remotion/compositor-darwin-x64/ffmpeg'),
+    path.resolve('node_modules/@remotion/compositor-darwin-arm64/ffmpeg'),
+    'ffmpeg',
+  ];
+  for (const c of candidates) {
+    if (c === 'ffmpeg' || fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return 'ffmpeg';
+}
+
+function findFfprobe(): string {
+  const candidates = [
+    path.resolve('node_modules/@remotion/compositor-win32-x64-msvc/ffprobe.exe'),
+    path.resolve('node_modules/@remotion/compositor-linux-x64-gnu/ffprobe'),
+    path.resolve('node_modules/@remotion/compositor-darwin-x64/ffprobe'),
+    path.resolve('node_modules/@remotion/compositor-darwin-arm64/ffprobe'),
+    'ffprobe',
+  ];
+  for (const c of candidates) {
+    if (c === 'ffprobe' || fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return 'ffprobe';
+}
+
+function getWavDuration(filePath: string): number | null {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const header = Buffer.alloc(44);
+    fs.readSync(fd, header, 0, 44, 0);
+    fs.closeSync(fd);
+    if (header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WAVE') {
+      const byteRate = header.readUInt32LE(28);
+      const dataSize = header.readUInt32LE(40);
+      if (byteRate > 0 && dataSize > 0) {
+        return dataSize / byteRate;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function durationSeconds(filePath: string): number {
-  const result = execFileSync('ffprobe', [
+  const wavDuration = getWavDuration(filePath);
+  if (wavDuration !== null && Number.isFinite(wavDuration) && wavDuration > 0) {
+    return wavDuration;
+  }
+
+  const ffprobeBin = findFfprobe();
+  const result = execFileSync(ffprobeBin, [
     '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath,
   ], { encoding: 'utf8' });
   const duration = Number(result.trim());
@@ -96,7 +151,8 @@ export class SarvamTTSProvider implements TTSProvider {
         if (pause) {
           const seconds = Number(pause[1]) / (pause[2].toLowerCase() === 'ms' ? 1000 : 1);
           if (seconds === 0) continue;
-          execFileSync('ffmpeg', [
+          const ffmpegBin = findFfmpeg();
+          execFileSync(ffmpegBin, [
             '-loglevel', 'error', '-f', 'lavfi', '-i', `anullsrc=r=${sampleRate}:cl=mono`,
             '-t', String(seconds), filePath,
           ]);
@@ -111,7 +167,8 @@ export class SarvamTTSProvider implements TTSProvider {
       const listPath = path.join(workDir, 'concat.txt');
       fs.writeFileSync(listPath, files.map(file => `file '${file}'`).join('\n'));
       const stagedMp3 = path.join(workDir, 'narration.mp3');
-      execFileSync('ffmpeg', [
+      const ffmpegBin = findFfmpeg();
+      execFileSync(ffmpegBin, [
         '-loglevel', 'error', '-f', 'concat', '-i', listPath,
         '-c:a', 'libmp3lame', '-b:a', '192k', stagedMp3,
       ]);

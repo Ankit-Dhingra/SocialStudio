@@ -125,6 +125,45 @@ export function parseSectionsFromMarkdown(markdown: string): ParsedScriptSection
   return sections;
 }
 
+function parseTradeoffDilemma(markdown = '') {
+  let optionA_Title = '';
+  let optionA_Pros = '';
+  let optionA_Cons = '';
+  let optionB_Title = '';
+  let optionB_Pros = '';
+  let optionB_Cons = '';
+
+  const optAMatch = markdown.match(/Option A\s*[:\-—]?\s*([^\n\r*]+)/i);
+  if (optAMatch) optionA_Title = 'OPTION A: ' + optAMatch[1].trim();
+
+  const optAProsMatch = markdown.match(/Option A[^\n]*\n[\s\S]*?\*?\*?Pros\*?\*?\s*[:\-—]?\s*([^\n\r]+)/i);
+  if (optAProsMatch) optionA_Pros = optAProsMatch[1].replace(/^\*?\*?:?\s*/, '').trim();
+
+  const optAConsMatch = markdown.match(/Option A[^\n]*\n[\s\S]*?\*?\*?Cons\*?\*?\s*[:\-—]?\s*([^\n\r]+)/i);
+  if (optAConsMatch) optionA_Cons = optAConsMatch[1].replace(/^\*?\*?:?\s*/, '').trim();
+
+  const optBMatch = markdown.match(/Option B\s*[:\-—]?\s*([^\n\r*]+)/i);
+  if (optBMatch) optionB_Title = 'OPTION B: ' + optBMatch[1].trim();
+
+  const optBProsMatch = markdown.match(/Option B[^\n]*\n[\s\S]*?\*?\*?Pros\*?\*?\s*[:\-—]?\s*([^\n\r]+)/i);
+  if (optBProsMatch) optionB_Pros = optBProsMatch[1].replace(/^\*?\*?:?\s*/, '').trim();
+
+  const optBConsMatch = markdown.match(/Option B[^\n]*\n[\s\S]*?\*?\*?Cons\*?\*?\s*[:\-—]?\s*([^\n\r]+)/i);
+  if (optBConsMatch) optionB_Cons = optBConsMatch[1].replace(/^\*?\*?:?\s*/, '').trim();
+
+  return { optionA_Title, optionA_Pros, optionA_Cons, optionB_Title, optionB_Pros, optionB_Cons };
+}
+
+function parseCheatSheetPoints(markdown = '') {
+  const points: string[] = [];
+  const lines = markdown.split('\n');
+  for (const line of lines) {
+    const m = line.match(/^\s*\d+\.\s*\*\*Concept:\s*([^*]+)\*\*/i) || line.match(/^\s*\d+\.\s*\*\*([^*]+)\*\*/);
+    if (m && m[1]) points.push(m[1].trim());
+  }
+  return points.slice(0, 4);
+}
+
 export function buildStoryboardFromParsed(
   topic: string,
   sections: ParsedScriptSections,
@@ -231,38 +270,47 @@ export function buildStoryboardFromParsed(
       let actNarration = extractCleanText(js.narration || actChunks[i] || js.visual || js.text, `Scene ${i + 1} engineering explanation.`);
       if (actNarration.length < 10) actNarration = `${actNarration} - core distributed architecture breakdown.`;
 
-      // Map AI type names to registered Remotion visual components with Act semantic roles
       const rawType = (js.type || '').toLowerCase();
+      const actFullText = `${topic} ${rawType} ${actNarration} ${js.onScreenText || ''}`.toLowerCase();
+
+      // Smart semantic scene routing based on narrative content
       let sceneType = 'hook';
-      
       if (i === 0) {
         // Act 1: The Hook
-        if (/race|concurrency|lock|seat|ticket|booking|flight/i.test(topic + ' ' + rawType)) {
+        if (/race|concurrency|lock|seat|ticket|booking|flight/i.test(actFullText)) {
           sceneType = 'raceCondition';
-        } else if (/phone|mockup|zomato|swiggy|order|price|surge/i.test(topic + ' ' + rawType)) {
+        } else if (/phone|mockup|zomato|swiggy|order|price|surge|delivery|uber|ola|ride/i.test(actFullText)) {
           sceneType = 'smartphoneMockup';
         } else {
           sceneType = 'hook';
         }
       } else if (i === 1) {
-        // Act 2: The Paradox / Parallel Execution Reality
-        if (/compare|diff|vs/i.test(rawType)) {
+        // Act 2: Break the Assumption / Paradox
+        if (/hex|h3|spatial|map|honeycomb|geo/i.test(actFullText)) {
+          sceneType = 'h3SpatialMap';
+        } else if (/compare|diff|vs|versus|naive|instead/i.test(actFullText)) {
           sceneType = 'comparison';
         } else {
           sceneType = 'architecturePipeline';
         }
       } else if (i === 2) {
         // Act 3: Core Architecture Engine
-        if (/hex|h3|spatial|map|geo/i.test(topic + ' ' + rawType)) {
+        if (/hex|h3|spatial|map|honeycomb|geo/i.test(actFullText) && scenes[1]?.type !== 'h3SpatialMap') {
           sceneType = 'h3SpatialMap';
-        } else if (/code|terminal|query|command/i.test(rawType)) {
+        } else if (/code|terminal|query|command|select|update/i.test(actFullText)) {
           sceneType = 'code';
         } else {
           sceneType = 'architecturePipeline';
         }
       } else if (i === 3) {
-        // Act 4: Production Edge Case (Crash / Failure / TTL)
-        sceneType = 'architecturePipeline';
+        // Act 4: Production Edge Case
+        if (/compare|diff|vs|versus|stale/i.test(actFullText)) {
+          sceneType = 'comparison';
+        } else if (/queue|timeline|async|offline/i.test(actFullText)) {
+          sceneType = 'queueTimeline';
+        } else {
+          sceneType = 'architecturePipeline';
+        }
       } else if (i === 4) {
         // Act 5: Senior SDE Tradeoff & Recap
         sceneType = 'tradeoffHUD';
@@ -280,6 +328,89 @@ export function buildStoryboardFromParsed(
       const onScreenText = rawOnScreen.length > 80 ? rawOnScreen.slice(0, 77) + '...' : (rawOnScreen.length < 3 ? `${rawOnScreen} SYS` : rawOnScreen);
       const technicalKeyPoint = extractVisualSummary(js.visualElements || js.visual, 'Core Architecture Flow');
 
+      const parsedDilemma = parseTradeoffDilemma(sections.tradeoffDilemma || fullMarkdown);
+      const parsedPoints = parseCheatSheetPoints(sections.interviewCheatSheet || fullMarkdown);
+
+      // Populate rich topic-aware dynamic visualProps
+      let visualProps: Record<string, any> = {
+        type: sceneType,
+        headline: onScreenText,
+        subtext: technicalKeyPoint,
+        title: onScreenText,
+        subtitle: technicalKeyPoint,
+      };
+
+      if (sceneType === 'smartphoneMockup') {
+        const isCab = /uber|ola|cab|ride/i.test(actFullText);
+        const isSwiggy = /swiggy/i.test(actFullText);
+        visualProps = {
+          ...visualProps,
+          appName: isCab ? 'UBER' : (isSwiggy ? 'SWIGGY' : 'ZOMATO'),
+          itemName: isCab ? 'Uber Premier (Airport Ride)' : 'Royal Chicken Dum Biryani',
+          locationText: 'HSR Layout, Sector 4',
+          itemPrice: isCab ? '₹550' : '₹350',
+          baseDeliveryFee: isCab ? '₹250' : '₹30',
+          surgeDeliveryFee: isCab ? '₹550' : '₹80',
+          surgeMultiplier: '1.8X',
+          surgeReason: 'HIGH DEMAND • 120+ ACTIVE ORDERS',
+          onScreenText,
+        };
+      } else if (sceneType === 'h3SpatialMap') {
+        visualProps = {
+          ...visualProps,
+          hotHexId: '#88619A0A4',
+          orderCount: 52,
+          riderCount: 5,
+          surgeMultiplier: '1.8X',
+        };
+      } else if (sceneType === 'tradeoffHUD') {
+        visualProps = {
+          ...visualProps,
+          optionA_Title: parsedDilemma.optionA_Title || 'OPTION A: HIGH FREQUENCY PINGS (2-5s)',
+          optionA_Pros: parsedDilemma.optionA_Pros || 'Real-time accuracy & faster candidate dispatching',
+          optionA_Cons: parsedDilemma.optionA_Cons || 'High battery drain on mobile client device',
+          optionB_Title: parsedDilemma.optionB_Title || 'OPTION B: LOW FREQUENCY PINGS (30s+)',
+          optionB_Pros: parsedDilemma.optionB_Pros || 'Minimal battery consumption & lightweight network load',
+          optionB_Cons: parsedDilemma.optionB_Cons || 'Stale location window & supply anomalies',
+          interviewPoints: parsedPoints.length > 0 ? parsedPoints : [
+            'Balance spatial indexing granularity with network throughput',
+            'Use heartbeat freshness checks to mitigate stale data',
+            'Decouple client updates via local offline queueing',
+            'Optimize cache invalidation for dynamic real-time surges',
+          ],
+          callToAction: 'Save this reel for your System Design Interview & follow for more!',
+        };
+      } else if (sceneType === 'architecturePipeline') {
+        visualProps = {
+          ...visualProps,
+          redisLatencyMs: 2.5,
+        };
+      } else if (sceneType === 'comparison') {
+        const isOfflineGps = /offline|stale|gps|network/i.test(actFullText);
+        visualProps = {
+          ...visualProps,
+          leftTitle: isOfflineGps ? 'STALE GPS OVERWRITE' : 'NAIVE DIRECT EXECUTION',
+          leftCode: isOfflineGps ? 'rider.location = incoming_payload.coords' : 'SELECT * FROM inventory WHERE id = 1',
+          leftPoints: isOfflineGps ? [
+            'Older delayed packet arrives late',
+            'Overwrites fresh live rider coordinates'
+          ] : [
+            'Parallel requests collide without lock',
+            'Double-spend / inventory below zero'
+          ],
+          rightTitle: isOfflineGps ? 'MONOTONIC HEARTBEAT SYNC' : 'ATOMIC STATE GUARD',
+          rightCode: isOfflineGps ? 'IF packet.timestamp > rider.last_seen UPDATE' : 'SET lock:key token NX EX 10',
+          rightPoints: isOfflineGps ? [
+            'Timestamps prevent out-of-order writes',
+            'Offline local queue syncs gracefully'
+          ] : [
+            'Atomic single-turn guarantee',
+            'Automatic TTL crash protection'
+          ],
+          verdict: isOfflineGps ? 'Winner: Monotonic Version Check' : 'Winner: Atomic Coordination Lock',
+        };
+      }
+
       scenes.push({
         id: `scene-${i + 1}`,
         sceneIndex: i,
@@ -288,33 +419,53 @@ export function buildStoryboardFromParsed(
         onScreenText,
         technicalKeyPoint,
         durationTargetSec: Math.max(4, Math.min(30, Math.round((js.durationFrames || 210) / 30))),
-        visualProps: {
-          type: sceneType,
-          headline: onScreenText,
-          subtext: technicalKeyPoint,
-          title: onScreenText,
-          subtitle: technicalKeyPoint,
-        },
+        visualProps,
       });
     }
   } else {
+    const parsedDilemma = parseTradeoffDilemma(sections.tradeoffDilemma || fullMarkdown);
+    const parsedPoints = parseCheatSheetPoints(sections.interviewCheatSheet || fullMarkdown);
     // Standard 5-Act Fallback if JSON scene block was missing
-    const fallbackTypes = ['smartphoneMockup', 'smartphoneMockup', 'h3SpatialMap', 'architecturePipeline', 'tradeoffHUD'];
+    const fallbackTypes = ['smartphoneMockup', 'h3SpatialMap', 'architecturePipeline', 'comparison', 'tradeoffHUD'];
     const actTitles = ['Act 1: The Hook', 'Act 2: The Paradox', 'Act 3: Core Architecture', 'Act 4: The Edge Case', 'Act 5: Tradeoff & Recap'];
     for (let i = 0; i < 5; i++) {
+      const type = fallbackTypes[i];
+      let visualProps: Record<string, any> = {
+        type,
+        headline: actTitles[i] || `ACT ${i + 1}`,
+        subtext: topic,
+        title: actTitles[i] || `ACT ${i + 1}`,
+        subtitle: topic,
+      };
+
+      if (type === 'tradeoffHUD') {
+        visualProps = {
+          ...visualProps,
+          optionA_Title: parsedDilemma.optionA_Title || 'OPTION A: HIGH FREQUENCY (2-5s)',
+          optionA_Pros: parsedDilemma.optionA_Pros || 'Real-time accuracy & faster dispatching',
+          optionA_Cons: parsedDilemma.optionA_Cons || 'High battery drain on mobile client',
+          optionB_Title: parsedDilemma.optionB_Title || 'OPTION B: LOW FREQUENCY (30s+)',
+          optionB_Pros: parsedDilemma.optionB_Pros || 'Minimal battery consumption & lightweight network',
+          optionB_Cons: parsedDilemma.optionB_Cons || 'Stale location window & supply anomalies',
+          interviewPoints: parsedPoints.length > 0 ? parsedPoints : [
+            'Balance spatial indexing granularity with network throughput',
+            'Use heartbeat freshness checks to mitigate stale data',
+            'Decouple client updates via local offline queueing',
+            'Optimize cache invalidation for dynamic real-time surges',
+          ],
+          callToAction: 'Save this reel for your System Design Interview & follow for more!',
+        };
+      }
+
       scenes.push({
         id: `scene-${i + 1}`,
         sceneIndex: i,
-        type: fallbackTypes[i] as any,
+        type: type as any,
         narration: actChunks[i] || `Act ${i + 1} engineering explanation for ${topic}.`,
         onScreenText: actTitles[i] || `ACT ${i + 1}`,
         technicalKeyPoint: 'Core Architecture Step',
         durationTargetSec: 14,
-        visualProps: {
-          type: fallbackTypes[i],
-          headline: actTitles[i] || `ACT ${i + 1}`,
-          subtext: topic,
-        },
+        visualProps,
       });
     }
   }

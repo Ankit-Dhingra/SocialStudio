@@ -26,6 +26,50 @@ export interface RenderResult {
 
 let cachedBundlePromise: Promise<string> | null = null;
 
+function getChromeExecutable(): string | undefined {
+  const envPath = process.env.CHROME_EXECUTABLE;
+  if (envPath && fs.existsSync(envPath)) {
+    return envPath;
+  }
+  return undefined;
+}
+
+function findFfprobe(): string {
+  const candidates = [
+    path.resolve('node_modules/@remotion/compositor-win32-x64-msvc/ffprobe.exe'),
+    path.resolve('node_modules/@remotion/compositor-linux-x64-gnu/ffprobe'),
+    path.resolve('node_modules/@remotion/compositor-darwin-x64/ffprobe'),
+    path.resolve('node_modules/@remotion/compositor-darwin-arm64/ffprobe'),
+    'ffprobe',
+  ];
+  for (const c of candidates) {
+    if (c === 'ffprobe' || fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return 'ffprobe';
+}
+
+function getRenderingConfig() {
+  const numCpus = os.cpus()?.length || 4;
+
+  // Concurrency: Use env if provided, or scale intelligently (min 2, max 8, default ~50% of cores)
+  const envConcurrency = process.env.REMOTION_CONCURRENCY ? Number(process.env.REMOTION_CONCURRENCY) : undefined;
+  const concurrency = envConcurrency && !Number.isNaN(envConcurrency) && envConcurrency > 0
+    ? envConcurrency
+    : Math.max(2, Math.min(8, Math.floor(numCpus * 0.5)));
+
+  // FFmpeg threads for video stitcher
+  const ffmpegThreads = Math.max(2, Math.min(8, Math.floor(numCpus * 0.5)));
+
+  // OpenGL backend: 'angle' hardware acceleration on Windows, 'swangle' for headless Linux
+  const gl = (process.env.REMOTION_GL as any) || (os.platform() === 'win32' ? 'angle' : 'swangle');
+
+  const browserExecutable = getChromeExecutable();
+
+  return { concurrency, ffmpegThreads, gl, browserExecutable };
+}
+
 async function getOrCreateBundle(): Promise<string> {
   const prebuilt = path.resolve('dist-remotion');
   if (fs.existsSync(path.join(prebuilt, 'index.html'))) {
@@ -67,15 +111,19 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
 
   const startTime = Date.now();
   const bundleLocation = await getOrCreateBundle();
+  const { concurrency, ffmpegThreads, gl, browserExecutable } = getRenderingConfig();
+
+  console.log(`[Renderer] Optimizing render pipeline: concurrency=${concurrency}, ffmpegThreads=${ffmpegThreads}, gl=${gl}, browser=${browserExecutable || 'remotion-default'}`);
 
   console.log(`[Renderer] Selecting composition 'StudioShort'...`);
   const composition = await selectComposition({
     serveUrl: bundleLocation,
     id: 'StudioShort',
     timeoutInMilliseconds: 300000,
+    browserExecutable,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
-      gl: 'swangle',
+      gl,
       disableWebSecurity: true,
     },
     inputProps: {
@@ -99,14 +147,14 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     crf: 20,
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
-    // Strictly controlled concurrency: 2 workers keeps Chromium memory below 800MB RAM on 8GB host
-    concurrency: 2,
+    concurrency,
     disallowParallelEncoding: false,
     enforceAudioTrack: true,
     timeoutInMilliseconds: 1200000,
+    browserExecutable,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
-      gl: 'swangle',
+      gl,
       disableWebSecurity: true,
     },
     inputProps: {
@@ -114,7 +162,6 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
       timeline,
     },
     ffmpegOverride: ({ type, args }) => {
-      // 2 threads for FFmpeg stitching: 2x speed without CPU starvation
       if (type === 'stitcher') {
         const outputIndex = args.length - 1;
         const cloned = [...args];
@@ -122,13 +169,13 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
           outputIndex,
           0,
           '-threads',
-          '2',
+          String(ffmpegThreads),
           '-x264-params',
-          'threads=2:lookahead_threads=1:rc_lookahead=10'
+          `threads=${ffmpegThreads}:lookahead_threads=2:rc_lookahead=20`
         );
-        return ['-threads', '2', ...cloned];
+        return ['-threads', String(ffmpegThreads), ...cloned];
       }
-      return ['-threads', '2', ...args];
+      return ['-threads', String(ffmpegThreads), ...args];
     },
     onProgress: ({ renderedFrames }) => {
       const percent = Math.floor((renderedFrames / totalFrames) * 100);
@@ -146,7 +193,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     throw new Error(`Render failed: Output file was not created at ${outputFilePath}`);
   }
 
-  const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries',
+  const ffprobeBin = findFfprobe();
+  const probe = JSON.parse(execFileSync(ffprobeBin, ['-v', 'error', '-show_entries',
     'format=duration:stream=codec_type,width,height,duration', '-of', 'json', outputFilePath], {encoding: 'utf8'}));
   const video = probe.streams.find((stream: {codec_type: string}) => stream.codec_type === 'video');
   if (video?.width !== 1080 || video?.height !== 1920 || !probe.streams.some((s: {codec_type: string}) => s.codec_type === 'audio')) {
@@ -186,13 +234,16 @@ export async function renderStillPreviews(
   }
 
   const bundleLocation = await getOrCreateBundle();
+  const { gl, browserExecutable } = getRenderingConfig();
+
   const composition = await selectComposition({
     serveUrl: bundleLocation,
     id: 'StudioShort',
     timeoutInMilliseconds: 120000,
+    browserExecutable,
     chromiumOptions: {
       enableMultiProcessOnLinux: true,
-      gl: 'swangle',
+      gl,
       disableWebSecurity: true,
     },
     inputProps: {
@@ -201,12 +252,9 @@ export async function renderStillPreviews(
     },
   });
 
-  const results: StillPreviewResult[] = [];
-
-  for (let i = 0; i < storyboard.scenes.length; i++) {
-    const scene = storyboard.scenes[i];
+  const renderTasks = storyboard.scenes.map(async (scene, i) => {
     const seg = timeline.segments[i];
-    if (!seg) continue;
+    if (!seg) return null;
 
     // Capture representative frame at peak action (40% into the scene duration)
     const frame = seg.startFrame + Math.min(120, Math.floor(seg.durationInFrames * 0.4));
@@ -220,22 +268,24 @@ export async function renderStillPreviews(
       output: targetPath,
       imageFormat: 'jpeg',
       jpegQuality: 88,
+      browserExecutable,
       inputProps: { storyboard, timeline },
       chromiumOptions: {
-        gl: 'swangle',
+        gl,
         disableWebSecurity: true,
       },
     });
 
-    results.push({
+    return {
       sceneIndex: i,
       sceneId: scene.id,
       type: scene.type,
       frame,
       url: `${urlPrefix}/${filename}`,
       filePath: targetPath,
-    });
-  }
+    };
+  });
 
-  return results;
+  const settled = await Promise.all(renderTasks);
+  return settled.filter(Boolean) as StillPreviewResult[];
 }

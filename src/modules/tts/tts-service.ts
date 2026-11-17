@@ -6,6 +6,7 @@ import { TTSProvider, SynthesizedAudioClip } from './tts-provider.js';
 import { EdgeTTSProvider } from './edge-tts-provider.js';
 import { ElevenLabsProvider } from './elevenlabs-provider.js';
 import { SarvamTTSProvider } from './sarvam-provider.js';
+import { transliterateToPhoneticDevanagari } from './phonetic-service.js';
 
 dotenv.config();
 
@@ -90,10 +91,22 @@ export async function synthesizeStoryboardNarration(
     const outputFilename = `scene-${i}.mp3`;
     const outputPath = path.join(runDir, outputFilename);
 
+    // If using Sarvam, ensure spoken text is in phonetic Devanagari for 100% pronunciation accuracy
+    let textToSynthesize = scene.spokenNarration;
+    if (provider.name === 'sarvam') {
+      if (!textToSynthesize || !/[\u0900-\u097F]/.test(textToSynthesize)) {
+        console.log(`[TTS] Transliterating Scene ${i + 1} to universal phonetic Devanagari for Sarvam AI...`);
+        textToSynthesize = await transliterateToPhoneticDevanagari(scene.narration);
+        scene.spokenNarration = textToSynthesize;
+      }
+    } else {
+      textToSynthesize = textToSynthesize || scene.narration;
+    }
+
     console.log(`[TTS] Synthesizing Scene ${i + 1}/${storyboard.scenes.length} (${scene.type})...`);
     let clip: SynthesizedAudioClip;
     try {
-      clip = await provider.synthesizeClip(scene.spokenNarration ?? scene.narration, outputPath, {
+      clip = await provider.synthesizeClip(textToSynthesize, outputPath, {
         sceneId: scene.id,
         sceneIndex: i,
       });

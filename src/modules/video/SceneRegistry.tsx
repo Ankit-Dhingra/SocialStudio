@@ -73,20 +73,27 @@ export const SceneRegistry: {
   ),
   smartphoneMockup: ({ scene }) => (
     <SmartphoneMockupScene
-      headline={scene.visualProps?.headline || scene.onScreenText || 'HIGH CONCURRENCY DEMAND'}
-      subtext={scene.visualProps?.subtext || scene.technicalKeyPoint || 'Real-time surge and lock management'}
-      appName={scene.visualProps?.appName || 'TicketMaster'}
-      locationText={scene.visualProps?.locationText || 'Live Arena'}
-      itemName={scene.visualProps?.itemName || 'VIP Ticket Pass'}
-      itemPrice={scene.visualProps?.itemPrice || '4999'}
-      surgeAmount={scene.visualProps?.surgeAmount}
-      surgeMultiplier={scene.visualProps?.surgeMultiplier}
+      headline={scene.visualProps?.headline || scene.onScreenText || 'REAL-TIME SURGE PRICING'}
+      subtext={scene.visualProps?.subtext || scene.technicalKeyPoint || 'Why fees jump dynamically under demand'}
+      appName={scene.visualProps?.appName || 'ZOMATO'}
+      locationText={scene.visualProps?.locationText || 'HSR Layout, Sector 4'}
+      itemName={scene.visualProps?.itemName || 'Royal Chicken Dum Biryani'}
+      itemPrice={scene.visualProps?.itemPrice || '₹350'}
+      baseDeliveryFee={scene.visualProps?.baseDeliveryFee || '₹30'}
+      surgeDeliveryFee={scene.visualProps?.surgeDeliveryFee || '₹80'}
+      surgeMultiplier={scene.visualProps?.surgeMultiplier || '1.8X'}
+      surgeReason={scene.visualProps?.surgeReason || 'HIGH DEMAND • 120+ ACTIVE ORDERS'}
+      onScreenText={scene.onScreenText}
     />
   ),
   h3SpatialMap: ({ scene }) => (
     <H3SpatialMapScene
       title={scene.visualProps?.title || scene.onScreenText || 'GEOSPATIAL H3 INDEXING'}
-      subtitle={scene.visualProps?.subtitle || scene.technicalKeyPoint || 'Hexagonal spatial partitioning'}
+      subtitle={scene.visualProps?.subtitle || scene.technicalKeyPoint || 'Hexagonal spatial partitioning for candidate lookup'}
+      hotHexId={scene.visualProps?.hotHexId || '#88619A0A4'}
+      orderCount={scene.visualProps?.orderCount ?? 52}
+      riderCount={scene.visualProps?.riderCount ?? 5}
+      surgeMultiplier={scene.visualProps?.surgeMultiplier || '1.8X'}
     />
   ),
   hook: ({ scene }) => (

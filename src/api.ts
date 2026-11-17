@@ -11,6 +11,19 @@ process.env.TMPDIR = diskTmpDir;
 process.env.TEMP = diskTmpDir;
 process.env.TMP = diskTmpDir;
 
+// Ensure Remotion's bundled ffmpeg and ffprobe are on PATH
+const remotionBinDirs = [
+  path.resolve('node_modules/@remotion/compositor-win32-x64-msvc'),
+  path.resolve('node_modules/@remotion/compositor-linux-x64-gnu'),
+  path.resolve('node_modules/@remotion/compositor-darwin-x64'),
+  path.resolve('node_modules/@remotion/compositor-darwin-arm64'),
+];
+for (const binDir of remotionBinDirs) {
+  if (fs.existsSync(binDir) && !process.env.PATH?.includes(binDir)) {
+    process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH}`;
+  }
+}
+
 import { parseCustomScriptToStoryboard } from './modules/ai-script/custom-script-parser.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
 import { masterScriptService } from './modules/ai-script/master-script-service.js';

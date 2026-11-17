@@ -143,6 +143,9 @@ export const SmartphoneMockupPropsSchema = z.object({
   itemPrice: z.string().default('₹380'),
   surgeAmount: z.string().default('+₹50'),
   surgeMultiplier: z.string().default('1.8X'),
+  baseDeliveryFee: z.string().default('₹30'),
+  surgeDeliveryFee: z.string().default('₹80'),
+  surgeReason: z.string().default('HIGH DEMAND • 120+ ACTIVE ORDERS'),
 });
 
 export const H3SpatialMapPropsSchema = z.object({
@@ -152,6 +155,10 @@ export const H3SpatialMapPropsSchema = z.object({
   activeHexCount: z.number().default(14),
   demandCount: z.number().default(40),
   supplyCount: z.number().default(10),
+  hotHexId: z.string().default('#88619A0A4'),
+  orderCount: z.number().default(52),
+  riderCount: z.number().default(5),
+  surgeMultiplier: z.string().default('1.8X'),
 });
 
 export const ArchitecturePipelinePropsSchema = z.object({
