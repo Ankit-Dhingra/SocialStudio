@@ -358,7 +358,7 @@ export const StoryboardSchema = z.object({
   targetAudience: z.string().default('Developers & CS students'),
   format: z.literal('short').default('short'),
   estimatedDurationSec: z.number().int().min(10).max(180).default(45),
-  scenes: z.array(StoryboardSceneSchema).min(3).max(8),
+  scenes: z.array(StoryboardSceneSchema).min(3).max(20),
   hashtags: z.array(z.string()).default(['#tech', '#programming', '#shorts']),
 });
 
