@@ -143,31 +143,31 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
 
           {/* Red X over the bypassed DB line */}
           <g transform="translate(460, 295)">
-            <rect x="-60" y="-16" width="120" height="32" rx="16" fill="rgba(239,68,68,0.9)" stroke="#FFFFFF" strokeWidth="2" />
+            <rect x="-70" y="-18" width="140" height="36" rx="18" fill="rgba(239,68,68,0.95)" stroke="#FFFFFF" strokeWidth="2" filter="drop-shadow(0 0 10px rgba(239,68,68,0.6))" />
             <text x="0" y="5" textAnchor="middle" fill="#FFFFFF" fontSize="13" fontWeight="900" fontFamily="sans-serif">
-              ⛔ BYPASSED
+              ⛔ BYPASSED POSTGRES
             </text>
           </g>
 
-          {/* Animated Glowing Read Laser Packet */}
-          <circle
-            cx={packetX}
-            cy={packetY}
-            r="12"
-            fill="#00F2FE"
-            filter="drop-shadow(0 0 14px #00F2FE)"
-          />
-          <circle cx={packetX} cy={packetY} r="5" fill="#FFFFFF" />
+          {/* Animated Glowing Read Laser Packet with Mute-Friendly Badge */}
+          <g transform={`translate(${packetX}, ${packetY})`}>
+            <circle r="12" fill="#00F2FE" filter="drop-shadow(0 0 14px #00F2FE)" />
+            <circle r="5" fill="#FFFFFF" />
+            <rect x="-46" y="-36" width="92" height="24" rx="12" fill="rgba(2, 132, 199, 0.95)" stroke="#38BDF8" strokeWidth="1.5" />
+            <text x="0" y="-20" textAnchor="middle" fill="#FFFFFF" fontSize="11" fontWeight="900" fontFamily="sans-serif">
+              ⚡ READ 4MS
+            </text>
+          </g>
 
-          {/* Animated Glowing Write Laser Packet */}
-          <circle
-            cx={writePacketX}
-            cy={writePacketY}
-            r="11"
-            fill="#C084FC"
-            filter="drop-shadow(0 0 14px #C084FC)"
-          />
-          <circle cx={writePacketX} cy={writePacketY} r="4" fill="#FFFFFF" />
+          {/* Animated Glowing Write Laser Packet with Mute-Friendly Badge */}
+          <g transform={`translate(${writePacketX}, ${writePacketY})`}>
+            <circle r="11" fill="#C084FC" filter="drop-shadow(0 0 14px #C084FC)" />
+            <circle r="4" fill="#FFFFFF" />
+            <rect x="-52" y="-34" width="104" height="24" rx="12" fill="rgba(126, 34, 206, 0.95)" stroke="#C084FC" strokeWidth="1.5" />
+            <text x="0" y="-18" textAnchor="middle" fill="#FFFFFF" fontSize="11" fontWeight="900" fontFamily="sans-serif">
+              📡 KAFKA PING
+            </text>
+          </g>
         </svg>
 
         {/* NODE 0: Primary Database (Top, x: 320, y: 90, w: 280, h: 120) */}

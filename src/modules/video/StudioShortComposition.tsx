@@ -113,6 +113,13 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
   // Background music source (defaults to our synthesized ambient tech track)
   const bgmTrack = timeline.bgmSrc || 'music/tech-ambient.wav';
 
+  // Active scene calculation for Mute-Proof Top Action Anchor
+  const currentSceneIdx = timeline.segments.findIndex(
+    (seg) => frame >= seg.startFrame && frame < seg.startFrame + seg.durationInFrames
+  );
+  const activeScene = storyboard.scenes[currentSceneIdx >= 0 ? currentSceneIdx : 0];
+  const activeTag = activeScene?.onScreenText || 'SYSTEM ARCHITECTURE';
+
   return (
     <AbsoluteFill
       style={{
@@ -124,7 +131,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
     >
       {/* Root Animated Black Cyber Grid Background (Zero harsh blue) */}
       <AnimatedBlackCyberGrid />
-      {/* Top Header Safe Zone Status Bar */}
+      {/* Top Header Safe Zone Status Bar (Mute-Proof Explainer Anchor) */}
       <div
         style={{
           position: 'absolute',
@@ -142,16 +149,18 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 10,
-            padding: '8px 18px',
-            background: 'rgba(255, 255, 255, 0.06)',
+            padding: '8px 20px',
+            background: 'rgba(15, 23, 42, 0.9)',
             backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
+            border: '1.5px solid rgba(56, 189, 248, 0.4)',
             borderRadius: 999,
+            boxShadow: '0 4px 25px rgba(0, 0, 0, 0.7)',
+            maxWidth: '68%',
           }}
         >
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 10px #10B981' }} />
-          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '1.5px', color: '#F1F5F9', textTransform: 'uppercase' }}>
-            TECH EXPLAINED
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 10px #10B981' }} />
+          <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: '1.4px', color: '#38BDF8', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {activeTag}
           </span>
         </div>
 
@@ -165,7 +174,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
               <div
                 key={idx}
                 style={{
-                  width: 32,
+                  width: Math.max(16, Math.min(32, Math.floor(320 / storyboard.scenes.length))),
                   height: 5,
                   borderRadius: 3,
                   background: isCompleted ? '#3B82F6' : isCurrent ? '#FACC15' : 'rgba(255, 255, 255, 0.2)',

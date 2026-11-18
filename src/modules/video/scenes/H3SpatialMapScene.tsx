@@ -209,6 +209,16 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
                 >
                   {hex.label}
                 </text>
+
+                {/* Mute-Proof Hot Hexagon Live Telemetry Chip */}
+                {hex.isHot && (
+                  <g transform={`translate(${hex.cx}, ${hex.cy + 48})`}>
+                    <rect x="-80" y="-14" width="160" height="28" rx="14" fill="rgba(15, 23, 42, 0.95)" stroke="#EF4444" strokeWidth="1.5" filter="drop-shadow(0 0 10px rgba(239,68,68,0.5))" />
+                    <text x="0" y="5" textAnchor="middle" fill="#FCA5A5" fontSize="13" fontWeight="900" fontFamily="sans-serif">
+                      🔴 54 ord • 🛵 4 rid
+                    </text>
+                  </g>
+                )}
               </g>
             );
           })}
