@@ -99,6 +99,24 @@ const storyboard: Storyboard = StoryboardSchema.parse({
         callToAction: 'Save this reel for your System Design Interview & follow for more!',
       },
     },
+    {
+      id: 'scene-5',
+      sceneIndex: 4,
+      type: 'summary',
+      narration: 'Aise hi real-world system design seekhne ke liye follow karo aur doston ke sath share karo!',
+      onScreenText: 'FOLLOW FOR DEEP TECH',
+      technicalKeyPoint: 'Follow & Share for System Design',
+      durationTargetSec: 8,
+      visualProps: {
+        headline: 'Master Real-World System Design',
+        takeaways: [
+          'H3 Spatial Indexing converts coordinates to O(1) string hashes',
+          'Redis in-memory caching serves dynamic surge pricing under 8ms',
+          'Decoupled read/write streams prevent database deadlocks',
+        ],
+        callToAction: 'Aise hi deep tech concepts seekhne ke liye follow karo!',
+      },
+    },
   ],
 });
 
@@ -132,9 +150,10 @@ async function renderDemoFrames() {
   // Calculate mid-frame for each scene in the timeline
   const targets = [
     { name: 'scene_1_phone_mockup.jpg', frame: 45, label: 'Act 1: 3D Smartphone Mockup + REJECTED Stamp' },
-    { name: 'scene_2_h3_spatial_map.jpg', frame: 380, label: 'Act 2 & 3: H3 Spatial City Hexagon Map' },
-    { name: 'scene_3_architecture_pipeline.jpg', frame: 670, label: 'Act 4: Architecture Flow & Redis In-Memory' },
-    { name: 'scene_4_tradeoff_cheat_sheet.jpg', frame: 950, label: 'Act 5: Interview Tradeoff & Cheat-Sheet' },
+    { name: 'scene_2_h3_spatial_map.jpg', frame: 380, label: 'Act 2: H3 Spatial City Hexagon Map' },
+    { name: 'scene_3_architecture_pipeline.jpg', frame: 670, label: 'Act 3: Architecture Flow & Redis In-Memory' },
+    { name: 'scene_4_tradeoff_cheat_sheet.jpg', frame: 950, label: 'Act 4: Interview Tradeoff Matrix' },
+    { name: 'scene_5_outro_cta.jpg', frame: 1240, label: 'Act 5: Smooth Outro & Follow CTA' },
   ];
 
   console.log('\n[Preview] Rendering 4 high-res 1080x1920 demo scene snapshots...\n');
