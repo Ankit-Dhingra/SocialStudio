@@ -80,11 +80,11 @@ const VIRAL_TECH_PRESETS = [
 ];
 
 const QUICK_CHAT_SUGGESTIONS = [
-  '👉 Hook 2 ko final voiceover me use karo',
-  '🎯 Act 4 me edge case thoda aur clear samjhao',
-  '⏱️ Redis reveal hone se pehle thoda pause daalo',
-  '💬 Tone thoda aur conversational Hinglish banao',
-  '🚀 Code snippet ka context simple kardo',
+  'Hook 2 ko final voiceover me use karo',
+  'Act 4 me edge case thoda aur clear samjhao',
+  'Redis reveal hone se pehle thoda pause daalo',
+  'Tone thoda aur conversational Hinglish banao',
+  'Code snippet ka context simple kardo',
 ];
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
@@ -480,12 +480,9 @@ function App() {
           {/* BRAND HEADER */}
           <div className="sidebar-header">
             <div className="sidebar-logo">
-              <Zap size={18} fill="#000" />
+              <Zap size={16} fill="#09090b" />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="sidebar-brand-title">SocialStudio</span>
-              <span className="sidebar-brand-badge">v2.0</span>
-            </div>
+            <span className="sidebar-brand-title">SocialStudio</span>
           </div>
 
           {/* MENU SECTION */}
@@ -497,7 +494,7 @@ function App() {
               onClick={() => setActiveNav('overview')}
             >
               <div className="sidebar-nav-left">
-                <LayoutDashboard size={16} />
+                <LayoutDashboard size={15} />
                 <span>Overview</span>
               </div>
               <span className="sidebar-badge">{sessionsList.length + 1}</span>
@@ -509,25 +506,11 @@ function App() {
               onClick={() => setActiveNav('create')}
             >
               <div className="sidebar-nav-left">
-                <PlusCircle size={16} />
+                <PlusCircle size={15} />
                 <span>Create Reel</span>
               </div>
-              <span className="badge-mono" style={{ fontSize: 10, background: '#00F2FE22', color: '#00F2FE' }}>
-                New
-              </span>
             </button>
           </nav>
-        </div>
-
-        {/* SIDEBAR FOOTER */}
-        <div className="sidebar-footer">
-          <div className="sidebar-status-box">
-            <span className="dot-pulse" />
-            <span>Engine Ready • 1080×1920</span>
-          </div>
-          <div style={{ fontSize: 10.5, color: 'var(--text-muted)', padding: '0 4px' }}>
-            Zero-Hardcoding Dynamic Pacing
-          </div>
         </div>
       </aside>
 
@@ -543,11 +526,11 @@ function App() {
             {/* OVERVIEW HEADER */}
             <div className="overview-header">
               <div>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: -0.5, margin: '0 0 4px' }}>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fafafa', letterSpacing: -0.4, margin: '0 0 4px' }}>
                   Studio Overview
                 </h1>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                  High-retention 13-cut developer reel production engine & project library.
+                  High-retention developer reel production engine & project library.
                 </p>
               </div>
 
@@ -556,16 +539,12 @@ function App() {
                 className="btn btn-primary"
                 onClick={() => setActiveNav('create')}
                 style={{
-                  height: 40,
-                  padding: '0 20px',
+                  height: 38,
+                  padding: '0 18px',
                   gap: 8,
-                  background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
-                  color: '#000',
-                  fontWeight: 800,
-                  boxShadow: '0 4px 18px rgba(0, 242, 254, 0.35)',
                 }}
               >
-                <PlusCircle size={16} />
+                <PlusCircle size={15} />
                 <span>Create Reel</span>
               </button>
             </div>
@@ -576,50 +555,50 @@ function App() {
                 <div className="stat-top">
                   <span className="stat-label">Total Reels Generated</span>
                   <div className="stat-icon-wrap">
-                    <Film size={18} />
+                    <Film size={16} />
                   </div>
                 </div>
                 <div className="stat-value">{sessionsList.length + 1}</div>
-                <div className="stat-subtext">1080×1920 Vertical Shorts & Reels</div>
+                <div className="stat-subtext">1080×1920 Vertical Reels</div>
               </div>
 
               <div className="stat-card">
                 <div className="stat-top">
-                  <span className="stat-label">Visual Architecture</span>
-                  <div className="stat-icon-wrap" style={{ color: '#10B981' }}>
-                    <Layers size={18} />
+                  <span className="stat-label">Pacing Architecture</span>
+                  <div className="stat-icon-wrap">
+                    <Layers size={16} />
                   </div>
                 </div>
-                <div className="stat-value" style={{ color: '#10B981' }}>
-                  13-Cut Fast Pace
+                <div className="stat-value">
+                  13 Cuts
                 </div>
-                <div className="stat-subtext">Anti-PPT • 3D Mockups • Hex Grids</div>
+                <div className="stat-subtext">Dynamic transitions & pacing</div>
               </div>
 
               <div className="stat-card">
                 <div className="stat-top">
                   <span className="stat-label">Voiceover Engine</span>
-                  <div className="stat-icon-wrap" style={{ color: '#F59E0B' }}>
-                    <Volume2 size={18} />
+                  <div className="stat-icon-wrap">
+                    <Volume2 size={16} />
                   </div>
                 </div>
-                <div className="stat-value" style={{ color: '#F59E0B' }}>
+                <div className="stat-value">
                   Sarvam Neural
                 </div>
-                <div className="stat-subtext">sunny_hi_reels • Locked Audio Pipeline</div>
+                <div className="stat-subtext">sunny_hi_reels • Hinglish audio</div>
               </div>
 
               <div className="stat-card">
                 <div className="stat-top">
-                  <span className="stat-label">Dynamic Extractor</span>
-                  <div className="stat-icon-wrap" style={{ color: '#8B5CF6' }}>
-                    <ShieldCheck size={18} />
+                  <span className="stat-label">Input Contract</span>
+                  <div className="stat-icon-wrap">
+                    <Code2 size={16} />
                   </div>
                 </div>
-                <div className="stat-value" style={{ color: '#8B5CF6' }}>
-                  Zero Hardcoding
+                <div className="stat-value">
+                  6-Key JSON
                 </div>
-                <div className="stat-subtext">Any Tech Domain • 6-Key JSON Contract</div>
+                <div className="stat-subtext">Structured storyboard schema</div>
               </div>
             </div>
 
@@ -627,7 +606,7 @@ function App() {
             <div className="reels-library-card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 2px' }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>
                     Recent Reels & Video Library
                   </h3>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
@@ -641,16 +620,16 @@ function App() {
 
               <div className="reels-grid">
                 {/* 1. Verified Featured Reel */}
-                <div className="reel-card" style={{ borderColor: 'rgba(0, 242, 254, 0.4)' }}>
+                <div className="reel-card">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span className="badge-mono" style={{ background: '#10B98122', color: '#10B981' }}>
+                    <span className="badge-mono" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
                       Ready • {featuredReel.duration}
                     </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{featuredReel.date}</span>
                   </div>
 
                   <div>
-                    <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                    <h4 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', color: '#fafafa' }}>
                       {featuredReel.title}
                     </h4>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
@@ -669,7 +648,7 @@ function App() {
                       onClick={() => setPreviewModalUrl(featuredReel.mediaUrl)}
                       style={{ flex: 1, gap: 6 }}
                     >
-                      <Play size={12} fill="#000" />
+                      <Play size={12} fill="#09090b" />
                       <span>Play Reel</span>
                     </button>
                     <a
@@ -836,16 +815,16 @@ function App() {
                       className={`script-mode-btn ${scriptMode === 'ai' ? 'active' : ''}`}
                       onClick={() => setScriptMode('ai')}
                     >
-                      <Sparkles size={14} />
-                      <span>✨ Generate Script (AI)</span>
+                      <Sparkles size={13} />
+                      <span>Generate Script (AI)</span>
                     </button>
                     <button
                       type="button"
                       className={`script-mode-btn ${scriptMode === 'paste' ? 'active' : ''}`}
                       onClick={() => setScriptMode('paste')}
                     >
-                      <FileText size={14} />
-                      <span>📝 Paste Script</span>
+                      <FileText size={13} />
+                      <span>Paste Script</span>
                     </button>
                   </div>
 
@@ -889,12 +868,8 @@ function App() {
                             onClick={handleGenerateReel}
                             style={{
                               height: 38,
-                              padding: '0 20px',
+                              padding: '0 18px',
                               gap: 8,
-                              background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
-                              color: '#000',
-                              fontWeight: 800,
-                              boxShadow: '0 4px 15px rgba(0, 242, 254, 0.35)',
                             }}
                           >
                             {rendering || studioLoading ? (
@@ -907,7 +882,7 @@ function App() {
                                 ? `Rendering (${renderProgress}%)`
                                 : studioLoading
                                 ? 'Processing Reel...'
-                                : '⚡ Generate Full Reel'}
+                                : 'Generate Full Reel'}
                             </span>
                           </button>
 
@@ -953,7 +928,7 @@ function App() {
                           <div className="chat-assistant-pane">
                             <div className="chat-pane-header">
                               <div className="chat-pane-title">
-                                <Bot size={16} style={{ color: '#00F2FE' }} />
+                                <Bot size={16} />
                                 <span>AI Script Assistant</span>
                                 <span className="badge-mono" style={{ fontSize: 10 }}>
                                   Hinglish Refinement
@@ -967,11 +942,9 @@ function App() {
                             {/* CHAT MESSAGE STREAM */}
                             <div className="chat-message-stream" ref={chatScrollRef}>
                               <div className="chat-bubble-ai">
-                                👋 <strong>Master Script Ready!</strong> Script 7-part master standard ke hisaab se
-                                ready hai.
+                                <strong>Master Script Ready</strong>
                                 <br />
-                                Agar aapko koi Hook change karwana ho, kisi Act me koi detail ya term add/fix karni ho,
-                                toh neeche prompt likhiye!
+                                Script master standard ke hisaab se ready hai. Agar aapko koi Hook change karwana ho ya koi term add/fix karni ho, toh neeche prompt likhiye.
                               </div>
 
                               {session.messages?.map((msg, idx) => (
@@ -987,7 +960,7 @@ function App() {
                                     {msg.role === 'assistant'
                                       ? msg.content.slice(0, 350) +
                                         (msg.content.length > 350
-                                          ? '\n\n✨ [Full updated script reflected in inspector on right ➡️]'
+                                          ? '\n\n[Full updated script reflected in inspector on right]'
                                           : '')
                                       : msg.content}
                                   </div>
@@ -1117,12 +1090,9 @@ function App() {
                                     </pre>
                                   </div>
 
-                                  <div className="act-card-item" style={{ borderLeft: '3px solid #00F2FE' }}>
+                                  <div className="act-card-item">
                                     <div className="act-card-top">
-                                      <span
-                                        className="act-card-badge"
-                                        style={{ background: '#00F2FE', color: '#000' }}
-                                      >
+                                      <span className="act-card-badge">
                                         Section 2: Final Voiceover Script
                                       </span>
                                     </div>
@@ -1267,29 +1237,29 @@ function App() {
 
                       {/* 6-KEY VALIDATION CHECKLIST BAR */}
                       <div className="key-checklist-bar">
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginRight: 4 }}>
                           Detected Keys:
                         </span>
                         <span className={`key-pill ${detectedKeys.title ? 'present' : 'missing'}`}>
-                          {detectedKeys.title ? '✔' : '✖'} title
+                          {detectedKeys.title ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} title
                         </span>
                         <span className={`key-pill ${detectedKeys.hook ? 'present' : 'missing'}`}>
-                          {detectedKeys.hook ? '✔' : '✖'} hook
+                          {detectedKeys.hook ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} hook
                         </span>
                         <span className={`key-pill ${detectedKeys.problem ? 'present' : 'missing'}`}>
-                          {detectedKeys.problem ? '✔' : '✖'} problem
+                          {detectedKeys.problem ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} problem
                         </span>
                         <span className={`key-pill ${detectedKeys.solution ? 'present' : 'missing'}`}>
-                          {detectedKeys.solution ? '✔' : '✖'} solution
+                          {detectedKeys.solution ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} solution
                         </span>
                         <span className={`key-pill ${detectedKeys.tech_explained ? 'present' : 'missing'}`}>
-                          {detectedKeys.tech_explained ? '✔' : '✖'} tech_explained
+                          {detectedKeys.tech_explained ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} tech_explained
                         </span>
                         <span className={`key-pill ${detectedKeys.conclusion ? 'present' : 'missing'}`}>
-                          {detectedKeys.conclusion ? '✔' : '✖'} conclusion
+                          {detectedKeys.conclusion ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} conclusion
                         </span>
                         <span className={`key-pill ${detectedKeys.cta ? 'present' : 'missing'}`}>
-                          {detectedKeys.cta ? '✔' : '✖'} cta
+                          {detectedKeys.cta ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} cta
                         </span>
                       </div>
 
@@ -1347,12 +1317,10 @@ function App() {
                           onClick={handleParseCustomScript}
                           disabled={studioLoading || !customScriptText.trim()}
                           style={{
-                            padding: '10px 24px',
+                            padding: '8px 20px',
                             fontSize: 13,
-                            fontWeight: 700,
+                            fontWeight: 600,
                             gap: 8,
-                            background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
-                            color: '#000',
                           }}
                         >
                           {studioLoading ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
@@ -1370,7 +1338,7 @@ function App() {
                   <div className="voiceover-hero-header">
                     <div>
                       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                        🎙️ Stage 2: Voiceover Synthesis
+                        Stage 2: Voiceover Synthesis
                       </h3>
                       <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                         Powered by <strong>Sarvam AI</strong> (Hinglish Neural Voice <code>sunny_hi_reels</code>) with
@@ -1458,7 +1426,7 @@ function App() {
                   <div className="stills-header">
                     <div>
                       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                        📸 Stage 3: Visual Stills Review (13 Cuts)
+                        Stage 3: Visual Stills Review (13 Cuts)
                       </h3>
                       <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                         Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
@@ -1528,7 +1496,7 @@ function App() {
                   <div className="render-header">
                     <div>
                       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                        🎬 Stage 4: 1080×1920 MP4 Video Export
+                        Stage 4: 1080×1920 MP4 Video Export
                       </h3>
                       <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                         Hardware-accelerated Remotion rendering with locked audio and strict Media QA verification.
@@ -1541,16 +1509,14 @@ function App() {
                       disabled={rendering}
                       onClick={handleRenderVideo}
                       style={{
-                        padding: '8px 24px',
+                        padding: '8px 20px',
                         fontSize: 13,
-                        fontWeight: 700,
+                        fontWeight: 600,
                         gap: 8,
-                        background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
-                        color: '#000',
                       }}
                     >
-                      {rendering ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
-                      <span>{rendering ? `Rendering (${renderProgress}%)` : '⚡ Start Render'}</span>
+                      {rendering ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+                      <span>{rendering ? `Rendering (${renderProgress}%)` : 'Start Render'}</span>
                     </button>
                   </div>
 
@@ -1562,7 +1528,7 @@ function App() {
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 6 }}>
                         <span style={{ color: 'var(--text-muted)' }}>Rendering frames @ 1080×1920 30FPS...</span>
-                        <span style={{ fontWeight: 700, color: '#00F2FE' }}>{renderProgress}%</span>
+                        <span style={{ fontWeight: 600, color: '#fafafa' }}>{renderProgress}%</span>
                       </div>
                     </div>
                   )}
@@ -1574,13 +1540,17 @@ function App() {
                         marginTop: 16,
                         padding: '12px 16px',
                         background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
                         borderRadius: 8,
-                        color: '#F87171',
+                        color: '#f87171',
                         fontSize: 12.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
                       }}
                     >
-                      ⚠️ Render Error: {renderError}
+                      <AlertTriangle size={15} />
+                      <span>Render Error: {renderError}</span>
                     </div>
                   )}
 
