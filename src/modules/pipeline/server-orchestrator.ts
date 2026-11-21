@@ -5,6 +5,7 @@ import { masterScriptService, ScriptSession } from '../ai-script/master-script-s
 import { getTTSProvider, synthesizeStoryboardNarration } from '../tts/tts-service.js';
 import { buildVideoTimeline } from '../video/timeline.js';
 import { renderStillPreviews, renderStudioShort } from '../render/video-renderer.js';
+import { prepareReelVisuals } from '../render/reel-visual-assets.js';
 import { performMediaQA } from '../qa/media-qa.js';
 
 export interface PipelineJob {
@@ -81,20 +82,17 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
       session = await masterScriptService.finalizeScript(session.id);
     }
 
-    // Enforce 12–16 valid scenes before TTS
-    if (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16) {
+    const needsAudio = !session.audioResult?.clips?.length || !session.timeline;
+
+    // Apply the scripting budget only when this job still needs to create narration.
+    if (needsAudio && (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16)) {
       session = masterScriptService.finalizeScript(session.id);
     }
-    if (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16) {
+    if (needsAudio && (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16)) {
       throw new Error(`[Pipeline Gate REJECTED] Storyboard has ${session.storyboard?.scenes?.length || 0} scenes. Exactly 12–16 valid typed scenes are required before TTS.`);
     }
 
     // 3. Audio Synthesis Stage
-    const needsAudio = !session.audioResult ||
-      !session.timeline ||
-      session.audioResult.totalDurationSec < 90.0 ||
-      session.audioResult.totalDurationSec > 120.0;
-
     if (needsAudio) {
       updateJob('synthesizing', 40, 'Synthesizing voiceover narration (enforcing 90–120s budget at natural tempo)...');
       const audioRun = randomUUID();
@@ -145,8 +143,9 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
     }
 
     // 4. Stills Previews Stage
-    if (!session.stillPreviews || session.stillPreviews.length === 0) {
-      updateJob('stills', 60, 'Generating visual stills and HUD previews...');
+    if (!session.visualAssets || !session.stillPreviews?.length) {
+      updateJob('stills', 60, 'Creating scene artwork and rendering previews...');
+      session.visualAssets = await prepareReelVisuals(session.storyboard, session.timeline, session.visualAssets);
       const previewDir = path.resolve('remotion/public/previews', session.id);
       fs.mkdirSync(previewDir, { recursive: true });
 
@@ -154,7 +153,9 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
         session.storyboard,
         session.timeline,
         previewDir,
-        `/previews/${session.id}`
+        `/previews/${session.id}`,
+        false,
+        session.visualAssets.plates,
       );
       session.stillPreviews = stills;
       masterScriptService.updateSession(session);
@@ -179,6 +180,7 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
       const renderResult = await renderStudioShort({
         storyboard: session.storyboard,
         timeline: renderTimeline,
+        plates: session.visualAssets?.plates,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
           const percent = Math.min(99, Math.max(1, Math.round(p.percent)));

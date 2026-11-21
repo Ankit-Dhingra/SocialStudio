@@ -759,6 +759,7 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to generate visual stills');
       setStills(data.stills || []);
+      setSession(current => current?.id === session.id ? { ...current, visualAssets: data.visuals } : current);
     } catch (err) {
       alert(`Screenshot Generation Error: ${err.message}`);
     } finally {
@@ -1061,10 +1062,10 @@ function App() {
                       </div>
 
                       <div>
-                        <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                        <h4 title={sess.title || sess.topic} style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
                           {sess.title || sess.topic}
                         </h4>
-                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                        <p title={sess.angle} style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
                           {sess.angle || 'System Design Reel'}
                         </p>
                       </div>
@@ -1073,7 +1074,7 @@ function App() {
                         1080×1920 Full HD • {sess.scenesCount || 12} Cuts
                       </div>
 
-                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <div className="reel-card-actions">
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
@@ -1224,10 +1225,10 @@ function App() {
                       </div>
 
                       <div>
-                        <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                        <h4 title={sess.title || sess.topic} style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
                           {sess.title || sess.topic}
                         </h4>
-                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                        <p title={sess.angle} style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
                           {sess.angle || 'System Design Reel'}
                         </p>
                       </div>
@@ -1236,7 +1237,7 @@ function App() {
                         {sess.scenesCount ? `${sess.scenesCount} Cuts` : 'Script In Progress'} • {sess.hasAudio ? 'Voiceover Synthesized' : 'Awaiting Audio'}
                       </div>
 
-                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <div className="reel-card-actions">
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
@@ -1329,10 +1330,10 @@ function App() {
                     </div>
 
                     <div>
-                      <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                      <h4 title={sess.title || sess.topic} style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
                         {sess.title || sess.topic}
                       </h4>
-                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                      <p title={sess.angle} style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
                         {sess.angle || 'System Design Reel'}
                       </p>
                     </div>
@@ -1341,7 +1342,7 @@ function App() {
                       1080×1920 Full HD • MP4 Video • {sess.scenesCount || 12} Cuts
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <div className="reel-card-actions">
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
@@ -2271,7 +2272,7 @@ function App() {
                             Stage 3: Visual Stills Review ({session?.storyboard?.scenes?.length || 'Dynamic'} Cuts)
                           </h3>
                           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
-                            Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
+                            Generate artwork from the finalized script and inspect the 1080×1920 scenes before export.
                           </p>
                         </div>
 
@@ -2288,7 +2289,7 @@ function App() {
                             ) : (
                               <Camera size={13} />
                             )}
-                            <span>{generatingStills ? 'Capturing Previews...' : `Generate ${session?.storyboard?.scenes?.length || ''} Previews`}</span>
+                            <span>{generatingStills ? 'Preparing Artwork & Previews…' : 'Generate Previews'}</span>
                           </button>
 
                           <button
@@ -2304,6 +2305,7 @@ function App() {
                           <button
                             type="button"
                             className="btn btn-emerald"
+                            disabled={generatingStills}
                             onClick={() => setStage(4)}
                             style={{ padding: '8px 18px', gap: 6 }}
                           >
@@ -2312,6 +2314,15 @@ function App() {
                           </button>
                         </div>
                       </div>
+
+                      {session?.visualAssets?.warning && (
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                          {session.visualAssets.warning} The preview uses built-in visuals where artwork is unavailable.
+                        </p>
+                      )}
+                      {session?.visualAssets?.status === 'generated' && (
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Scene artwork generated for this reel.</p>
+                      )}
 
                       {/* STILLS GRID */}
                       {stills && stills.length > 0 ? (
@@ -2341,7 +2352,7 @@ function App() {
                         <div className="panel-card empty-placeholder" style={{ padding: '40px 20px' }}>
                           <Camera size={24} style={{ margin: '0 auto 10px', color: 'var(--text-muted)' }} />
                           <p style={{ color: 'var(--text-muted)' }}>
-                            Click "Generate Previews" to instantly capture high-res frame previews of every scene cut.
+                            Generate previews to review the artwork, animation keyframes and captions.
                           </p>
                         </div>
                       )}
@@ -2387,10 +2398,16 @@ function App() {
                         <div className="progress-bar-fill" style={{ width: `${renderProgress}%` }} />
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 6 }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Rendering frames @ 1080×1920 30FPS...</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{renderProgress <= 5 ? 'Preparing visual assets…' : 'Rendering frames @ 1080×1920 30FPS…'}</span>
                         <span style={{ fontWeight: 600, color: '#fafafa' }}>{renderProgress}%</span>
                       </div>
                     </div>
+                  )}
+
+                  {session?.visualAssets?.warning && (
+                    <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                      {session.visualAssets.warning} Built-in visuals cover any unavailable artwork.
+                    </p>
                   )}
 
                   {/* ERROR BANNER */}

@@ -26,6 +26,7 @@ media/*.mp4
 media/*.mp3
 media/*.wav
 media/runs/
+media/generated-reel-visuals/
 media/previews/
 media/sessions/
 media/tmp/

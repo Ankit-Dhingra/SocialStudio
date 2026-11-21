@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
 import { Storyboard, StoryboardSchema, SceneTypeEnum } from '../contracts/storyboard.js';
+import type { ReelVisualAssets } from '../render/reel-visual-assets.js';
 
 dotenv.config();
 
@@ -53,6 +54,7 @@ export interface ScriptSession {
   audioResult?: any;
   timeline?: any;
   stillPreviews?: any[];
+  visualAssets?: ReelVisualAssets;
   renderState?: RenderState;
   job?: any;
   createdAt: number;
@@ -1068,15 +1070,13 @@ Always return the full updated 7 sections so the script remains complete and sel
     existingSessionId?: string,
     angleOverride?: string
   ): Promise<ScriptSession> {
-    const { parseCustomScriptToStoryboard } = await import('./custom-script-parser.js');
+    const { decodePastedScript, parseCustomScriptToStoryboard } = await import('./custom-script-parser.js');
     let scriptObj: Record<string, any> = {};
     if (typeof customScript === 'string') {
-      try {
-        scriptObj = JSON.parse(customScript);
-      } catch {
-        const parsed = tryParseSevenKeyJson(customScript);
-        scriptObj = parsed || { title: topicFallback, hook: customScript };
-      }
+      const decoded = decodePastedScript(customScript);
+      scriptObj = decoded && typeof decoded === 'object' && !Array.isArray(decoded)
+        ? decoded
+        : tryParseSevenKeyJson(customScript) || { title: topicFallback, hook: customScript };
     } else {
       scriptObj = customScript;
     }
@@ -1119,6 +1119,7 @@ Always return the full updated 7 sections so the script remains complete and sel
     delete session.audioResult;
     delete session.timeline;
     delete session.stillPreviews;
+    delete session.visualAssets;
     session.renderState = {status: 'idle', progress: 0};
   }
 

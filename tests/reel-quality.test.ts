@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { prepareSpeech, speechChunks } from '../src/modules/tts/speech-text.js';
 import { buildVideoTimeline } from '../src/modules/video/timeline.js';
@@ -9,6 +10,100 @@ import { musicVolumeAtFrame } from '../src/modules/video/StudioShortComposition.
 import { buildStoryboardFromParsed, parseTolerantJson, parseSectionsFromMarkdown } from '../src/modules/ai-script/master-script-service.js';
 import { StoryboardSchema } from '../src/modules/contracts/storyboard.js';
 import { findFfmpeg } from '../src/modules/tts/sarvam-provider.js';
+import { parseCustomScriptToStoryboard } from '../src/modules/ai-script/custom-script-parser.js';
+import { planSceneShots, readVisualContext } from '../src/modules/video/visual-story.js';
+import { prepareReelVisuals, stageReelVisuals } from '../src/modules/render/reel-visual-assets.js';
+import { randomUUID } from 'node:crypto';
+
+test('the visual pipeline generates and reuses a script-specific image across preview and export', async (t) => {
+  const board = await parseCustomScriptToStoryboard({
+    title: `Rain delivery ${randomUUID()}`,
+    hook: 'A delivery rider waits in midnight rain. The delivery fee jumps from ₹30 to ₹90.',
+    problem: 'There are 100 orders but just 20 riders available.',
+    solution: 'The pricing engine measures local conditions.',
+  });
+  const timeline = buildVideoTimeline(board);
+  const builtIn = fs.readFileSync('remotion/public/visuals/rain-delivery.png');
+  const environment = { GEMINI_API_KEY: process.env.GEMINI_API_KEY, REEL_IMAGE_GENERATION: process.env.REEL_IMAGE_GENERATION, DEMO_MODE: process.env.DEMO_MODE };
+  Object.assign(process.env, { GEMINI_API_KEY: 'test-key', REEL_IMAGE_GENERATION: 'on', DEMO_MODE: 'false' });
+  t.after(() => {
+    for (const [name, value] of Object.entries(environment)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  const request = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.match(String(url), /generativelanguage\.googleapis\.com.*:generateContent$/);
+    const body = JSON.parse(String(options?.body));
+    assert.equal(body.generationConfig.imageConfig.aspectRatio, '9:16');
+    assert.match(body.contents[0].parts[0].text, /delivery rider waits in midnight rain/);
+    return Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: builtIn.toString('base64') } }] } }] });
+  });
+  const [preview, overlappingRender] = await Promise.all([prepareReelVisuals(board, timeline), prepareReelVisuals(board, timeline)]);
+  assert.equal(preview.status, 'generated');
+  assert.ok(preview.plates.street);
+  t.after(() => fs.rmSync(path.join('media', preview.plates.street!), { force: true }));
+  assert.deepEqual(overlappingRender, preview);
+  const restored = await prepareReelVisuals(board, timeline);
+  assert.deepEqual(restored, preview);
+  assert.equal(request.mock.callCount(), 1);
+  const bundlePath = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-asset-test-'));
+  t.after(() => fs.rmSync(bundlePath, { recursive: true, force: true }));
+  await stageReelVisuals(bundlePath, restored.plates);
+  assert.deepEqual(fs.readFileSync(path.join(bundlePath, 'public', preview.plates.street)), builtIn);
+});
+
+test('cinematic shots follow pasted narration and derive its own figures', async () => {
+  const script = {
+    title: 'Why rain changes a delivery quote',
+    hook: 'बारिश हो रही है। Delivery charge ₹42 से अचानक ₹84 हो गया।',
+    problem: 'There are 350 orders and 70 riders available.',
+    solution: 'Use geographical cells to isolate local demand.',
+    tech_explained: 'A rider sends GPS location. H3 maps the location. Redis stores the counts. A stale heartbeat marks the rider offline.',
+    conclusion: 'Distance is the same. Local demand is higher.',
+    cta: 'For more interesting tech stories, follow Behind The Tech.',
+  };
+  const encoded = JSON.stringify(script, null, 2).split('\n').map((line, index) =>
+    (index > 0 && line.startsWith('  ') ? `&#x20; ${line.trimStart()}` : line)
+  ).join('\\\n');
+  const board = await parseCustomScriptToStoryboard(encoded);
+  const context = readVisualContext(board);
+  assert.deepEqual([context.baseFee, context.finalFee, context.orders, context.riders, context.ratio], ['₹42', '₹84', 350, 70, '5']);
+  assert.equal(context.channel, 'Behind The Tech');
+
+  const timeline = buildVideoTimeline(board);
+  const shots = board.scenes.flatMap((scene, index) => {
+    const segment = timeline.segments[index];
+    const result = planSceneShots(scene, segment, context, 30);
+    assert.equal(result[0].from, 0);
+    assert.equal(result.reduce((frames, shot) => frames + shot.duration, 0), segment.durationInFrames);
+    assert.ok(result.every(shot => shot.duration > 0));
+    return result.map(shot => shot.kind);
+  });
+  for (const shot of ['street', 'quote', 'shortage', 'cells', 'location', 'cache', 'heartbeat', 'recap'] as const) {
+    assert.ok(shots.includes(shot), `Expected shot ${shot}`);
+  }
+});
+
+test('a narration clock can cut from a demo QR to Kafka without delivery graphics', async () => {
+  const board = await parseCustomScriptToStoryboard({
+    title: 'Chai shop payments with Kafka',
+    hook: 'The customer scans a QR code to pay. The payment event is published to Kafka.',
+    problem: 'Consumers need to know when a payment succeeds.',
+    solution: 'The producer publishes a payment event to a Kafka topic.',
+  });
+  const context = readVisualContext(board);
+  const segment = buildVideoTimeline(board).segments[0];
+  const shots = planSceneShots(board.scenes[0], {
+    ...segment,
+    wordFrames: [0, 5, 10, 15, 20, 25, 30, 35, 44, 50, 58, 65, 70, 76, 83, 88],
+  }, context, 30);
+  assert.deepEqual(shots.map(({ kind, from }) => ({ kind, from })), [
+    { kind: 'payment', from: 0 }, { kind: 'kafka', from: 44 },
+  ]);
+  assert.equal(context.delivery, false);
+  assert.equal(context.chaiShop, true);
+});
 
 test('speech preparation preserves a decimal and expands technical notation before stripping markup', () => {
   const text = 'Redis... Kafka <break time="400ms"/> SQL, H3, TTL, SETNX. O(1) in 1.5 ms!';

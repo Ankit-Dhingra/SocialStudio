@@ -5,14 +5,17 @@ import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { bundle } from '@remotion/bundler';
-import { renderMedia, renderStill, selectComposition } from '@remotion/renderer';
+import { openBrowser, renderMedia, renderStill, selectComposition } from '@remotion/renderer';
 import { Storyboard } from '../contracts/storyboard.js';
 import { VideoTimeline } from '../video/timeline.js';
+import { planSceneShots, readVisualContext, type ReelPlates, type ShotKind } from '../video/visual-story.js';
+import { stageReelVisuals } from './reel-visual-assets.js';
 
 export interface RenderShortOptions {
   storyboard: Storyboard;
   timeline: VideoTimeline;
   outputFilePath: string;
+  plates?: ReelPlates;
   onProgress?: (progress: { percent: number; renderedFrames: number; totalFrames: number }) => void;
 }
 
@@ -118,7 +121,7 @@ export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string
 }
 
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
-  const { storyboard, timeline, outputFilePath, onProgress } = options;
+  const { storyboard, timeline, outputFilePath, plates, onProgress } = options;
 
   const outputDir = path.dirname(outputFilePath);
   if (!fs.existsSync(outputDir)) {
@@ -127,6 +130,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
 
   const startTime = Date.now();
   const bundleLocation = await getOrCreateBundle(timeline);
+  await stageReelVisuals(bundleLocation, plates);
+  const inputProps = { storyboard, timeline, plates };
   const { concurrency, ffmpegThreads, gl, browserExecutable } = getRenderingConfig();
 
   console.log(`[Renderer] Optimizing render pipeline: concurrency=${concurrency}, ffmpegThreads=${ffmpegThreads}, gl=${gl}, browser=${browserExecutable || 'remotion-default'}`);
@@ -142,10 +147,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
       gl,
       disableWebSecurity: true,
     },
-    inputProps: {
-      storyboard,
-      timeline,
-    },
+    inputProps,
   });
 
   const totalFrames = composition.durationInFrames;
@@ -173,10 +175,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
       gl,
       disableWebSecurity: true,
     },
-    inputProps: {
-      storyboard,
-      timeline,
-    },
+    inputProps,
     ffmpegOverride: ({ type, args }) => {
       if (type === 'stitcher') {
         const outputIndex = args.length - 1;
@@ -243,45 +242,56 @@ export async function renderStillPreviews(
   storyboard: Storyboard,
   timeline: VideoTimeline,
   outputDir: string,
-  urlPrefix = '/previews'
+  urlPrefix = '/previews',
+  distinctShots = false,
+  plates?: ReelPlates,
 ): Promise<StillPreviewResult[]> {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const bundleLocation = await getOrCreateBundle(timeline);
-  const { gl, browserExecutable } = getRenderingConfig();
-
-  const composition = await selectComposition({
-    serveUrl: bundleLocation,
-    id: 'StudioShort',
-    timeoutInMilliseconds: 120000,
-    browserExecutable,
-    chromiumOptions: {
-      enableMultiProcessOnLinux: true,
-      gl,
-      disableWebSecurity: true,
-    },
-    inputProps: {
-      storyboard,
-      timeline,
-    },
+  const context = readVisualContext(storyboard);
+  const seen = new Set<ShotKind>();
+  const targets = storyboard.scenes.flatMap((scene, idx) => {
+    const seg = timeline.segments[idx];
+    if (!seg) return [];
+    const shots = planSceneShots(scene, seg, context, timeline.fps);
+    if (distinctShots) {
+      return shots.filter(shot => {
+        if (shot.kind === 'scene' || seen.has(shot.kind)) return false;
+        seen.add(shot.kind);
+        return true;
+      }).map(shot => ({
+        scene, idx, filename: `${shot.kind}.jpg`,
+        frame: seg.startFrame + shot.from + Math.min(shot.duration - 1, Math.max(Math.round(timeline.fps * 1.25), Math.floor(shot.duration * 0.6))),
+      }));
+    }
+    const shot = shots.filter(shot => shot.kind !== 'scene').sort((a, b) => b.duration - a.duration)[0];
+    return [{
+      scene, idx, filename: `scene-${idx}-${scene.type}.jpg`,
+      frame: seg.startFrame + (shot
+        ? shot.from + Math.min(shot.duration - 1, Math.max(Math.round(timeline.fps * 1.25), Math.floor(shot.duration * 0.6)))
+        : Math.min(120, Math.floor(seg.durationInFrames * 0.4))),
+    }];
   });
+  if (distinctShots && !targets.length) return renderStillPreviews(storyboard, timeline, outputDir, urlPrefix, false, plates);
 
-  const results: StillPreviewResult[] = [];
-  // Render in controlled batches of 2 to avoid overwhelming headless Chrome memory & socket pools
-  const concurrency = 2;
-
-  for (let i = 0; i < storyboard.scenes.length; i += concurrency) {
-    const batch = storyboard.scenes.slice(i, i + concurrency);
-    const batchPromises = batch.map(async (scene, bIdx) => {
-      const idx = i + bIdx;
-      const seg = timeline.segments[idx];
-      if (!seg) return null;
-
-      // Capture representative frame at peak action (40% into the scene duration)
-      const frame = seg.startFrame + Math.min(120, Math.floor(seg.durationInFrames * 0.4));
-      const filename = `scene-${idx}-${scene.type}.jpg`;
+  const bundleLocation = await getOrCreateBundle(timeline);
+  await stageReelVisuals(bundleLocation, plates);
+  const { gl, browserExecutable } = getRenderingConfig();
+  const chromiumOptions = { gl, enableMultiProcessOnLinux: true, disableWebSecurity: true };
+  const puppeteerInstance = await openBrowser('chrome', { browserExecutable, chromiumOptions });
+  const inputProps = { storyboard, timeline, plates };
+  try {
+    const composition = await selectComposition({
+      serveUrl: bundleLocation,
+      id: 'StudioShort',
+      timeoutInMilliseconds: 120000,
+      puppeteerInstance,
+      inputProps,
+    });
+    const results: StillPreviewResult[] = [];
+    for (const { scene, idx, frame, filename } of targets) {
       const targetPath = path.join(outputDir, filename);
 
       await renderStill({
@@ -290,31 +300,23 @@ export async function renderStillPreviews(
         frame,
         output: targetPath,
         imageFormat: 'jpeg',
-        jpegQuality: 85,
+        jpegQuality: 93,
         timeoutInMilliseconds: 120000,
-        browserExecutable,
-        inputProps: { storyboard, timeline },
-        chromiumOptions: {
-          gl,
-          disableWebSecurity: true,
-        },
+        puppeteerInstance,
+        inputProps,
       });
 
-      return {
+      results.push({
         sceneIndex: idx,
         sceneId: scene.id,
         type: scene.type,
         frame,
         url: `${urlPrefix}/${filename}?t=${Date.now()}`,
         filePath: targetPath,
-      };
-    });
-
-    const batchResults = await Promise.all(batchPromises);
-    for (const r of batchResults) {
-      if (r) results.push(r);
+      });
     }
+    return results;
+  } finally {
+    await puppeteerInstance.close({ silent: true });
   }
-
-  return results;
 }

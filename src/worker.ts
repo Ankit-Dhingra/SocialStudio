@@ -18,6 +18,7 @@ import { generateHinglishScript } from './modules/ai-script/script-generator.js'
 import { synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort } from './modules/render/video-renderer.js';
+import { prepareReelVisuals } from './modules/render/reel-visual-assets.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 
 export interface VideoJobData {
@@ -123,9 +124,11 @@ export const worker = new Worker<VideoJobData>(
       const targetMp4Path = path.resolve('media/runs', id, 'final-short.mp4');
 
       console.log(`[Worker:${id}] Rendering composition StudioShort to ${targetMp4Path}...`);
+      const visuals = await prepareReelVisuals(storyboard, timeline);
       const renderResult = await renderStudioShort({
         storyboard,
         timeline,
+        plates: visuals.plates,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
           const overallProgress = 45 + Math.round(p.percent * 0.45); // 45% -> 90%

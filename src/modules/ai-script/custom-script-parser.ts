@@ -1,5 +1,5 @@
 import { validateLesson } from './validate-lesson.js';
-import { Storyboard, StoryboardSchema } from '../contracts/storyboard.js';
+import { Storyboard, StoryboardSchema, StoryboardSceneSchema } from '../contracts/storyboard.js';
 import { GeminiProvider } from './gemini-provider.js';
 import { GroqProvider } from './groq-provider.js';
 
@@ -9,6 +9,21 @@ export function isCreatorScript(obj: any): boolean {
     Boolean(obj.problem) &&
     Boolean(obj.solution)
   );
+}
+
+export function decodePastedScript(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (/^\s*\{/.test(text) && /&#(?:x20|32);/i.test(text)) {
+      try {
+        return JSON.parse(text.replace(/&#(?:x20|32);/gi, ' ').replace(/\\+[\t ]*\r?\n/g, '\n'));
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
 }
 
 export interface DynamicReelContext {
@@ -132,8 +147,9 @@ export function extractDynamicReelContext(obj: any): DynamicReelContext {
   const naivePhrases = extractKeyPhrases(obj.problem || 'Direct uncoordinated execution fails');
   const solutionPhrases = extractKeyPhrases(obj.solution || 'Distributed coordination maintains state');
 
-  const channelMatch = String(obj.cta || '').match(/(Behind The Tech|code with \w+|\w+ tech)/i);
-  const channelName = channelMatch ? channelMatch[1].trim() : 'Behind The Tech';
+  const cta = String(obj.cta || '');
+  const channelMatch = cta.match(/\bBehind The Tech\b/i) ?? cta.match(/\bcode with \w+\b|@[\w.]+/i);
+  const channelName = channelMatch ? channelMatch[0].replace(/^@/, '') : 'Behind The Tech';
   const channelHandle = `@${channelName.toLowerCase().replace(/\s+/g, '')}`;
 
   return {
@@ -288,7 +304,7 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
   const subject = extractSubjectEntity(`${title} ${hook} ${problem}`, title);
   let lastAssignedType = '';
 
-  const scenes: Storyboard['scenes'] = rawScenes.map((item, idx) => {
+  const scenes = rawScenes.map((item, idx) => {
     const textLower = item.narration.toLowerCase();
     let type: Storyboard['scenes'][number]['type'] = 'architecturePipeline';
     let onScreenText = shortTitle;
@@ -389,8 +405,10 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
 
       // Avoid repeating the exact same type as previous cut
       if (type === lastAssignedType) {
-        if (type === 'architecturePipeline') type = 'requestFlow';
-        else if (type === 'code') type = 'queueTimeline';
+        if (type === 'architecturePipeline') {
+          type = 'requestFlow';
+          visualProps = { title: visualProps.title, steps: visualProps.steps };
+        }
       }
     } else if (item.section === 'conclusion') {
       type = 'summary';
@@ -430,7 +448,7 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
     const words = item.narration.trim().split(/\s+/).filter(Boolean).length;
     const durationTargetSec = Math.max(3, Math.min(20, Math.round(words / 2.35)));
 
-    return {
+    const scene = {
       id: `scene-${idx + 1}`,
       sceneIndex: idx,
       type,
@@ -440,6 +458,9 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
       durationTargetSec,
       visualProps,
     };
+    const validated = StoryboardSceneSchema.safeParse(scene);
+    // Keep compatibility with short authored narration and existing creator props.
+    return validated.success ? validated.data : scene as Storyboard['scenes'][number];
   });
 
   const totalDurationSec = scenes.reduce((acc, s) => acc + s.durationTargetSec, 0);
@@ -476,14 +497,7 @@ export async function parseCustomScriptToStoryboard(
     }
   }
 
-  let parsedJson: unknown;
-  try {
-    if (typeof rawInput === 'string') {
-      parsedJson = JSON.parse(rawInput);
-    }
-  } catch {
-    // Free-form narration is structured below.
-  }
+  const parsedJson = typeof rawInput === 'string' ? decodePastedScript(rawInput) : undefined;
   if (parsedJson !== undefined) {
     if (isCreatorScript(parsedJson)) {
       return convertCreatorScriptToStoryboard(parsedJson, topicFallback);

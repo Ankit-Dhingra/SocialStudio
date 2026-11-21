@@ -20,7 +20,10 @@ function stages(s: StoryboardScene): Array<[string, string]> {
       [s.visualProps.optionB_Title || 'OPTION B', s.visualProps.optionB_Pros || 'Pros'],
       [s.visualProps.optionB_Title || 'OPTION B', s.visualProps.optionB_Cons || 'Cons']
     ];
-    case 'smartphoneMockup': return [[s.visualProps.baseDeliveryFee, s.visualProps.itemName], [s.visualProps.surgeDeliveryFee, s.visualProps.surgeReason]];
+    case 'smartphoneMockup': return [
+      [s.visualProps.baseDeliveryFee ?? 'Base fee', s.visualProps.itemName],
+      [s.visualProps.surgeDeliveryFee ?? 'Updated fee', s.visualProps.surgeReason ?? s.technicalKeyPoint],
+    ];
     case 'raceCondition': return [[s.visualProps.user1Name, s.visualProps.itemTitle], [s.visualProps.user2Name, s.visualProps.itemTitle], ['Atomic write', s.visualProps.atomicQuery]];
     case 'h3SpatialMap': return [[s.visualProps.hotHexId, s.visualProps.subtitle], [s.visualProps.orderCount + ' orders', s.visualProps.riderCount + ' riders'], [s.visualProps.surgeMultiplier, s.technicalKeyPoint]];
     case 'architecturePipeline': return [['Redis', s.visualProps.subtitle], [s.visualProps.redisLatencyMs + ' ms', s.visualProps.atomicCommand || 'O(1) Pipeline']];

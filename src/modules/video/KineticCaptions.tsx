@@ -6,6 +6,7 @@ interface KineticCaptionsProps {
   durationInFrames: number;
   wordFrames?: number[];
   highlightColor?: string;
+  useBackdrop?: boolean;
 }
 
 export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
@@ -13,6 +14,7 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
   wordFrames,
   durationInFrames,
   highlightColor = '#64E99A',
+  useBackdrop = false,
 }) => {
   const frame = useCurrentFrame();
 
@@ -47,6 +49,7 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
         gap: '8px 10px',
         pointerEvents: 'none',
         zIndex: 50,
+        ...(useBackdrop ? { background: '#050608e8', borderRadius: 24, padding: '8px 14px' } : {}),
       }}
     >
       {activeChunk.map((word, idx) => {
@@ -55,7 +58,7 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
           <span
             key={idx}
             style={{
-              fontFamily: 'Inter, system-ui, sans-serif',
+              fontFamily: 'Inter, Nirmala UI, system-ui, sans-serif',
               fontSize: 47,
               fontWeight: 750,
               lineHeight: 1.2,

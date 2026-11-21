@@ -27,10 +27,10 @@ for (const binDir of remotionBinDirs) {
 import { parseCustomScriptToStoryboard } from './modules/ai-script/custom-script-parser.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
 import { masterScriptService } from './modules/ai-script/master-script-service.js';
-import { scaleStoryboardForDuration } from './modules/ai-script/word-budget.js';
 import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort, renderStillPreviews } from './modules/render/video-renderer.js';
+import { prepareReelVisuals } from './modules/render/reel-visual-assets.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
 import { execFileSync } from 'node:child_process';
@@ -394,21 +394,36 @@ app.post('/api/pipeline/stills', async (req, res) => {
       masterScriptService.updateSession(session);
     }
 
-    const previewDir = path.resolve('remotion/public/previews', sessionId);
+    const storyboard = session.storyboard;
+    const timeline = session.timeline;
+    const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets?.warning ? undefined : session.visualAssets);
+    if (session.timeline !== timeline || session.storyboard !== storyboard) {
+      return res.status(409).json({ error: 'The script or audio changed while preparing visuals.' });
+    }
+    session.visualAssets = visuals;
+    masterScriptService.updateSession(session);
+    const previewRun = randomUUID();
+    const previewDir = path.resolve('remotion/public/previews', sessionId, previewRun);
     console.log(`[Pipeline] Generating still previews for session ${sessionId}...`);
     const stills = await renderStillPreviews(
-      session.storyboard,
-      session.timeline,
+      storyboard,
+      timeline,
       previewDir,
-      `/previews/${sessionId}`
+      `/previews/${sessionId}/${previewRun}`,
+      false,
+      visuals.plates,
     );
 
+    if (session.timeline !== timeline || session.storyboard !== storyboard) {
+      return res.status(409).json({ error: 'The script or audio changed while rendering visual previews.' });
+    }
     session.stillPreviews = stills;
     masterScriptService.updateSession(session);
 
     res.json({
       ok: true,
       stills,
+      visuals: { status: visuals.status, warning: visuals.warning },
     });
   } catch (err: any) {
     console.error(`[Pipeline Stills Error]:`, err);
@@ -444,23 +459,9 @@ app.post('/api/pipeline/render', async (req, res) => {
     });
   }
 
-  // 90-120s Duration Gate before render
-  let durationSec = session.audioResult?.totalDurationSec || session.timeline?.durationSec || 0;
-  if (durationSec < 90.0 || durationSec > 120.0) {
-    console.warn(`[Pipeline Render Gate] Session ${sessionId} duration (${durationSec.toFixed(1)}s) outside 90–120s. Rescaling word budget to enforce 90–120s gate...`);
-    const ttsProvider = getTTSProvider();
-    const runDir = path.resolve('media/runs', session.id, randomUUID());
-    fs.mkdirSync(runDir, { recursive: true });
-    session.storyboard = scaleStoryboardForDuration(session.storyboard, durationSec, 105);
-    const audioResult = await synthesizeStoryboardNarration(session.storyboard, runDir, ttsProvider);
-    session.audioResult = audioResult;
-    session.timeline = buildVideoTimeline(session.storyboard, audioResult.clips);
-    masterScriptService.updateSession(session);
-    durationSec = session.audioResult.totalDurationSec;
-  }
-
   if (session.renderState?.status === 'rendering') return res.status(409).json({error: 'A render is already running.'});
   const renderTimeline = session.timeline;
+  const storyboard = session.storyboard;
   const renderFilename = `final-${randomUUID()}.mp4`;
   // Set rendering status
   session.renderState = {
@@ -475,9 +476,14 @@ app.post('/api/pipeline/render', async (req, res) => {
   (async () => {
     try {
       console.log(`[Pipeline] Rendering StudioShort for session ${sessionId}...`);
+      const visuals = await prepareReelVisuals(storyboard, renderTimeline, session.visualAssets);
+      if (session.timeline !== renderTimeline || session.storyboard !== storyboard) return;
+      session.visualAssets = visuals;
+      masterScriptService.updateSession(session);
       const renderResult = await renderStudioShort({
-        storyboard: session.storyboard,
+        storyboard,
         timeline: renderTimeline,
+        plates: visuals.plates,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
           if (session.timeline !== renderTimeline) return;
@@ -530,6 +536,7 @@ app.get('/api/pipeline/render/status/:sessionId', (req, res) => {
   }
   res.json({
     renderState: session.renderState || { status: 'idle', progress: 0 },
+    visuals: session.visualAssets && { status: session.visualAssets.status, warning: session.visualAssets.warning },
   });
 });
 

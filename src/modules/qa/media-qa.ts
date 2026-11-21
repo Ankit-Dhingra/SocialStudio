@@ -22,16 +22,17 @@ export function performMediaQA(renderResult: RenderResult, timeline: VideoTimeli
 
   // Check 1: File Exists & Size
   const exists = fs.existsSync(renderResult.outputFilePath);
-  const minSize = 1024 * 1024; // 1MB minimum for 40s 1080x1920 video
+  // Scale the existing 1 MB floor for short, voiceover-locked reels.
+  const minSize = Math.min(1024 * 1024, Math.max(1, Math.ceil(timeline.totalDurationSec * 1024 * 1024 / 40)));
   const hasMinSize = renderResult.fileSizeBytes >= minSize;
 
   checks.push({
     name: 'File Exists & Size Check',
     passed: exists && hasMinSize,
-    details: `Size: ${(renderResult.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB (Min required: 1 MB)`,
+    details: `Size: ${renderResult.fileSizeBytes} bytes (minimum ${minSize} bytes)`,
   });
   if (!exists || !hasMinSize) {
-    errors.push(`File missing or smaller than 1MB: size=${renderResult.fileSizeBytes}`);
+    errors.push(`File missing or smaller than ${minSize} bytes: size=${renderResult.fileSizeBytes}`);
   }
 
   // Check 2: Duration Consistency

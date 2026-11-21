@@ -2307,7 +2307,7 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
 
 .reels-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 14px;
 }
 
@@ -2315,11 +2315,33 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
   background: #141417;
   border: 1px solid #222226;
   border-radius: 10px;
+  height: 224px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   transition: all 0.15s ease;
+}
+
+.reel-card h4 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.reel-card p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reel-card-actions {
+  display: flex;
+  gap: 8px;
+  min-height: 32px;
+  margin-top: auto;
 }
 
 .reel-card:hover {

@@ -9,10 +9,10 @@ export function compositionSignature(): string {
       for (const name of fs.readdirSync(file).sort()) {
         if (name !== 'public') visit(path.join(file, name));
       }
-    } else if (/\.(tsx?|json)$/.test(file)) {
+    } else if (/\.(tsx?|json|png|svg)$/.test(file)) {
       hash.update(file.replace(/\\/g, '/')).update(fs.readFileSync(file));
     }
   }
-  for (const input of ['remotion', 'src/modules/video', 'src/modules/contracts', 'package-lock.json']) visit(input);
+  for (const input of ['remotion', 'remotion/public/visuals', 'src/modules/video', 'src/modules/contracts', 'package-lock.json']) visit(input);
   return hash.digest('hex');
 }
