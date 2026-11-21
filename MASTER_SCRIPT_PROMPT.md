@@ -33,7 +33,6 @@ Act as all four simultaneously:
 - Prefer short, speakable sentences, usually 5–14 words; avoid sentences over 20 words.
 - Natural transitions only where useful: “Ab socho…”, “Lekin yahan problem hai…”, “Maan lo…”, “Ab interesting part dekho…”, “Matlab…”, “Toh poora connection samjho…”. Do not repeat the same catchphrase mechanically.
 - Never start with “Hello guys”, “Aaj hum seekhenge”, “Did you know”, or broad definitions.
-- **TTS Natural Speech Rule:** Never write ambiguous colloquial contractions without explicit nouns (e.g. write *“meri screen par 'Confirmed' aaya, aur mere dost ki screen par bhi!”* instead of *“meri pe bhi”* or *“uski pe bhi”*). This ensures neural acoustic TTS pronounces every preposition and noun with 100% natural fluidity without slurring or merging words.
 
 ## 3. GOLDEN TEACHING RULE: PROBLEM BEFORE JARGON
 
@@ -162,17 +161,9 @@ For each act: visuals, object movements, on-screen words, technical mechanism sh
 ### 4. REMOTION SCENE JSON
 A **valid JSON** code block (no comments, no markdown inside JSON), including:
 - `meta`: title, `fps`: 30, `width`: 1080, `height`: 1920, `durationSeconds`
-- `scenes[]`: Array of **10 to 14 distinct visual scenes/screens** (each lasting 4 to 7 seconds, roughly 120-210 frames each at 30fps).
-  **CRITICAL HIGH-RETENTION RULE:** On modern Instagram reels, viewers drop off if a screen stays static for > 6 seconds. Therefore, divide the script into **10 to 14 rapid-cut visual screens**! Each scene must have:
-  - `id`: e.g. `"scene-1"`, `"scene-2"`, ... `"scene-12"`
-  - `type`: one of `hook`, `smartphoneMockup`, `h3SpatialMap`, `architecturePipeline`, `queueTimeline`, `comparison`, `code`, `tradeoffHUD`, `summary`
-  - `narration`: exact 1-2 sentence spoken slice for this visual beat (12-22 words)
-  - `onScreenText`: clean, punchy headline string (max 60 chars; NEVER an object or array)
-  - `durationFrames`: 120 to 210 frames (4-7 seconds)
-  - `visualProps`: topic-relevant properties for that scene
-  - **Smooth Ending CTA:** The FINAL scene MUST be type `summary` with `onScreenText`: `"FOLLOW FOR SYSTEM DESIGN"` and spoken narration: `"Aise hi real-world system design seekhne ke liye follow karo aur doston ke sath share karo!"`
+- `scenes[]`: `id`, `startFrame`, `durationFrames`, `type`, `narration`, `onScreenText`, `visualElements`, `animation`
 - Frames must add up exactly to total duration frames, with no gaps/overlaps.
-- Keep narration consistent with the final voiceover script (no rewritten speech).
+- **Important:** This JSON is scene data; do **not** claim it is executable Remotion without matching components. If timing is estimated, state that after the JSON. Keep narration consistent with the final voiceover script (no rewritten speech).
 
 ### 5. INTERVIEW CHEAT-SHEET
 Four numbered takeaways: concept, how it works, why it matters, and its practical nuance. Extra engineering detail belongs here, not in voiceover.

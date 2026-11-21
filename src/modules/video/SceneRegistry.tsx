@@ -16,37 +16,41 @@ import { CollectionScene } from './scenes/CollectionScene.js';
 export type RegisteredSceneProps<T extends StoryboardScene = StoryboardScene> = {
   scene: T;
   cueFrames?: number[];
+  wordFrames?: number[];
+  audioFrames?: number;
 };
 
 export const SceneRegistry: {
   [K in StoryboardScene['type']]: React.FC<RegisteredSceneProps<Extract<StoryboardScene, { type: K }>>>;
 } = {
-  raceCondition: ({ scene }) => (
+  raceCondition: ({ scene, cueFrames }) => (
     <RaceConditionSimulatorScene
       title={scene.visualProps?.title || scene.onScreenText || 'CONCURRENCY • RACE CONDITION'}
-      itemTitle={scene.visualProps?.itemTitle || 'Coldplay VIP Lounge (Seat A-12)'}
-      user1Name={scene.visualProps?.user1Name || 'Aman (Client A)'}
-      user2Name={scene.visualProps?.user2Name || 'Riya (Client B)'}
-      atomicQuery={scene.visualProps?.atomicQuery || 'UPDATE seats SET stock = stock - 1 WHERE id = 101 AND stock > 0;'}
+      itemTitle={scene.visualProps?.itemTitle || `${scene.onScreenText || 'Shared Resource'} Mutex`}
+      user1Name={scene.visualProps?.user1Name || 'Worker Node A'}
+      user2Name={scene.visualProps?.user2Name || 'Worker Node B'}
+      atomicQuery={scene.visualProps?.atomicQuery || 'SET lock:resource "worker_uuid" NX EX 5;'}
       onScreenText={scene.onScreenText}
+      cueFrames={cueFrames}
     />
   ),
   architecturePipeline: ({ scene }) => (
     <ArchitectureFlowPipelineScene
       title={scene.visualProps?.title || scene.onScreenText || 'ARCHITECTURE PIPELINE'}
       subtitle={scene.visualProps?.subtitle || scene.technicalKeyPoint || 'In-memory coordination engine'}
-      redisLatencyMs={scene.visualProps?.redisLatencyMs ?? 0.8}
+      redisLatencyMs={scene.visualProps?.redisLatencyMs ?? 2.1}
+      steps={scene.visualProps?.steps}
     />
   ),
   comparison: ({ scene }) => (
     <ComparisonScene
-      leftTitle={scene.visualProps?.leftTitle || 'Naive Direct Query'}
-      leftCode={scene.visualProps?.leftCode || 'SELECT * FROM seats WHERE id = 1'}
-      leftPoints={scene.visualProps?.leftPoints || ['Parallel requests collide', 'Inventory drops below zero (-1)']}
-      rightTitle={scene.visualProps?.rightTitle || 'Distributed Lock Engine'}
-      rightCode={scene.visualProps?.rightCode || 'SET lock:seat_1 user_id NX EX 10'}
-      rightPoints={scene.visualProps?.rightPoints || ['Atomic single-turn guarantee', 'Safe auto-release on crash (TTL)']}
-      verdict={scene.visualProps?.verdict || scene.technicalKeyPoint || 'Winner: Redis Atomic Lock'}
+      leftTitle={scene.visualProps?.leftTitle || 'Naive Approach'}
+      leftCode={scene.visualProps?.leftCode || 'SELECT * FROM resource_table WHERE id = 101 FOR UPDATE;'}
+      leftPoints={scene.visualProps?.leftPoints || ['Unindexed full-scan search', 'High contention under heavy load']}
+      rightTitle={scene.visualProps?.rightTitle || 'Optimized Architecture'}
+      rightCode={scene.visualProps?.rightCode || 'SET lock:resource uuid NX EX 5'}
+      rightPoints={scene.visualProps?.rightPoints || ['Sub-millisecond latency in memory', 'Scales across distributed nodes']}
+      verdict={scene.visualProps?.verdict || scene.technicalKeyPoint || 'Winner: Scalable Architecture'}
       onScreenText={scene.onScreenText}
     />
   ),
@@ -54,52 +58,64 @@ export const SceneRegistry: {
     <TradeoffDecisionHUDScene
       title={scene.visualProps?.title || scene.onScreenText || 'SENIOR SDE TRADEOFF MATRIX'}
       subtitle={scene.visualProps?.subtitle || scene.technicalKeyPoint || 'Which architecture strategy would you defend?'}
-      optionA_Title={scene.visualProps?.optionA_Title || 'OPTION A: SHORT TTL (5-10s)'}
-      optionA_Pros={scene.visualProps?.optionA_Pros || 'Quick recovery from crashes, minimal deadlock downtime'}
-      optionA_Cons={scene.visualProps?.optionA_Cons || 'Premature expiry risk if query latency spikes'}
-      optionB_Title={scene.visualProps?.optionB_Title || 'OPTION B: LONG TTL (60s+)'}
-      optionB_Pros={scene.visualProps?.optionB_Pros || 'Safe for heavy computations and complex transactions'}
-      optionB_Cons={scene.visualProps?.optionB_Cons || 'Prolonged deadlocks if client process dies'}
+      optionA_Title={scene.visualProps?.optionA_Title || 'OPTION A: LOW LATENCY / IN-MEMORY CACHE'}
+      optionA_Pros={scene.visualProps?.optionA_Pros || 'Sub-millisecond response time & zero disk I/O bottleneck'}
+      optionA_Cons={scene.visualProps?.optionA_Cons || 'Potential cache invalidation lag & cluster memory footprint'}
+      optionB_Title={scene.visualProps?.optionB_Title || 'OPTION B: STRONG CONSISTENCY / DIRECT STORE'}
+      optionB_Pros={scene.visualProps?.optionB_Pros || 'Guaranteed atomic durability across all transactions'}
+      optionB_Cons={scene.visualProps?.optionB_Cons || 'Higher query latency & database connection pool contention'}
       interviewPoints={
         scene.visualProps?.interviewPoints || [
-          'Acquire lock atomically using SET NX EX with unique client token',
-          'Release lock safely via Lua script verifying token ownership',
-          'Use TTL to guard against process crashes and network partitions',
-          'Tradeoff: Fast crash recovery (Short TTL) vs Process safety (Long TTL)',
+          scene.technicalKeyPoint || 'Decouple read hot-paths using in-memory state',
+          'Use atomic locks with TTL guards to prevent deadlocks',
+          'Design graceful degradation for edge-case network partitions',
+          'Balance latency budgets against strict consistency requirements',
         ]
       }
       callToAction={scene.visualProps?.callToAction || 'Save this reel for your System Design Interview & follow for more!'}
     />
   ),
-  smartphoneMockup: ({ scene }) => (
+  smartphoneMockup: ({ scene, cueFrames }) => (
     <SmartphoneMockupScene
-      headline={scene.visualProps?.headline || scene.onScreenText || 'REAL-TIME SURGE PRICING'}
-      subtext={scene.visualProps?.subtext || scene.technicalKeyPoint || 'Why fees jump dynamically under demand'}
-      appName={scene.visualProps?.appName || 'ZOMATO'}
-      locationText={scene.visualProps?.locationText || 'HSR Layout, Sector 4'}
-      itemName={scene.visualProps?.itemName || 'Royal Chicken Dum Biryani'}
-      itemPrice={scene.visualProps?.itemPrice || '₹350'}
-      baseDeliveryFee={scene.visualProps?.baseDeliveryFee || '₹30'}
-      surgeDeliveryFee={scene.visualProps?.surgeDeliveryFee || '₹80'}
-      surgeMultiplier={scene.visualProps?.surgeMultiplier || '1.8X'}
-      surgeReason={scene.visualProps?.surgeReason || 'HIGH DEMAND • 120+ ACTIVE ORDERS'}
+      headline={scene.visualProps?.headline || scene.onScreenText || 'REAL-TIME CLIENT TRIGGER'}
+      subtext={scene.visualProps?.subtext || scene.technicalKeyPoint || 'State change observed on consumer client'}
+      appName={scene.visualProps?.appName}
+      appCategory={scene.visualProps?.appCategory}
+      locationText={scene.visualProps?.locationText}
+      itemName={scene.visualProps?.itemName}
+      itemEmoji={scene.visualProps?.itemEmoji}
+      itemPrice={scene.visualProps?.itemPrice}
+      feeLabel={scene.visualProps?.feeLabel}
+      baseDeliveryFee={scene.visualProps?.baseDeliveryFee}
+      surgeDeliveryFee={scene.visualProps?.surgeDeliveryFee}
+      surgeMultiplier={scene.visualProps?.surgeMultiplier}
+      surgeReason={scene.visualProps?.surgeReason}
+      algorithmName={scene.visualProps?.algorithmName}
+      ctaText={scene.visualProps?.ctaText}
+      lottieAsset={scene.visualProps?.lottieAsset}
       onScreenText={scene.onScreenText}
+      cueFrames={cueFrames}
     />
   ),
   h3SpatialMap: ({ scene }) => (
     <H3SpatialMapScene
-      title={scene.visualProps?.title || scene.onScreenText || 'GEOSPATIAL H3 INDEXING'}
-      subtitle={scene.visualProps?.subtitle || scene.technicalKeyPoint || 'Hexagonal spatial partitioning for candidate lookup'}
-      hotHexId={scene.visualProps?.hotHexId || '#88619A0A4'}
-      orderCount={scene.visualProps?.orderCount ?? 52}
-      riderCount={scene.visualProps?.riderCount ?? 5}
-      surgeMultiplier={scene.visualProps?.surgeMultiplier || '1.8X'}
+      title={scene.visualProps?.title || scene.onScreenText || 'SPATIAL INDEXING & PARTITION MESH'}
+      subtitle={scene.visualProps?.subtitle || scene.technicalKeyPoint || 'O(1) Cell resolution narrows search candidate radius'}
+      hotHexId={scene.visualProps?.hotHexId}
+      orderCount={scene.visualProps?.orderCount}
+      riderCount={scene.visualProps?.riderCount}
+      surgeMultiplier={scene.visualProps?.surgeMultiplier}
+      mode={scene.visualProps?.mode}
+      entityLabel={scene.visualProps?.entityLabel}
+      providerLabel={scene.visualProps?.providerLabel}
+      entityEmoji={scene.visualProps?.entityEmoji}
+      providerEmoji={scene.visualProps?.providerEmoji}
     />
   ),
   hook: ({ scene }) => (
     <DeepConceptHook
       headline={scene.visualProps?.headline || scene.onScreenText || 'SYSTEM DESIGN HOOK'}
-      questionKicker={scene.visualProps?.questionKicker || scene.narration || 'How does concurrent booking work?'}
+      questionKicker={scene.visualProps?.questionKicker || scene.narration || 'How does this architecture work under the hood?'}
       badgeText={scene.visualProps?.badgeText || 'SYSTEM DESIGN'}
       accentColor={scene.visualProps?.accentColor || '#00F2FE'}
       misconceptionAlert={scene.visualProps?.misconceptionAlert}
@@ -108,10 +124,10 @@ export const SceneRegistry: {
   ),
   code: ({ scene }) => (
     <InteractiveConsoleScene
-      filename={scene.visualProps?.filename || 'atomic_lock.sql'}
-      code={scene.visualProps?.code || scene.technicalKeyPoint || 'UPDATE inventory SET stock = stock - 1 WHERE id = 101 AND stock > 0;'}
+      filename={scene.visualProps?.filename || 'system_handler.ts'}
+      code={scene.visualProps?.code || scene.technicalKeyPoint || 'const lock = await acquireLock(resourceId, 5000);'}
       highlightLines={scene.visualProps?.highlightLines || [1]}
-      terminalOutputs={scene.visualProps.terminalOutputs ?? []}
+      terminalOutputs={scene.visualProps?.terminalOutputs ?? []}
       explanationCallout={scene.visualProps?.explanationCallout || scene.technicalKeyPoint || 'Atomic conditional check'}
       onScreenText={scene.onScreenText}
     />
@@ -121,9 +137,10 @@ export const SceneRegistry: {
       headline={scene.visualProps?.headline || scene.onScreenText || 'MENTAL MODEL RECAP'}
       takeaways={
         scene.visualProps?.takeaways || [
-          'SET NX EX ensures single-turn atomicity across all nodes',
-          'Unique request token prevents accidental lock releases',
-          'TTL expiration provides guaranteed deadlock safety on crash',
+          scene.technicalKeyPoint || 'Partition state to enable O(1) candidate lookup',
+          'Offload hot read paths from disk to in-memory buffers',
+          'Use atomic leases with auto-expiry to safeguard concurrency',
+          'Filter stale node heartbeats from live availability pools',
         ]
       }
       callToAction={scene.visualProps?.callToAction || 'Follow for more senior backend engineering breakdowns!'}
@@ -137,6 +154,9 @@ export const SceneRegistry: {
       activeItemIndex={scene.visualProps?.activeItemIndex || 0}
       cueFrames={cueFrames}
       onScreenText={scene.onScreenText}
+      technicalKeyPoint={scene.technicalKeyPoint}
+      visualProps={scene.visualProps}
+      mode={scene.visualProps?.mode}
     />
   ),
   requestFlow: ({ scene, cueFrames }) => (
@@ -157,12 +177,12 @@ export const SceneRegistry: {
   ),
 };
 
-export function renderRegisteredScene(scene: StoryboardScene, cueFrames?: number[]) {
+export function renderRegisteredScene(scene: StoryboardScene, cueFrames?: number[], wordFrames?: number[], audioFrames?: number) {
   const Component = SceneRegistry[scene.type] as React.FC<RegisteredSceneProps<any>> | undefined;
   if (!Component) {
     throw new Error(
       `[SceneRegistry] Unknown scene type '${(scene as any).type}'. Every scene must be registered in the SceneRegistry.`
     );
   }
-  return <Component scene={scene} cueFrames={cueFrames} />;
+  return <Component scene={scene} cueFrames={cueFrames} wordFrames={wordFrames} audioFrames={audioFrames} />;
 }

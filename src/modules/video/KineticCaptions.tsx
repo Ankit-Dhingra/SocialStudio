@@ -37,9 +37,9 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
     <div
       style={{
         position: 'absolute',
-        top: 1395,
+        top: 1400,
         left: 80,
-        right: 100,
+        right: 140,
         display: 'flex',
         justifyContent: 'center',
         flexWrap: 'wrap',
@@ -60,12 +60,9 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
               fontWeight: 750,
               lineHeight: 1.2,
               padding: '3px 7px',
-              borderRadius: 8,
-              backgroundColor: isActive ? highlightColor : 'rgba(9, 11, 10, 0.76)',
-              color: isActive ? '#07110a' : '#f5f5f5',
-              transform: isActive ? 'scale(1.08)' : 'scale(1.0)',
-              boxShadow: isActive ? '0 0 16px rgba(100, 233, 154, 0.45)' : 'none',
-              transition: 'transform 0.08s ease, box-shadow 0.08s ease',
+              color: isActive ? highlightColor : '#f5f5f5',
+              textShadow: isActive ? '0 0 16px #00f2fe70' : undefined,
+              transform: isActive ? 'translateY(-3px)' : undefined,
               overflowWrap: 'anywhere',
               maxWidth: '100%',
             }}

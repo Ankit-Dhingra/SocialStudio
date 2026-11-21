@@ -10,6 +10,7 @@ import {
   useVideoConfig,
 } from 'remotion';
 import { VideoDesignTokens } from '../design-system.js';
+import { LottieAsset } from '../LottieAsset.js';
 
 export interface RaceConditionSimulatorProps {
   title?: string;
@@ -18,15 +19,17 @@ export interface RaceConditionSimulatorProps {
   user2Name?: string;
   atomicQuery?: string;
   onScreenText?: string;
+  cueFrames?: number[];
 }
 
 export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> = ({
   title = 'CONCURRENCY • RACE CONDITION',
-  itemTitle = 'Coldplay VIP Lounge (Seat A-12)',
-  user1Name = 'Aman (Client A)',
-  user2Name = 'Riya (Client B)',
-  atomicQuery = 'UPDATE seats SET stock = stock - 1 WHERE id = 101 AND stock > 0;',
+  itemTitle = 'Hex #88619A0A4 Surge Mutex',
+  user1Name = 'Order Worker A',
+  user2Name = 'Surge Engine B',
+  atomicQuery = 'SET lock:hex:88619A0A4 "worker_uuid_77" NX EX 5;',
   onScreenText,
+  cueFrames,
 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
@@ -35,20 +38,22 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
   const totalFrames = Math.max(durationInFrames || 300, 180);
 
   // Keyframe Milestones:
-  // Step 1: 0% to 18% - Realistic Ticket card appears
-  // Step 2: 18% to 35% - Two concurrent users viewing the same seat
-  // Step 3: 35% to 50% - Both click "Book Now" (t=20:00:00.120 vs .124)
-  // Step 4: 50% to 66% - Network packets travel along SVG bezier paths
-  // Step 5: 66% to 80% - Both threads concurrently read stock = 1 (The Race Hazard)
-  // Step 6: 80% to 100% - Atomic update resolves: Aman confirms (1 row), Riya rejected (0 rows)
+  // Step 1: 0% to 18% - Realistic Mutex card appears
+  // Step 2: 18% to 35% - Two concurrent workers contending for same hex
+  // Step 3: 35% to 50% - Both attempt lock acquisition
+  // Step 4: 50% to 66% - Network packets travel to Redis
+  // Step 5: 66% to 80% - Both threads attempt write (Race Hazard)
+  // Step 6: 80% to 100% - SETNX atomic update resolves: Worker A wins lock (OK), Worker B rejected (nil)
 
   const fStep2 = Math.floor(totalFrames * 0.16);
   const fClickAman = Math.floor(totalFrames * 0.33);
   const fClickRiya = Math.floor(totalFrames * 0.36);
   const fNetworkStart = Math.floor(totalFrames * 0.48);
   const fReadDb = Math.floor(totalFrames * 0.65);
-  const fResolveAman = Math.floor(totalFrames * 0.79);
-  const fResolveRiya = Math.floor(totalFrames * 0.85);
+  const fResolveAman = cueFrames && cueFrames.length > 0 && cueFrames[0] > 0
+    ? Math.min(cueFrames[0], totalFrames - 25)
+    : Math.floor(totalFrames * 0.79);
+  const fResolveRiya = fResolveAman + Math.min(18, Math.floor((totalFrames - fResolveAman) * 0.4));
 
   // States
   const isStep2 = frame >= fStep2;
@@ -241,33 +246,33 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
                 fontSize: 26,
               }}
             >
-              🎟️
+              <LottieAsset name="lock" style={{ width: 44, height: 44 }} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF', letterSpacing: -0.3 }}>
                 {itemTitle}
               </div>
               <div style={{ fontSize: 15, color: '#94A3B8', marginTop: 3 }}>
-                DY Patil Stadium • Gate 4 • North Stand • ₹4,999
+                Shared Distributed Resource • Atomic Mutex Lock
               </div>
             </div>
 
-            {/* Inventory Status Pill */}
+            {/* Inventory / Lock Status Pill */}
             <div
               style={{
                 padding: '6px 14px',
                 borderRadius: 20,
-                background: stockCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(100, 116, 139, 0.2)',
-                border: stockCount > 0 ? '1.5px solid #EF4444' : '1.5px solid #64748B',
-                color: stockCount > 0 ? '#F87171' : '#94A3B8',
+                background: stockCount > 0 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.2)',
+                border: stockCount > 0 ? '1.5px solid #38BDF8' : '1.5px solid #EF4444',
+                color: stockCount > 0 ? '#38BDF8' : '#F87171',
                 fontWeight: 900,
                 fontSize: 16,
                 letterSpacing: 0.5,
                 opacity: stockCount > 0 ? pulseOpacity : 1,
-                boxShadow: stockCount > 0 ? '0 0 16px rgba(239, 68, 68, 0.3)' : 'none',
+                boxShadow: stockCount > 0 ? '0 0 16px rgba(56, 189, 248, 0.3)' : '0 0 16px rgba(239, 68, 68, 0.3)',
               }}
             >
-              {stockCount > 0 ? '🔥 ONLY 1 SEAT LEFT' : '❌ SOLD OUT'}
+              {stockCount > 0 ? '🔓 MUTEX UNLOCKED' : '🔐 LOCK ACQUIRED'}
             </div>
           </div>
         </div>

@@ -26,11 +26,13 @@ for (const binDir of remotionBinDirs) {
 
 import { parseCustomScriptToStoryboard } from './modules/ai-script/custom-script-parser.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
-import { masterScriptService, buildStoryboardFromParsed } from './modules/ai-script/master-script-service.js';
+import { masterScriptService } from './modules/ai-script/master-script-service.js';
+import { scaleStoryboardForDuration } from './modules/ai-script/word-budget.js';
 import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort, renderStillPreviews } from './modules/render/video-renderer.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
+import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
 import { execFileSync } from 'node:child_process';
 import express from 'express';
 import cors from 'cors';
@@ -39,7 +41,7 @@ import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { pool, queue, connection } from './core.js';
 
-const app = express();
+export const app = express();
 app.use(express.json({ limit: '50kb' }));
 app.use(cors({ origin: '*' })); // Allow dashboard, n8n, and local dev clients
 
@@ -143,6 +145,7 @@ app.get('/api/pipeline/sessions', (_req, res) => {
   try {
     const list = masterScriptService.listSessions().map((s) => ({
       id: s.id,
+      jobId: s.jobId || s.job?.id,
       topic: s.topic,
       angle: s.angle,
       title: s.storyboard?.title || s.topic,
@@ -150,6 +153,7 @@ app.get('/api/pipeline/sessions', (_req, res) => {
       hasAudio: Boolean(s.audioResult),
       hasVideo: Boolean(s.renderState?.mediaUrl),
       renderStatus: s.renderState?.status || 'idle',
+      job: s.job,
       updatedAt: s.updatedAt,
       createdAt: s.createdAt,
     }));
@@ -241,9 +245,11 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     })),
   };
 
+  const sourceStoryboard = session.storyboard;
+  const audioRun = `${sessionId}/${randomUUID()}`;
   try {
     console.log(`[Pipeline] Synthesizing audio for session ${sessionId}...`);
-    const runDir = path.resolve('remotion/public/audio/runs', sessionId);
+    const runDir = path.resolve('remotion/public/audio/runs', audioRun);
     if (!fs.existsSync(runDir)) {
       fs.mkdirSync(runDir, { recursive: true });
     }
@@ -252,11 +258,11 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     const audioResult = await synthesizeStoryboardNarration(storyboard, runDir, ttsProvider);
 
     // Copy to media runs and dist-remotion so all clients can serve it
-    const mediaAudioDir = path.resolve('media/runs', sessionId, 'audio');
+    const mediaAudioDir = path.resolve('media/runs', audioRun, 'audio');
     const distDirs = [
       mediaAudioDir,
-      path.resolve('dist-remotion/public/audio/runs', sessionId),
-      path.resolve('dist-remotion/audio/runs', sessionId),
+      path.resolve('dist-remotion/public/audio/runs', audioRun),
+      path.resolve('dist-remotion/audio/runs', audioRun),
     ];
     for (const d of distDirs) {
       if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
@@ -288,7 +294,7 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
       for (const d of distDirs) {
         fs.copyFileSync(fullNarrationPath, path.join(d, 'full-narration.mp3'));
       }
-      fullAudioUrl = `/audio/runs/${sessionId}/full-narration.mp3`;
+      fullAudioUrl = `/audio/runs/${audioRun}/full-narration.mp3`;
     } catch (concatErr) {
       console.warn('[Pipeline] Full narration concat warning:', concatErr);
     }
@@ -296,18 +302,20 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     // Build timeline
     const timeline = buildVideoTimeline(storyboard, audioResult.clips, {
       fps: 30,
-      scenePaddingFrames: 5,
-      audioSrcPrefix: `audio/runs/${sessionId}`,
+      audioSrcPrefix: `audio/runs/${audioRun}`,
     });
 
     // Update session
+    if (session.storyboard !== sourceStoryboard) return res.status(409).json({error: 'Script changed while synthesizing. Generate audio for the current revision.'});
     session.storyboard = storyboard;
+    session.stillPreviews = [];
+    session.renderState = {status: 'idle', progress: 0};
     session.audioResult = {
       ...audioResult,
       fullAudioUrl,
       clips: audioResult.clips.map((c) => ({
         ...c,
-        url: `/audio/runs/${sessionId}/${path.basename(c.filePath)}`,
+        url: `/audio/runs/${audioRun}/${path.basename(c.filePath)}`,
       })),
     };
     session.timeline = timeline;
@@ -338,19 +346,9 @@ app.post('/api/pipeline/stills', async (req, res) => {
   }
 
   try {
-    // Automatically re-sync storyboard from parsed script sections to reflect latest scene routing
-    if (session.sections && session.currentMarkdown) {
-      session.storyboard = buildStoryboardFromParsed(session.topic, session.sections, session.currentMarkdown);
+    if (!session.timeline) {
       session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
         fps: 30,
-        scenePaddingFrames: 5,
-        audioSrcPrefix: `audio/runs/${sessionId}`,
-      });
-      masterScriptService.updateSession(session);
-    } else if (!session.timeline) {
-      session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
-        fps: 30,
-        scenePaddingFrames: 5,
         audioSrcPrefix: `audio/runs/${sessionId}`,
       });
       masterScriptService.updateSession(session);
@@ -406,6 +404,24 @@ app.post('/api/pipeline/render', async (req, res) => {
     });
   }
 
+  // 90-120s Duration Gate before render
+  let durationSec = session.audioResult?.totalDurationSec || session.timeline?.durationSec || 0;
+  if (durationSec < 90.0 || durationSec > 120.0) {
+    console.warn(`[Pipeline Render Gate] Session ${sessionId} duration (${durationSec.toFixed(1)}s) outside 90–120s. Rescaling word budget to enforce 90–120s gate...`);
+    const ttsProvider = getTTSProvider();
+    const runDir = path.resolve('media/runs', session.id, randomUUID());
+    fs.mkdirSync(runDir, { recursive: true });
+    session.storyboard = scaleStoryboardForDuration(session.storyboard, durationSec, 105);
+    const audioResult = await synthesizeStoryboardNarration(session.storyboard, runDir, ttsProvider);
+    session.audioResult = audioResult;
+    session.timeline = buildVideoTimeline(session.storyboard, audioResult.clips);
+    masterScriptService.updateSession(session);
+    durationSec = session.audioResult.totalDurationSec;
+  }
+
+  if (session.renderState?.status === 'rendering') return res.status(409).json({error: 'A render is already running.'});
+  const renderTimeline = session.timeline;
+  const renderFilename = `final-${randomUUID()}.mp4`;
   // Set rendering status
   session.renderState = {
     status: 'rendering',
@@ -413,7 +429,7 @@ app.post('/api/pipeline/render', async (req, res) => {
   };
   masterScriptService.updateSession(session);
 
-  const targetMp4Path = path.resolve('media/runs', sessionId, 'final-short.mp4');
+  const targetMp4Path = path.resolve('media/runs', sessionId, renderFilename);
 
   // Trigger rendering asynchronously
   (async () => {
@@ -421,9 +437,10 @@ app.post('/api/pipeline/render', async (req, res) => {
       console.log(`[Pipeline] Rendering StudioShort for session ${sessionId}...`);
       const renderResult = await renderStudioShort({
         storyboard: session.storyboard,
-        timeline: session.timeline,
+        timeline: renderTimeline,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
+          if (session.timeline !== renderTimeline) return;
           session.renderState = {
             status: 'rendering',
             progress: Math.min(99, Math.max(1, Math.round(p.percent))),
@@ -433,9 +450,11 @@ app.post('/api/pipeline/render', async (req, res) => {
       });
 
       console.log(`[Pipeline] Video render finished for session ${sessionId}. Running Media QA...`);
-      const qaReport = performMediaQA(renderResult, session.timeline);
+      if (session.timeline !== renderTimeline) return;
+      const qaReport = performMediaQA(renderResult, renderTimeline);
+      if (!qaReport.passed) throw new Error(qaReport.errors.join('. '));
 
-      const mediaUrl = `/media/runs/${sessionId}/final-short.mp4`;
+      const mediaUrl = `/media/runs/${sessionId}/${renderFilename}`;
       session.renderState = {
         status: 'completed',
         progress: 100,
@@ -445,6 +464,7 @@ app.post('/api/pipeline/render', async (req, res) => {
       masterScriptService.updateSession(session);
       console.log(`🎉 [Pipeline] Video ready at ${mediaUrl}!`);
     } catch (err: any) {
+      if (session.timeline !== renderTimeline) return;
       console.error(`❌ [Pipeline] Render failed for session ${sessionId}:`, err);
       session.renderState = {
         status: 'failed',
@@ -470,6 +490,112 @@ app.get('/api/pipeline/render/status/:sessionId', (req, res) => {
   }
   res.json({
     renderState: session.renderState || { status: 'idle', progress: 0 },
+  });
+});
+
+// 9. Server-Orchestrated Full Reel Generation (Persisted background job)
+app.post('/api/pipeline/generate-reel', async (req, res) => {
+  try {
+    const { topic, angle, sessionId } = req.body;
+    let targetSessionId = sessionId;
+    const jobId = req.body.jobId || `job_${randomUUID()}`;
+
+    if (!targetSessionId) {
+      if (!topic || !topic.trim()) {
+        return res.status(400).json({ error: 'Topic is required.' });
+      }
+      const tempId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      targetSessionId = tempId;
+      const initialSession: any = {
+        id: tempId,
+        jobId,
+        topic: topic.trim(),
+        angle: (angle || '').trim(),
+        messages: [{ role: 'user', content: `TOPIC: ${topic.trim()}`, timestamp: Date.now() }],
+        currentMarkdown: '',
+        sections: {},
+        storyboard: { topic: topic.trim(), title: topic.trim(), hook: '', learningObjective: '', scenes: [] },
+        finalized: false,
+        renderState: { status: 'idle', progress: 0 },
+        job: {
+          id: jobId,
+          status: 'running',
+          stage: 'scripting',
+          progress: 5,
+          message: 'Initializing server pipeline job...',
+          startedAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      masterScriptService.updateSession(initialSession);
+    }
+
+    const session = masterScriptService.getSession(targetSessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Initialize or refresh job state
+    if (!session.job || session.job.status === 'failed') {
+      const activeJobId = session.jobId || session.job?.id || jobId;
+      session.jobId = activeJobId;
+      session.job = {
+        id: activeJobId,
+        status: 'running',
+        stage: 'scripting',
+        progress: 5,
+        message: 'Initializing server pipeline job...',
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      masterScriptService.updateSession(session);
+    }
+
+    // Launch background execution independently of client connection
+    runServerPipeline(targetSessionId).catch((err) => {
+      console.error(`[Server Pipeline Background Failure][${targetSessionId}]:`, err);
+    });
+
+    res.json({
+      ok: true,
+      sessionId: targetSessionId,
+      session,
+      job: session.job,
+    });
+  } catch (err: any) {
+    console.error('[Generate Reel Endpoint Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. Pipeline Job & Session Status (Pollable after reload)
+app.get('/api/pipeline/status/:sessionId', (req, res) => {
+  const session = masterScriptService.getSession(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found' });
+  }
+
+  // Resume stalled running job if server process was restarted
+  if (
+    session.job?.status === 'running' &&
+    session.renderState?.status !== 'completed' &&
+    !isJobRunning(session.id)
+  ) {
+    console.log(`[Server Orchestrator] Resuming stalled job for session ${session.id}...`);
+    runServerPipeline(session.id).catch((err) => {
+      console.error(`[Server Pipeline Resume Failure][${session.id}]:`, err);
+    });
+  }
+
+  res.json({
+    ok: true,
+    sessionId: session.id,
+    session,
+    job: session.job || { status: 'idle', stage: 'scripting', progress: 0, message: '' },
+    renderState: session.renderState || { status: 'idle', progress: 0 },
+    mediaUrl: session.renderState?.mediaUrl || null,
   });
 });
 
@@ -507,17 +633,19 @@ app.post('/api/previews', async (req, res) => {
   if (!checkAuth(req)) return res.status(401).json({error: 'Invalid automation token'});
   const input = z.union([
     z.object({customScript: z.string().min(20).max(40000)}),
-    z.object({topic: z.string().min(5).max(200)}),
+    z.object({topic: z.string().min(5).max(200), angle: z.string().optional()}),
   ]).safeParse(req.body);
   if (!input.success) return res.status(400).json({error: 'Enter a topic or a complete script.'});
   try {
     const storyboard = 'customScript' in input.data
       ? await parseCustomScriptToStoryboard(input.data.customScript)
-      : await generateHinglishScript({topic: input.data.topic, targetDurationSec: 55});
+      : await generateHinglishScript({topic: input.data.topic, angle: input.data.angle, targetDurationSec: 105});
     const id = randomUUID();
-    const clip = path.resolve('media/previews', id, 'opening.mp3');
-    await getTTSProvider().synthesizeClip(storyboard.scenes[0].narration, clip);
-    res.json({storyboard, audioUrl: `/media/previews/${id}/opening.mp3`});
+    const dir = path.resolve('media/previews', id);
+    const {clips} = await synthesizeStoryboardNarration(
+      {...storyboard, scenes: storyboard.scenes.slice(0,1)}, dir, getTTSProvider(), {fitDuration:false, align:false}
+    );
+    res.json({storyboard, audioUrl: `/media/previews/${id}/${path.basename(clips[0].filePath)}`});
   } catch (err: any) {
     res.status(422).json({error: err.message});
   }
@@ -532,6 +660,7 @@ app.post('/api/videos', async (req, res) => {
   const parsed = z
     .object({
       topic: z.string().min(5).max(300).optional(),
+      angle: z.string().min(3).max(300).optional(),
       example: z.enum(['react-state', 'checkout', 'retrieval']).optional(),
       scheduleKey: z.string().min(1).max(200).optional(),
       customScript: z.string().min(20).max(40000).optional(),
@@ -587,7 +716,7 @@ app.post('/api/videos', async (req, res) => {
 
     await queue.add(
       'generate',
-      { id },
+      { id, topic, angle: parsed.data.angle },
       {
         jobId: id,
         attempts: 2,

@@ -128,23 +128,42 @@ function App() {
   useEffect(() => {
     async function loadSessions() {
       try {
+        const savedId = localStorage.getItem('socialstudio_active_session');
         const res = await fetch(toApiUrl('/api/pipeline/sessions'));
         if (res.ok) {
           const list = await res.json();
-          if (list && list.length > 0) {
-            // Load latest session
-            const latestRes = await fetch(toApiUrl(`/api/pipeline/script/${list[0].id}`));
+          const targetId = (savedId && list.some(s => s.id === savedId)) ? savedId : (list && list.length > 0 ? list[0].id : null);
+          if (targetId) {
+            const latestRes = await fetch(toApiUrl(`/api/pipeline/status/${targetId}`));
             if (latestRes.ok) {
-              const fullSession = await latestRes.json();
+              const statusData = await latestRes.json();
+              const fullSession = statusData.session || {};
               setSession(fullSession);
               setTopic(fullSession.topic || '');
               setAngle(fullSession.angle || '');
               if (fullSession.audioResult) setAudioResult(fullSession.audioResult);
               if (fullSession.stillPreviews) setStills(fullSession.stillPreviews);
-              if (fullSession.renderState?.mediaUrl) setRenderedMediaUrl(fullSession.renderState.mediaUrl);
-              if (fullSession.renderState?.qa) setQaReport(fullSession.renderState.qa);
-              if (fullSession.finalized) {
-                setStage(fullSession.renderState?.mediaUrl ? 4 : fullSession.audioResult ? 3 : 2);
+              if (savedId) {
+                const job = statusData.job;
+                const rState = statusData.renderState || fullSession.renderState;
+                if (job?.status === 'running' || rState?.status === 'rendering') {
+                  setRendering(true);
+                  setRenderProgress(job?.progress || rState?.progress || 10);
+                  setStage(4);
+                } else if (job?.status === 'completed' || rState?.status === 'completed') {
+                  setRendering(false);
+                  setRenderedMediaUrl(statusData.mediaUrl || rState?.mediaUrl);
+                  setQaReport(job?.qa || rState?.qa);
+                  setStage(4);
+                } else if (job?.status === 'failed' || rState?.status === 'failed') {
+                  setRendering(false);
+                  setRenderError(job?.error || rState?.error || 'Video generation failed');
+                  setStage(4);
+                } else {
+                  setStage(rState?.mediaUrl ? 4 : fullSession.audioResult ? 3 : fullSession.finalized ? 2 : 1);
+                }
+              } else {
+                setStage(1);
               }
             }
           }
@@ -156,33 +175,39 @@ function App() {
     loadSessions();
   }, []);
 
-  // Poll render status when rendering
+  // Poll server pipeline job and render status
   useEffect(() => {
     let interval = null;
     if (rendering && session?.id) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(toApiUrl(`/api/pipeline/render/status/${session.id}`));
+          const res = await fetch(toApiUrl(`/api/pipeline/status/${session.id}`));
           if (res.ok) {
             const data = await res.json();
-            const state = data.renderState;
-            if (state) {
-              setRenderProgress(state.progress || 0);
-              if (state.status === 'completed') {
+            const job = data.job;
+            const rState = data.renderState || data.session?.renderState;
+            if (data.session) {
+              setSession(data.session);
+              if (data.session.audioResult) setAudioResult(data.session.audioResult);
+              if (data.session.stillPreviews) setStills(data.session.stillPreviews);
+            }
+            if (job) {
+              setRenderProgress(job.progress || rState?.progress || 0);
+              if (job.status === 'completed' || rState?.status === 'completed') {
                 setRendering(false);
-                setRenderedMediaUrl(state.mediaUrl);
-                setQaReport(state.qa);
+                setRenderedMediaUrl(data.mediaUrl || rState?.mediaUrl);
+                setQaReport(job.qa || rState?.qa);
                 setStage(4);
-              } else if (state.status === 'failed') {
+              } else if (job.status === 'failed' || rState?.status === 'failed') {
                 setRendering(false);
-                setRenderError(state.error || 'Video rendering failed.');
+                setRenderError(job.error || rState?.error || 'Pipeline execution failed.');
               }
             }
           }
         } catch (e) {
-          console.warn('Render status polling error:', e);
+          console.warn('Pipeline status polling error:', e);
         }
-      }, 2000);
+      }, 1500);
     }
     return () => clearInterval(interval);
   }, [rendering, session?.id]);
@@ -211,6 +236,48 @@ function App() {
   // PIPELINE HANDLERS
   // ==========================================
 
+  function clearRenderPreview() {
+    setStills([]);
+    setSelectedStill(null);
+    setQaReport(null);
+    setRendering(false);
+    setRenderProgress(0);
+    setRenderError('');
+    setRenderedMediaUrl('');
+  }
+
+  // 0. Server-Orchestrated Full Reel Generator: Start -> Finalize -> Audio -> Stills -> Render without browser dependencies
+  async function handleGenerateReel() {
+    if (!topic.trim()) return;
+    setStudioLoading(true);
+    setLegacyError('');
+    setRenderError('');
+    clearRenderPreview();
+    try {
+      console.log('[Dashboard] Triggering server-orchestrated reel generation for:', topic);
+      const res = await fetch(toApiUrl('/api/pipeline/generate-reel'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim(), angle: angle.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to start reel generation');
+
+      const curSession = data.session || { id: data.sessionId };
+      setSession(curSession);
+      localStorage.setItem('socialstudio_active_session', data.sessionId);
+      setRendering(true);
+      setRenderProgress(data.job?.progress || 10);
+      setStage(4);
+    } catch (err) {
+      console.error('[Dashboard Error]:', err);
+      setRenderError(err.message);
+      alert(`Reel Generation Error: ${err.message}`);
+    } finally {
+      setStudioLoading(false);
+    }
+  }
+
   // 1. Generate Initial Master Script
   async function handleGenerateScript() {
     if (!topic.trim()) return;
@@ -225,6 +292,8 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to generate script');
       setSession(data);
+      setAudioResult(null);
+      clearRenderPreview();
       setStage(1);
     } catch (err) {
       alert(`Script Generation Error: ${err.message}`);
@@ -248,6 +317,9 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Refinement failed');
       setSession(data);
+      setVoiceEdits(edits => ({...edits, [data.id]: {}}));
+      setAudioResult(null);
+      clearRenderPreview();
     } catch (err) {
       alert(`Chat Refinement Error: ${err.message}`);
     } finally {
@@ -294,6 +366,7 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Audio synthesis failed');
       setAudioResult(data.audioResult);
+      clearRenderPreview();
       // Reload session
       const sessRes = await fetch(toApiUrl(`/api/pipeline/script/${session.id}`));
       if (sessRes.ok) setSession(await sessRes.json());
@@ -490,16 +563,40 @@ function App() {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      disabled={studioLoading || !topic.trim()}
+                      id="btn-generate-reel"
+                      disabled={studioLoading || rendering || !topic.trim()}
+                      onClick={handleGenerateReel}
+                      style={{
+                        height: 38,
+                        padding: '0 20px',
+                        gap: 8,
+                        background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+                        color: '#000',
+                        fontWeight: 800,
+                        boxShadow: '0 4px 15px rgba(0, 242, 254, 0.35)',
+                      }}
+                    >
+                      {rendering || studioLoading ? (
+                        <RefreshCw size={13} className="animate-spin" />
+                      ) : (
+                        <Zap size={13} />
+                      )}
+                      <span>{rendering ? `Rendering (${renderProgress}%)` : studioLoading ? 'Processing Reel...' : '⚡ Generate Reel'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={studioLoading || rendering || !topic.trim()}
                       onClick={handleGenerateScript}
-                      style={{ height: 38, padding: '0 18px', gap: 8 }}
+                      style={{ height: 38, padding: '0 16px', gap: 8 }}
                     >
                       {studioLoading ? (
                         <RefreshCw size={13} className="animate-spin" />
                       ) : (
                         <Wand2 size={13} />
                       )}
-                      <span>{studioLoading ? 'Generating Script...' : 'Generate Master Script'}</span>
+                      <span>Script Only</span>
                     </button>
                   </div>
 
@@ -634,7 +731,7 @@ function App() {
                             className={`script-tab-btn ${activeScriptTab === 'acts' ? 'active' : ''}`}
                             onClick={() => setActiveScriptTab('acts')}
                           >
-                            <Volume2 size={12} /> 5-Act Voiceover
+                            <Volume2 size={12} /> Voiceover Script
                           </button>
                           <button
                             type="button"
@@ -687,7 +784,7 @@ function App() {
                             <div className="act-card-item" style={{ borderLeft: '3px solid #3b82f6' }}>
                               <div className="act-card-top">
                                 <span className="act-card-badge" style={{ background: '#3b82f6', color: '#fff' }}>
-                                  Section 2: Final Voiceover (5 Acts)
+                                  Section 2: Final Voiceover Script
                                 </span>
                               </div>
                               <div className="act-card-text" style={{ whiteSpace: 'pre-wrap' }}>
@@ -821,7 +918,7 @@ function App() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>Synthesize Spoken Audio</div>
                     <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                      Synthesizes all 5 scene acts and combines them into master audio. Strictly on-demand to protect your credits!
+                      Synthesizes complete storyboard narration and builds master timeline audio (90–120s budget).
                     </div>
                   </div>
 
@@ -889,18 +986,18 @@ function App() {
                       />
                     </div>
 
-                    {/* INDIVIDUAL ACT PLAYERS */}
+                    {/* INDIVIDUAL SCENE AUDIO PLAYERS */}
                     <div className="audio-scenes-grid">
                       {audioResult.clips?.map((clip, idx) => (
                         <div key={idx} className="audio-scene-card">
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span className="badge-mono">Act {idx + 1}</span>
+                            <span className="badge-mono">Scene {idx + 1}</span>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                               {(clip.durationMs / 1000).toFixed(1)}s
                             </span>
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', maxHeight: 40, overflow: 'hidden' }}>
-                            {session?.storyboard?.scenes?.[idx]?.narration || `Act ${idx + 1} Narration`}
+                            {session?.storyboard?.scenes?.[idx]?.narration || `Scene ${idx + 1} Narration`}
                           </div>
                           <audio controls src={toApiUrl(clip.url)} style={{ width: '100%', height: 32 }} />
                         </div>
@@ -977,7 +1074,7 @@ function App() {
                     </button>
 
                     <div className="badge-mono" style={{ background: '#3b82f6', color: '#fff' }}>
-                      {session?.storyboard?.scenes?.length || 5} Scenes • {audioResult?.totalDurationSec || 75}s
+                      {session?.storyboard?.scenes?.length ?? 0} scenes • {session?.timeline && audioResult ? `${session.timeline.totalDurationSec}s timeline` : `~${session?.storyboard?.estimatedDurationSec ?? 55}s estimated`}
                     </div>
                   </div>
                 </div>
@@ -1193,6 +1290,7 @@ function App() {
                         type="button"
                         className="btn btn-secondary"
                         onClick={() => {
+                          localStorage.removeItem('socialstudio_active_session');
                           setSession(null);
                           setAudioResult(null);
                           setRenderedMediaUrl('');

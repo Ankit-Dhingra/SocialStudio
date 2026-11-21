@@ -43,7 +43,7 @@ LANGUAGE RULES (70:30 HINGLISH)
 - Technical terms ko synthetic Hindi mein translate mat karo (no "vitrit len-den", no "vilambata").
 
 HARD RULES
-- Reel length: 60-90 sec, approx 150-220 words total. Chhote vaakya. Ek reel = ek core idea + ek tradeoff.
+- Reel length: 50-60 sec, approx 125-145 words total. Chhote vaakya. Ek reel = ek core idea + ek tradeoff.
 - Example reels sirf style reference hain. Unki koi line, analogy ya example copy mat karo. Naya relatable scenario socho.
 - Facts: Jo engineering blogs/talks se confirmed hai wahi fact ki tarah bolo. Baaki ko "ek possible design aisa ho sakta hai" frame karo. Internal numbers invent mat karo.
 - Visual anchors: Script mein har act ke 1-2 key components ko **bold** karo (jaise **Redis**, **Queue**, **Worker**, **Shard Key**).
@@ -51,9 +51,9 @@ HARD RULES
 5-ACT STRUCTURE
 Act 1 (0-6s) Relatable Hook: Roz ka relatable scenario (subah chai, food delivery, payment soundbox, interview first question).
 Act 2 (6-12s) Counter-Intuitive Paradox: Common developer assumption todo. Shock factor ya mystery create karo.
-Act 3 (12-50s) Architecture Flow: Client -> Gateway -> Queue/Sharding/Cache -> Worker -> DB. Step-by-step relay, har step ek crisp beat.
-Act 4 (50-70s) Aha Reveal: Asli mechanism jo sab badal deta hai (e.g. Deferred Net Settlement, H3 spatial cells, Redis TTL overwrite).
-Act 5 (70-90s) Tradeoff Dilemma: Genuine engineering tradeoff + viewer se sawaal ("Ab system tumhara hai: A ya B?") + Save/Share CTA.
+Act 3 (12-37s) Architecture Flow: Client -> Gateway -> Queue/Sharding/Cache -> Worker -> DB. Step-by-step relay, har step ek crisp beat.
+Act 4 (37-48s) Aha Reveal: Asli mechanism jo sab badal deta hai (e.g. Deferred Net Settlement, H3 spatial cells, Redis TTL overwrite).
+Act 5 (48-55s) Tradeoff Dilemma: Genuine engineering tradeoff + viewer se sawaal ("Ab system tumhara hai: A ya B?") + Save/Share CTA.
 
 OUTPUT FORMAT (strictly in this order):
 1. HOOK OPTIONS: 5 distinct 1-line hooks. Ek line mein likho kaunsa recommended hai aur kyun.

@@ -14,6 +14,8 @@ interface TradeoffDecisionHUDSceneProps {
   optionB_Cons?: string;
   interviewPoints?: string[];
   callToAction?: string;
+  channelName?: string;
+  channelHandle?: string;
 }
 
 export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> = ({
@@ -26,10 +28,13 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
   optionB_Pros = 'Ultra-lightweight in-memory footprint',
   optionB_Cons = 'Border pricing anomalies at boundary edges',
   interviewPoints = [
-    'H3 Spatial Indexing converts geometric polygons to O(1) string hashes',
-    'Redis in-memory caching serves dynamic surge pricing under 4ms',
+    'Price signals live supply-demand deficit, not static distance alone',
+    'Spatial indexing converts geometric polygons to O(1) string hashes',
+    'Heartbeat TTL freshness checks prevent ghost rider cache bugs',
   ],
   callToAction = 'Save this reel for your System Design Interview & follow for more!',
+  channelName = 'Behind The Stack',
+  channelHandle = '@behindthestack',
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -39,6 +44,10 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
     fps,
     config: { damping: 14, stiffness: 85 },
   });
+
+  const p1 = interviewPoints[0] || 'Price signals live supply-demand deficit, not static distance alone';
+  const p2 = interviewPoints[1] || 'Spatial indexing converts lookups to in-memory O(1) cell IDs';
+  const p3 = interviewPoints[2] || 'Heartbeat TTL freshness checks prevent stale cache anomalies';
 
   const cardEntranceA = spring({
     frame: Math.max(0, frame - 8),
@@ -63,20 +72,16 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
       style={{
         display: 'flex',
         flexDirection: 'column',
-        paddingTop: 120,
+        paddingTop: VideoDesignTokens.safeMargin.top,
         paddingBottom: VideoDesignTokens.safeMargin.bottom,
-        paddingLeft: 40,
-        paddingRight: 40,
+        paddingLeft: VideoDesignTokens.safeMargin.left,
+        paddingRight: VideoDesignTokens.safeMargin.right,
         justifyContent: 'space-between',
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
         color: '#FFFFFF',
         overflow: 'hidden',
       }}
     >
-      {/* Cinematic Layercut & 3D Glass Ribbon */}
-      <LayercutWordBehind word="TRADEOFF" topPercent={24} color="rgba(250, 204, 21, 0.05)" />
-      <SpiralGlassRibbon topPercent={40} rotationDeg={-12} />
-
       {/* Header Pill & Title */}
       <div style={{ transform: `scale(${entrance})`, textAlign: 'center', zIndex: 10 }}>
         <div
@@ -85,180 +90,286 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
             alignItems: 'center',
             gap: 10,
             padding: '8px 24px',
-            background: 'rgba(234, 179, 8, 0.15)',
-            border: '1.5px solid rgba(234, 179, 8, 0.5)',
+            background: frame >= 350 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+            border: `1.5px solid ${frame >= 350 ? 'rgba(56, 189, 248, 0.5)' : 'rgba(234, 179, 8, 0.5)'}`,
             borderRadius: 30,
             marginBottom: 10,
-            boxShadow: '0 0 25px rgba(234, 179, 8, 0.25)',
+            boxShadow: frame >= 350 ? '0 0 25px rgba(56, 189, 248, 0.25)' : '0 0 25px rgba(234, 179, 8, 0.25)',
           }}
         >
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#EAB308', boxShadow: '0 0 10px #EAB308' }} />
-          <span style={{ fontSize: 18, fontWeight: 900, letterSpacing: 3, color: '#FDE047', textTransform: 'uppercase' }}>
-            SENIOR SDE-3 DECISION MATRIX
+          <div
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: frame >= 350 ? '#38BDF8' : '#EAB308',
+              boxShadow: `0 0 10px ${frame >= 350 ? '#38BDF8' : '#EAB308'}`,
+            }}
+          />
+          <span
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
+              letterSpacing: 3,
+              color: frame >= 350 ? '#38BDF8' : '#FDE047',
+              textTransform: 'uppercase',
+            }}
+          >
+            {frame >= 350 ? 'BEHIND THE STACK • EXCLUSIVE' : 'SENIOR SDE INTERVIEW MATRIX'}
           </span>
         </div>
         <h1 style={{ fontSize: 48, fontWeight: 900, color: '#FFFFFF', margin: '0 0 6px 0' }}>
-          {title}
+          {frame >= 350 ? 'FOLLOW FOR DEEP SYSTEM DESIGN' : title}
         </h1>
         <p style={{ fontSize: 22, fontWeight: 600, color: '#94A3B8', margin: 0 }}>
-          {subtitle}
+          {frame >= 350 ? 'Decoding complex engineering systems behind tech giants' : subtitle}
         </p>
       </div>
 
-      {/* Futuristic Radial Gauge Columns (No Boring Note Boxes!) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, zIndex: 10 }}>
-        {/* OPTION A: MICRO-HEX */}
+      {/* Dynamic Cut Switch: Cut 4.1 (SDE Cheat-Sheet HUD) vs Cut 4.2 (Screenshot Moment & Behind The Stack Follow CTA) */}
+      {frame < 350 ? (
+        /* CUT 4.1: SDE INTERVIEW CHEAT-SHEET HUD (Frames 0 to 350 / 0s - 12s) */
         <div
           style={{
-            transform: `translateY(${(1 - cardEntranceA) * 60}px)`,
-            opacity: cardEntranceA,
-            background: 'linear-gradient(145deg, rgba(16, 185, 129, 0.16) 0%, rgba(15, 23, 42, 0.9) 100%)',
-            backdropFilter: 'blur(20px)',
-            border: '1.5px solid rgba(16, 185, 129, 0.45)',
-            borderRadius: 28,
-            padding: '24px 20px',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(16, 185, 129, 0.2)',
+            position: 'absolute',
+            top: 360,
+            bottom: 530,
+            left: 60,
+            right: 140,
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
+            justifyContent: 'center',
+            gap: 20,
+            zIndex: 30,
+            transform: `scale(${entrance})`,
           }}
         >
-          {/* Radial Circular Dial */}
-          <div style={{ position: 'relative', width: 110, height: 110, marginBottom: 12 }}>
-            <svg width="110" height="110" viewBox="0 0 110 110">
-              <circle cx="55" cy="55" r="46" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-              <circle
-                cx="55"
-                cy="55"
-                r="46"
-                fill="none"
-                stroke="#10B981"
-                strokeWidth="8"
-                strokeDasharray={circumference}
-                strokeDashoffset={circumference * (1 - dialA)}
-                strokeLinecap="round"
-                transform="rotate(-90 55 55)"
-                filter="drop-shadow(0 0 8px #10B981)"
-              />
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 24, fontWeight: 900, color: '#34D399' }}>95%</span>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8' }}>ACCURACY</span>
+          {/* Pillar 1 */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(15, 23, 42, 0.95) 100%)',
+              border: '1.5px solid rgba(56, 189, 248, 0.5)',
+              borderRadius: 22,
+              padding: '18px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 18,
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.7)',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                background: 'rgba(56, 189, 248, 0.2)',
+                border: '1.5px solid #38BDF8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+              }}
+            >
+              1
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#FFFFFF', lineHeight: 1.3 }}>
+                {p1}
+              </div>
             </div>
           </div>
 
-          <div style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF', marginBottom: 6 }}>
-            {optionA_Title.replace(/^OPTION A:\s*/i, '')}
-          </div>
-          <div style={{ fontSize: 14, color: '#34D399', fontWeight: 700, marginBottom: 12 }}>
-            ✓ {optionA_Pros}
-          </div>
-
+          {/* Pillar 2 */}
           <div
             style={{
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              color: '#FCA5A5',
-              padding: '6px 12px',
-              borderRadius: 12,
-              fontSize: 13,
-              fontWeight: 800,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(15, 23, 42, 0.95) 100%)',
+              border: '1.5px solid rgba(16, 185, 129, 0.5)',
+              borderRadius: 22,
+              padding: '18px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 18,
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.7)',
             }}
           >
-            ⚠️ High RAM Footprint
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '1.5px solid #10B981',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+              }}
+            >
+              2
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#FFFFFF', lineHeight: 1.3 }}>
+                {p2}
+              </div>
+            </div>
+          </div>
+
+          {/* Pillar 3 */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(15, 23, 42, 0.95) 100%)',
+              border: '1.5px solid rgba(245, 158, 11, 0.5)',
+              borderRadius: 22,
+              padding: '18px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 18,
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.7)',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 14,
+                background: 'rgba(245, 158, 11, 0.2)',
+                border: '1.5px solid #F59E0B',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+              }}
+            >
+              3
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#FFFFFF', lineHeight: 1.3 }}>
+                {p3}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* OPTION B: MACRO-ZONES */}
+      ) : (
+        /* CUT 4.2: VIRAL SCREENSHOT MOMENT & BEHIND THE STACK FOLLOW CTA (Frames 350 to end / 12s - 24s) */
         <div
           style={{
-            transform: `translateY(${(1 - cardEntranceB) * 60}px)`,
-            opacity: cardEntranceB,
-            background: 'linear-gradient(145deg, rgba(56, 189, 248, 0.16) 0%, rgba(15, 23, 42, 0.9) 100%)',
-            backdropFilter: 'blur(20px)',
-            border: '1.5px solid rgba(56, 189, 248, 0.45)',
-            borderRadius: 28,
-            padding: '24px 20px',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.2)',
+            position: 'absolute',
+            top: 350,
+            bottom: 530,
+            left: 60,
+            right: 140,
             display: 'flex',
             flexDirection: 'column',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            textAlign: 'center',
+            zIndex: 30,
+            transform: `scale(${spring({ frame: frame - 350, fps, config: { damping: 14, stiffness: 100 } })})`,
           }}
         >
-          {/* Radial Circular Dial */}
-          <div style={{ position: 'relative', width: 110, height: 110, marginBottom: 12 }}>
-            <svg width="110" height="110" viewBox="0 0 110 110">
-              <circle cx="55" cy="55" r="46" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="8" />
-              <circle
-                cx="55"
-                cy="55"
-                r="46"
-                fill="none"
-                stroke="#38BDF8"
-                strokeWidth="8"
-                strokeDasharray={circumference}
-                strokeDashoffset={circumference * (1 - dialB)}
-                strokeLinecap="round"
-                transform="rotate(-90 55 55)"
-                filter="drop-shadow(0 0 8px #38BDF8)"
-              />
-            </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 24, fontWeight: 900, color: '#38BDF8' }}>65%</span>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8' }}>ACCURACY</span>
-            </div>
-          </div>
-
-          <div style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF', marginBottom: 6 }}>
-            {optionB_Title.replace(/^OPTION B:\s*/i, '')}
-          </div>
-          <div style={{ fontSize: 14, color: '#38BDF8', fontWeight: 700, marginBottom: 12 }}>
-            ✓ {optionB_Pros}
-          </div>
-
+          {/* Prominent Screenshot Banner */}
           <div
             style={{
-              background: 'rgba(234, 179, 8, 0.15)',
-              border: '1px solid rgba(234, 179, 8, 0.4)',
-              color: '#FDE047',
-              padding: '6px 12px',
-              borderRadius: 12,
-              fontSize: 13,
-              fontWeight: 800,
+              width: '100%',
+              background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.25) 0%, rgba(15, 23, 42, 0.98) 100%)',
+              border: '2px solid #EAB308',
+              borderRadius: 26,
+              padding: '20px 24px',
+              textAlign: 'center',
+              boxShadow: '0 0 40px rgba(234, 179, 8, 0.4)',
+              transform: `scale(${1 + Math.sin(frame / 6) * 0.02})`,
             }}
           >
-            ⚠️ Border Price Jitter
+            <div style={{ fontSize: 32 }}>📸 📌</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF', marginTop: 6 }}>
+              TAKE A SCREENSHOT NOW
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#FDE047', marginTop: 4 }}>
+              Bookmark for your next Senior SDE System Design interview
+            </div>
+          </div>
+
+          {/* Behind The Stack Follow Card */}
+          <div
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%)',
+              border: '2px solid rgba(56, 189, 248, 0.6)',
+              borderRadius: 28,
+              padding: '28px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.9), 0 0 35px rgba(56, 189, 248, 0.3)',
+            }}
+          >
+            {/* Channel Logo Icon */}
+            <div
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: 24,
+                background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 40,
+                boxShadow: '0 10px 30px rgba(0, 242, 254, 0.5)',
+                marginBottom: 14,
+              }}
+            >
+              ⚡
+            </div>
+
+            <div style={{ fontSize: 30, fontWeight: 900, color: '#FFFFFF' }}>
+              {channelName}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#38BDF8', marginTop: 2 }}>
+              {channelHandle}
+            </div>
+
+            <div style={{ fontSize: 14, color: '#94A3B8', marginTop: 10, maxWidth: 380 }}>
+              Decoding complex engineering systems behind real-world tech giants.
+            </div>
+
+            {/* Glowing Pulsing Follow Button */}
+            <div
+              style={{
+                marginTop: 20,
+                background: 'linear-gradient(135deg, #38BDF8 0%, #0284C7 100%)',
+                color: '#FFFFFF',
+                fontWeight: 900,
+                fontSize: 20,
+                letterSpacing: 1.5,
+                padding: '14px 44px',
+                borderRadius: 999,
+                boxShadow: '0 0 30px rgba(56, 189, 248, 0.6)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                transform: `scale(${1 + Math.sin(frame / 5) * 0.04})`,
+              }}
+            >
+              <span>FOLLOW NOW</span>
+              <span style={{ fontSize: 22 }}>🔔</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* SDE-3 Architectural Verdict Banner */}
-      <div style={{ zIndex: 10 }}>
+      {/* Camera Shutter Flash Overlay at Frame 350 */}
+      {frame >= 350 && frame < 365 && (
         <div
           style={{
-            background: 'linear-gradient(90deg, rgba(234, 179, 8, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%)',
-            border: '1.5px solid rgba(234, 179, 8, 0.6)',
-            borderRadius: 22,
-            padding: '18px 24px',
-            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(234, 179, 8, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
+            position: 'absolute',
+            inset: 0,
+            background: '#FFFFFF',
+            opacity: interpolate(frame, [350, 354, 365], [0, 0.85, 0]),
+            pointerEvents: 'none',
+            zIndex: 100,
           }}
-        >
-          <span style={{ fontSize: 28 }}>⚖️</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#FDE047', letterSpacing: 2 }}>
-              THE SENIOR SDE ANSWER
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.3, marginTop: 2 }}>
-              Micro-hex in dense urban cores; fallback to macro-zones in rural corridors.
-            </div>
-          </div>
-        </div>
-      </div>
+        />
+      )}
     </AbsoluteFill>
   );
 };

@@ -1,3 +1,4 @@
+import {compositionSignature} from './bundle-signature.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,6 +25,7 @@ export interface RenderResult {
   renderTimeMs: number;
 }
 
+let cachedSignature = '';
 let cachedBundlePromise: Promise<string> | null = null;
 
 function getChromeExecutable(): string | undefined {
@@ -53,11 +55,12 @@ function findFfprobe(): string {
 function getRenderingConfig() {
   const numCpus = os.cpus()?.length || 4;
 
-  // Concurrency: Use env if provided, or scale intelligently (min 2, max 8, default ~50% of cores)
+  // Concurrency: Use env if provided. On Windows, cap at 2-3 to avoid GPU/DirectX memory crashes under ANGLE.
   const envConcurrency = process.env.REMOTION_CONCURRENCY ? Number(process.env.REMOTION_CONCURRENCY) : undefined;
+  const defaultConcurrency = os.platform() === 'win32' ? 2 : Math.max(2, Math.min(6, Math.floor(numCpus * 0.5)));
   const concurrency = envConcurrency && !Number.isNaN(envConcurrency) && envConcurrency > 0
     ? envConcurrency
-    : Math.max(2, Math.min(8, Math.floor(numCpus * 0.5)));
+    : defaultConcurrency;
 
   // FFmpeg threads for video stitcher
   const ffmpegThreads = Math.max(2, Math.min(8, Math.floor(numCpus * 0.5)));
@@ -70,35 +73,48 @@ function getRenderingConfig() {
   return { concurrency, ffmpegThreads, gl, browserExecutable };
 }
 
-async function getOrCreateBundle(): Promise<string> {
+function stageRunAudio(location: string, timeline: VideoTimeline) {
+  // A development bundle snapshots public/. Later jobs introduce new run-specific assets.
+  for (const {audioSrc} of timeline.segments) {
+    if (!/^audio\/runs\/[\w./-]+$/.test(audioSrc) || audioSrc.split('/').includes('..')) continue;
+    const target = path.join(location, 'public', audioSrc);
+    fs.mkdirSync(path.dirname(target), {recursive:true});
+    fs.copyFileSync(path.resolve('remotion/public', audioSrc), target);
+  }
+}
+
+export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string> {
   const prebuilt = path.resolve('dist-remotion');
-  if (fs.existsSync(path.join(prebuilt, 'index.html'))) {
+  const signature = compositionSignature();
+  const stamp = path.join(prebuilt, 'composition.sha256');
+  if (fs.existsSync(path.join(prebuilt, 'index.html')) && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8') === signature) {
+    stageRunAudio(prebuilt, timeline);
     return prebuilt;
   }
 
-  if (cachedBundlePromise) {
-    return cachedBundlePromise;
-  }
-
-  cachedBundlePromise = (async () => {
-    console.log('[Renderer] Bundling Remotion project (in-memory cached)...');
-    const entryPoint = path.resolve('remotion/index.ts');
-    return bundle({
-      entryPoint,
-      publicDir: path.resolve('remotion/public'),
-      webpackOverride: (config) => ({
-        ...config,
-        resolve: {
-          ...config.resolve,
-          extensionAlias: {
-            '.js': ['.ts', '.tsx', '.js'],
+  if (!cachedBundlePromise || cachedSignature !== signature) {
+    cachedSignature = signature;
+    cachedBundlePromise = (async () => {
+      console.log('[Renderer] Bundling Remotion project (in-memory cached)...');
+      const entryPoint = path.resolve('remotion/index.ts');
+      return bundle({
+        entryPoint,
+        publicDir: path.resolve('remotion/public'),
+        webpackOverride: (config) => ({
+          ...config,
+          resolve: {
+            ...config.resolve,
+            extensionAlias: {
+              '.js': ['.ts', '.tsx', '.js'],
+            },
           },
-        },
-      }),
-    });
-  })();
-
-  return cachedBundlePromise;
+        }),
+      });
+    })().catch(error => { cachedBundlePromise = null; throw error; });
+  }
+  const location = await cachedBundlePromise;
+  stageRunAudio(location, timeline);
+  return location;
 }
 
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
@@ -110,7 +126,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
   }
 
   const startTime = Date.now();
-  const bundleLocation = await getOrCreateBundle();
+  const bundleLocation = await getOrCreateBundle(timeline);
   const { concurrency, ffmpegThreads, gl, browserExecutable } = getRenderingConfig();
 
   console.log(`[Renderer] Optimizing render pipeline: concurrency=${concurrency}, ffmpegThreads=${ffmpegThreads}, gl=${gl}, browser=${browserExecutable || 'remotion-default'}`);
@@ -148,7 +164,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
     concurrency,
-    disallowParallelEncoding: false,
+    disallowParallelEncoding: true,
     enforceAudioTrack: true,
     timeoutInMilliseconds: 1200000,
     browserExecutable,
@@ -233,7 +249,7 @@ export async function renderStillPreviews(
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const bundleLocation = await getOrCreateBundle();
+  const bundleLocation = await getOrCreateBundle(timeline);
   const { gl, browserExecutable } = getRenderingConfig();
 
   const composition = await selectComposition({

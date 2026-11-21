@@ -10,6 +10,7 @@ export interface SceneTimelineSegment {
   audioDurationMs: number;
   cueFrames?: number[];
   wordFrames?: number[];
+  speechRanges?: Array<{start: number; end: number}>;
   audioSrc: string; // e.g. 'audio/runs/test-run-1/scene-0.mp3'
 }
 
@@ -90,7 +91,7 @@ function estimateWordStarts(
 
 export function buildVideoTimeline(
   storyboard: Storyboard,
-  clips: SynthesizedAudioClip[],
+  clips: SynthesizedAudioClip[] = [],
   options: {
     fps?: number;
     scenePaddingFrames?: number;
@@ -100,7 +101,7 @@ export function buildVideoTimeline(
 ): VideoTimeline {
   const {
     fps = 30,
-    scenePaddingFrames = 12, // 0.4s breathing room between scenes
+    scenePaddingFrames = Math.round(fps * 0.06),
     bgmSrc,
     audioSrcPrefix = '',
   } = options;
@@ -114,7 +115,7 @@ export function buildVideoTimeline(
 
     const audioDurationMs = clip ? clip.durationMs : scene.durationTargetSec * 1000;
     const audioFrames = Math.ceil((audioDurationMs * fps) / 1000);
-    const durationInFrames = audioFrames + (i === storyboard.scenes.length - 1 ? Math.max(fps * 2, scenePaddingFrames) : scenePaddingFrames);
+    const durationInFrames = audioFrames + (i === storyboard.scenes.length - 1 ? Math.max(Math.round(fps * 0.35), scenePaddingFrames) : scenePaddingFrames);
 
     const audioSrc = clip
       ? audioSrcPrefix
@@ -124,24 +125,112 @@ export function buildVideoTimeline(
 
     const cleanWords = tokenize(scene.narration);
     const toFrame = (seconds: number) => Math.max(0, Math.min(audioFrames - 1, Math.round(seconds * fps)));
-    const spoken = clip?.wordTimestamps?.filter(word =>
+    const duration = audioDurationMs / 1000;
+    const speechRanges: Array<{start: number; end: number}> = [];
+    let cursor = 0;
+    for (const quiet of clip?.quietIntervals || []) {
+      if (quiet.start > cursor) speechRanges.push({start: cursor, end: Math.min(quiet.start, duration)});
+      cursor = Math.max(cursor, quiet.end);
+    }
+    if (cursor < duration) speechRanges.push({start: cursor, end: duration});
+    const alignment = clip?.alignment;
+    const nativeWords = alignment && Array.from(alignment.text.matchAll(/\S+/g), m => ({
+      word: m[0], start: alignment.starts[m.index!], end: alignment.starts[m.index! + m[0].length] ?? duration,
+    }));
+    const spoken = (nativeWords ?? clip?.wordTimestamps)?.filter(word =>
       typeof word.word === 'string' && Number.isFinite(word.start) && Number.isFinite(word.end)
     ).sort((a, b) => a.start - b.start);
     let wordFrames: number[] | undefined;
     if (spoken?.length && cleanWords.length) {
-      const voiceWords = scene.spokenNarration ? tokenize(scene.spokenNarration) : cleanWords;
-      const alignmentWords = voiceWords.length === cleanWords.length ? voiceWords : cleanWords;
-      wordFrames = estimateWordStarts(alignmentWords, spoken, audioDurationMs / 1000).map(toFrame);
-    } else if (clip?.alignment?.text === scene.narration && !scene.narration.includes('<')) {
-      wordFrames = Array.from(scene.narration.matchAll(/\S+/g), match =>
-        toFrame(clip.alignment!.starts[match.index!])
-      );
+      const voiceWords = tokenize(clip?.spokenText || scene.spokenNarration || scene.narration);
+      // Align in the spoken script first. Expanded acronyms and prices can add several
+      // spoken words to one display token. Preserve sentence starts across scripts.
+      const useVoice = matchSpokenWords(voiceWords, spoken).size > matchSpokenWords(cleanWords, spoken).size;
+      const alignmentWords = useVoice ? voiceWords : cleanWords;
+      const times = estimateWordStarts(alignmentWords, spoken, duration);
+      const boundaries = (words: string[]) => [0, ...words.flatMap((w,i) =>
+        i < words.length-1 && /[.!?।]["'’”]?$/.test(w) ? [i+1] : []), words.length];
+      const display = boundaries(cleanWords);
+      const voice = boundaries(alignmentWords);
+      const sameSentences = display.length === voice.length;
+      wordFrames = cleanWords.map((_, index) => {
+        const sentence = sameSentences ? display.findIndex(end => end > index)-1 : 0;
+        const left = sameSentences ? display[sentence] : 0;
+        const right = sameSentences ? display[sentence+1] : cleanWords.length;
+        const start = sameSentences ? voice[sentence] : 0;
+        const end = sameSentences ? voice[sentence+1] : alignmentWords.length;
+        return toFrame(times[start + Math.floor((index-left)*(end-start)/(right-left))]);
+      });
+    } else if (cleanWords.length && speechRanges.length) {
+      // Anchor sentence starts to nearby measured pauses; distribute remaining words over speech only.
+      const weights = cleanWords.map(w => Math.sqrt(w.length));
+      const sum = weights.reduce((a,b) => a+b, 0);
+      const voiced = speechRanges.reduce((a,r) => a+r.end-r.start, 0);
+      let elapsed = 0;
+      let rangeIndex = 0;
+      let consumed = 0;
+      wordFrames = weights.map((w,i) => {
+        const target = elapsed / sum * voiced;
+        elapsed += w;
+        while (rangeIndex+1 < speechRanges.length && consumed + speechRanges[rangeIndex].end - speechRanges[rangeIndex].start <= target) {
+          consumed += speechRanges[rangeIndex].end - speechRanges[rangeIndex].start;
+          rangeIndex++;
+        }
+        const start = speechRanges[rangeIndex].start + target - consumed;
+        return toFrame(start);
+      });
+      for (let i=1; i<cleanWords.length; i++) {
+        if (!/[.!?।]$/.test(cleanWords[i-1])) continue;
+        const nearest = speechRanges.find(r => Math.abs(toFrame(r.start)-wordFrames![i]) < fps*0.3 &&
+          toFrame(r.start)>=wordFrames![i-1] && toFrame(r.start)<=(wordFrames![i+1] ?? audioFrames));
+        if (nearest) wordFrames[i] = toFrame(nearest.start);
+      }
     }
 
     let cues: Array<string | undefined> | undefined;
-    if (scene.type === 'collection') cues = [scene.visualProps.cue];
-    if (scene.type === 'requestFlow') cues = scene.visualProps.steps.map(step => step.cue ?? step.label);
-    if (scene.type === 'queueTimeline') cues = scene.visualProps.items.map(item => item.cue ?? item.name);
+    if (scene.type === 'collection') cues = [scene.visualProps?.cue];
+    if (scene.type === 'requestFlow') cues = scene.visualProps?.steps?.map((step: any) => step.cue ?? step.label);
+    if (scene.type === 'queueTimeline') cues = scene.visualProps?.items?.map((item: any) => item.cue ?? item.name);
+    if (scene.type === 'smartphoneMockup') {
+      // Wire spoken price reveal to the actual phone scene: prioritize specific surge price words (80, assi, surge, jump)
+      const primaryTokens = ['80', 'assi', 'अस्सी', 'surge', 'jump'];
+      const secondaryTokens = ['seedha', 'badh', 'fees', 'fee'];
+      let foundIdx = cleanWords.findIndex(w => {
+        const norm = normalize(w);
+        return primaryTokens.some(token => norm.includes(token));
+      });
+      if (foundIdx === -1) {
+        foundIdx = cleanWords.findIndex(w => {
+          const norm = normalize(w);
+          return secondaryTokens.some(token => norm.includes(token));
+        });
+      }
+      if (foundIdx !== -1) {
+        cues = [cleanWords[foundIdx]];
+      } else {
+        cues = [scene.visualProps?.surgeDeliveryFee || '80'];
+      }
+    }
+    if (scene.type === 'raceCondition') {
+      // Wire atomic lock transition to race condition scene: prioritize SETNX / mutex over generic lock
+      const primaryTokens = ['setnx', 'set en ex', 'mutex', 'atomic'];
+      const secondaryTokens = ['lock', 'ex', 'nx'];
+      let foundIdx = cleanWords.findIndex(w => {
+        const norm = normalize(w);
+        return primaryTokens.some(token => norm.includes(token));
+      });
+      if (foundIdx === -1) {
+        foundIdx = cleanWords.findIndex(w => {
+          const norm = normalize(w);
+          return secondaryTokens.some(token => norm.includes(token));
+        });
+      }
+      if (foundIdx !== -1) {
+        cues = [cleanWords[foundIdx]];
+      } else {
+        cues = ['setnx'];
+      }
+    }
     const scriptTokens = cleanWords.map(normalize);
     let searchFrom = 0;
     const cueFrames = cues?.map((cue, index, allCues) => {
@@ -159,6 +248,7 @@ export function buildVideoTimeline(
     });
 
     segments.push({
+      speechRanges,
       wordFrames,
       cueFrames,
       sceneId: scene.id,

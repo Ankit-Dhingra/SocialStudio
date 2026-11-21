@@ -21,6 +21,8 @@ import { performMediaQA } from './modules/qa/media-qa.js';
 
 export interface VideoJobData {
   id: string;
+  topic?: string;
+  angle?: string;
 }
 
 export const worker = new Worker<VideoJobData>(
@@ -56,10 +58,10 @@ export const worker = new Worker<VideoJobData>(
           storyboard = parsed.data;
         } else {
           console.warn(`[Worker:${id}] Existing script invalid; regenerating with AI...`);
-          storyboard = await generateHinglishScript({ topic: row.topic, targetDurationSec: 55 });
+          storyboard = await generateHinglishScript({ topic: row.topic, angle: job.data.angle || row.angle, targetDurationSec: 105 });
         }
       } else {
-        storyboard = await generateHinglishScript({ topic: row.topic, targetDurationSec: 55 });
+        storyboard = await generateHinglishScript({ topic: row.topic, angle: job.data.angle || row.angle, targetDurationSec: 105 });
       }
 
       await patch(id, {
@@ -113,7 +115,6 @@ export const worker = new Worker<VideoJobData>(
       console.log(`[Worker:${id}] [Stage 3] Calculating frame timeline...`);
       const timeline = buildVideoTimeline(storyboard, audioResult.clips, {
         fps: 30,
-        scenePaddingFrames: 5,
         audioSrcPrefix: `audio/runs/${id}`,
       });
 

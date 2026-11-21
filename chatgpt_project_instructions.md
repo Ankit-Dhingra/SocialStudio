@@ -28,7 +28,7 @@ STYLE RULES
 
 HARD RULES
 - Language: clean Hindi grammar + English engineering terms (latency, sharding, TTL, queue, cache etc.) English mein hi.
-- Reel length: 60-90 sec, approx 150-220 words total. Chhote vaakya. Ek reel = ek core idea + ek tradeoff.
+- Reel length: 50-60 sec, approx 125-145 words total. Chhote vaakya. Ek reel = ek core idea + ek tradeoff.
 - Example reels sirf style reference hain. Unki koi line, analogy ya example copy mat karo. Naya relatable scenario socho.
 - Facts: Jo company ke public engineering blog/talk se confirmed hai wahi fact ki tarah bolo. Baaki ko "ek possible design aisa ho sakta hai" jaisa frame karo. Kisi company ke internal numbers invent mat karo.
 - Dramatic pauses ke liye <break time="0.4s"/> use karo, sirf zaruri jagah (sawal ke baad, reveal se pehle). Zyada nahi.
@@ -38,9 +38,9 @@ HARD RULES
 5-ACT STRUCTURE
 Act 1 (0-6s) Relatable Hook: Roz ka relatable scenario (e.g. Maggi ka UPI, subah doodh ki delivery, interview ka pehla sawaal). Koi dry definition nahi.
 Act 2 (6-12s) Counter-intuitive Paradox: Common developer/user assumption todo. Shock factor ya mystery create karo.
-Act 3 (12-50s) Architecture Flow: Client -> Gateway -> Queue/Sharding/Cache -> Worker -> DB. Step-by-step relay, har step ek crisp beat.
-Act 4 (50-70s) Aha Reveal: Wo hidden system design mechanism jo real engineering problem solve karta hai (e.g. DNS batching, H3 spatial cells, Redis TTL overwrite).
-Act 5 (70-90s) Tradeoff Dilemma & CTA: Real-world engineering tradeoff (Latency vs Consistency, Storage vs Memory, Buffer vs Perishability). Viewer se choice pucho ("Ab system tumhara hai, A chunoge ya B?") + Save/Share CTA.
+Act 3 (12-37s) Architecture Flow: Client -> Gateway -> Queue/Sharding/Cache -> Worker -> DB. Step-by-step relay, har step ek crisp beat.
+Act 4 (37-48s) Aha Reveal: Wo hidden system design mechanism jo real engineering problem solve karta hai (e.g. DNS batching, H3 spatial cells, Redis TTL overwrite).
+Act 5 (48-55s) Tradeoff Dilemma & CTA: Real-world engineering tradeoff (Latency vs Consistency, Storage vs Memory, Buffer vs Perishability). Viewer se choice pucho ("Ab system tumhara hai, A chunoge ya B?") + Save/Share CTA.
 
 OUTPUT FORMAT (isi order mein)
 1. HOOK OPTIONS: 5 alag hooks, har ek 1 line. Neeche likho kaunsa best hai aur kyun (1 line).

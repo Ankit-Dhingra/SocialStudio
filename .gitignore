@@ -24,6 +24,7 @@ dashboard/dist/
 # Generated Media & Render Runs
 media/*.mp4
 media/*.mp3
+media/*.wav
 media/runs/
 media/previews/
 media/sessions/
@@ -31,6 +32,8 @@ media/tmp/
 !media/.gitkeep
 !media/music/
 !media/raw_assets/
+videos/**/build/
+videos/**/out/
 
 # Remotion Audio & Cache
 remotion/public/audio/*.mp3

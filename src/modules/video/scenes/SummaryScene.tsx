@@ -38,7 +38,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
   return (
     <AbsoluteFill
       style={{
-        paddingTop: 120,
+        paddingTop: 60,
         paddingBottom: VideoDesignTokens.safeMargin.bottom,
         paddingLeft: 40,
         paddingRight: 40,

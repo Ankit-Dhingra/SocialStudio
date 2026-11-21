@@ -27,12 +27,13 @@ export const VideoDesignTokens = {
       number: '#B5CEA8',     // 0, 1000
     },
   },
-  // 9:16 vertical safe margins (bottom safe margin protects against Reels audio/caption bar and kinetic subtitles)
+  // 9:16 vertical safe margins (strictly protects against Instagram Reels UI:
+  // Top header, Right like/comment buttons, and Bottom account/audio bar)
   safeMargin: {
-    top: 170,
-    bottom: 420,
+    top: 180,
+    bottom: 520,
     left: 60,
-    right: 60,
+    right: 140,
   },
   typography: {
     fontFamilySans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',

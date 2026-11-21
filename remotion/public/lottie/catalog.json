@@ -1,0 +1,3537 @@
+[
+  {
+    "id": "alert-circle",
+    "title": "Alert circle",
+    "category": "Alerts",
+    "keywords": [
+      "alert",
+      "alert-circle",
+      "alerts",
+      "attention",
+      "circle",
+      "error",
+      "warning"
+    ],
+    "lottie": "https://useanimations.com/icons/alert-circle.json"
+  },
+  {
+    "id": "alert-octagon",
+    "title": "Alert octagon",
+    "category": "Alerts",
+    "keywords": [
+      "alert",
+      "alert-octagon",
+      "alerts",
+      "attention",
+      "error",
+      "octagon",
+      "warning"
+    ],
+    "lottie": "https://useanimations.com/icons/alert-octagon.json"
+  },
+  {
+    "id": "alert-triangle",
+    "title": "Alert triangle",
+    "category": "Alerts",
+    "keywords": [
+      "alert",
+      "alert-triangle",
+      "alerts",
+      "attention",
+      "error",
+      "triangle",
+      "warning"
+    ],
+    "lottie": "https://useanimations.com/icons/alert-triangle.json"
+  },
+  {
+    "id": "error",
+    "title": "Error",
+    "category": "Alerts",
+    "keywords": [
+      "alerts",
+      "close",
+      "error",
+      "failure",
+      "x"
+    ],
+    "lottie": "https://useanimations.com/icons/error.json"
+  },
+  {
+    "id": "x-octagon",
+    "title": "X Octagon",
+    "category": "Alerts",
+    "keywords": [
+      "alerts",
+      "octagon",
+      "x",
+      "x-octagon"
+    ],
+    "lottie": "https://useanimations.com/icons/x-octagon.json"
+  },
+  {
+    "id": "notification",
+    "title": "Notification",
+    "category": "Notifications",
+    "keywords": [
+      "alert",
+      "bell",
+      "bell-off",
+      "mute",
+      "notification",
+      "notifications"
+    ],
+    "lottie": "https://useanimations.com/icons/notification.json"
+  },
+  {
+    "id": "notification-v2",
+    "title": "Notification V2",
+    "category": "Notifications",
+    "keywords": [
+      "alert",
+      "bell",
+      "bell-off",
+      "mute",
+      "notification",
+      "notifications"
+    ],
+    "lottie": "https://useanimations.com/icons/notification-v2.json"
+  },
+  {
+    "id": "notification-v3",
+    "title": "Notification V3",
+    "category": "Notifications",
+    "keywords": [
+      "alert",
+      "bell",
+      "mute",
+      "notification",
+      "notifications"
+    ],
+    "lottie": "https://useanimations.com/icons/notification-v3.json"
+  },
+  {
+    "id": "notification-v4",
+    "title": "Notification V4",
+    "category": "Notifications",
+    "keywords": [
+      "alert",
+      "bell",
+      "mute",
+      "notification",
+      "notifications"
+    ],
+    "lottie": "https://useanimations.com/icons/notification-v4.json"
+  },
+  {
+    "id": "arrow-down-circle",
+    "title": "Arrow down circle",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-down-circle",
+      "circle",
+      "direction",
+      "down",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-down-circle.json"
+  },
+  {
+    "id": "arrow-down-left",
+    "title": "Arrow Down Left",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-down-left",
+      "direction",
+      "down",
+      "left",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-down-left.json"
+  },
+  {
+    "id": "arrow-down-right",
+    "title": "Arrow Down Right",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-down-right",
+      "direction",
+      "down",
+      "navigation",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-down-right.json"
+  },
+  {
+    "id": "arrow-left",
+    "title": "Arrow Left",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-left",
+      "direction",
+      "left",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-left.json"
+  },
+  {
+    "id": "arrow-left-circle",
+    "title": "Arrow left circle",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-left-circle",
+      "circle",
+      "direction",
+      "left",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-left-circle.json"
+  },
+  {
+    "id": "arrow-right",
+    "title": "Arrow Right",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-right",
+      "direction",
+      "navigation",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-right.json"
+  },
+  {
+    "id": "arrow-right-circle",
+    "title": "Arrow right circle",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-right-circle",
+      "circle",
+      "direction",
+      "navigation",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-right-circle.json"
+  },
+  {
+    "id": "arrow-up-circle",
+    "title": "Arrow up circle",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-up-circle",
+      "circle",
+      "direction",
+      "navigation",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-up-circle.json"
+  },
+  {
+    "id": "arrow-up-left",
+    "title": "Arrow Up Left",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-up-left",
+      "direction",
+      "left",
+      "navigation",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-up-left.json"
+  },
+  {
+    "id": "arrow-up-right",
+    "title": "Arrow Up Right",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "arrow-up-right",
+      "direction",
+      "navigation",
+      "right",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-up-right.json"
+  },
+  {
+    "id": "menu",
+    "title": "Burger Menu",
+    "category": "Navigation",
+    "keywords": [
+      "burger",
+      "close",
+      "hamburger",
+      "menu",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/menu.json"
+  },
+  {
+    "id": "chevron-down",
+    "title": "Chevron Down",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "back",
+      "chevron",
+      "chevron-down",
+      "down",
+      "navigation",
+      "next"
+    ],
+    "lottie": "https://useanimations.com/icons/chevron-down.json"
+  },
+  {
+    "id": "chevron-up",
+    "title": "Chevron Up",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "back",
+      "chevron",
+      "chevron-up",
+      "navigation",
+      "next",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/chevron-up.json"
+  },
+  {
+    "id": "chevrons-down",
+    "title": "Chevrons Down",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "back",
+      "chevrons",
+      "chevrons-down",
+      "down",
+      "navigation",
+      "next"
+    ],
+    "lottie": "https://useanimations.com/icons/chevrons-down.json"
+  },
+  {
+    "id": "chevrons-left",
+    "title": "Chevrons Left",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "back",
+      "chevrons",
+      "chevrons-left",
+      "left",
+      "navigation",
+      "next"
+    ],
+    "lottie": "https://useanimations.com/icons/chevrons-left.json"
+  },
+  {
+    "id": "chevrons-right",
+    "title": "Chevrons Right",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "back",
+      "chevrons",
+      "chevrons-right",
+      "navigation",
+      "next",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/chevrons-right.json"
+  },
+  {
+    "id": "chevrons-up",
+    "title": "Chevrons Up",
+    "category": "Navigation",
+    "keywords": [
+      "arrow",
+      "back",
+      "chevrons",
+      "chevrons-up",
+      "navigation",
+      "next",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/chevrons-up.json"
+  },
+  {
+    "id": "corner-down-left",
+    "title": "Corner Down Left",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-down-left",
+      "down",
+      "left",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-down-left.json"
+  },
+  {
+    "id": "corner-down-right",
+    "title": "Corner Down Right",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-down-right",
+      "down",
+      "navigation",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-down-right.json"
+  },
+  {
+    "id": "corner-left-down",
+    "title": "Corner Left Down",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-left-down",
+      "down",
+      "left",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-left-down.json"
+  },
+  {
+    "id": "corner-left-up",
+    "title": "Corner Left Up",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-left-up",
+      "left",
+      "navigation",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-left-up.json"
+  },
+  {
+    "id": "corner-right-down",
+    "title": "Corner Right Down",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-right-down",
+      "down",
+      "navigation",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-right-down.json"
+  },
+  {
+    "id": "corner-right-up",
+    "title": "Corner Right Up",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-right-up",
+      "navigation",
+      "right",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-right-up.json"
+  },
+  {
+    "id": "corner-up-left",
+    "title": "Corner Up Left",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-up-left",
+      "left",
+      "navigation",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-up-left.json"
+  },
+  {
+    "id": "corner-up-right",
+    "title": "Corner Up Right",
+    "category": "Navigation",
+    "keywords": [
+      "corner",
+      "corner-up-right",
+      "navigation",
+      "right",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/corner-up-right.json"
+  },
+  {
+    "id": "external-link",
+    "title": "External Link",
+    "category": "Navigation",
+    "keywords": [
+      "external",
+      "external-link",
+      "link",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/external-link.json"
+  },
+  {
+    "id": "log-in",
+    "title": "Log In",
+    "category": "Navigation",
+    "keywords": [
+      "in",
+      "log",
+      "log-in",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/log-in.json"
+  },
+  {
+    "id": "log-out",
+    "title": "Log Out",
+    "category": "Navigation",
+    "keywords": [
+      "log",
+      "log-out",
+      "navigation",
+      "out"
+    ],
+    "lottie": "https://useanimations.com/icons/log-out.json"
+  },
+  {
+    "id": "menu-v2",
+    "title": "Menu V2",
+    "category": "Navigation",
+    "keywords": [
+      "close",
+      "hamburger",
+      "menu",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/menu-v2.json"
+  },
+  {
+    "id": "menu-v3",
+    "title": "Menu V3",
+    "category": "Navigation",
+    "keywords": [
+      "close",
+      "hamburger",
+      "menu",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/menu-v3.json"
+  },
+  {
+    "id": "menu-v4",
+    "title": "Menu V4",
+    "category": "Navigation",
+    "keywords": [
+      "close",
+      "hamburger",
+      "menu",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/menu-v4.json"
+  },
+  {
+    "id": "more-horizontal",
+    "title": "More Horizontal",
+    "category": "Navigation",
+    "keywords": [
+      "horizontal",
+      "more",
+      "more-horizontal",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/more-horizontal.json"
+  },
+  {
+    "id": "more-vertical",
+    "title": "More Vertical",
+    "category": "Navigation",
+    "keywords": [
+      "more",
+      "more-vertical",
+      "navigation",
+      "vertical"
+    ],
+    "lottie": "https://useanimations.com/icons/more-vertical.json"
+  },
+  {
+    "id": "sidebar",
+    "title": "Sidebar",
+    "category": "Navigation",
+    "keywords": [
+      "navigation",
+      "sidebar"
+    ],
+    "lottie": "https://useanimations.com/icons/sidebar.json"
+  },
+  {
+    "id": "award",
+    "title": "Award",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "award"
+    ],
+    "lottie": "https://useanimations.com/icons/award.json"
+  },
+  {
+    "id": "bookmark",
+    "title": "Bookmark",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "bookmark",
+      "save"
+    ],
+    "lottie": "https://useanimations.com/icons/bookmark.json"
+  },
+  {
+    "id": "calendar",
+    "title": "Calendar",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "calendar",
+      "date",
+      "schedule"
+    ],
+    "lottie": "https://useanimations.com/icons/calendar.json"
+  },
+  {
+    "id": "check",
+    "title": "Check",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "check"
+    ],
+    "lottie": "https://useanimations.com/icons/check.json"
+  },
+  {
+    "id": "check-circle",
+    "title": "Check Circle",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "check",
+      "check-circle",
+      "circle"
+    ],
+    "lottie": "https://useanimations.com/icons/check-circle.json"
+  },
+  {
+    "id": "checkmark",
+    "title": "Checkmark",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "check",
+      "checkmark",
+      "done",
+      "success",
+      "tick"
+    ],
+    "lottie": "https://useanimations.com/icons/checkmark.json"
+  },
+  {
+    "id": "chevron-left",
+    "title": "Chevron left",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "arrow",
+      "back",
+      "chevron",
+      "chevron-left",
+      "left",
+      "navigation",
+      "next"
+    ],
+    "lottie": "https://useanimations.com/icons/chevron-left.json"
+  },
+  {
+    "id": "chevron-right",
+    "title": "Chevron right",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "arrow",
+      "back",
+      "chevron",
+      "chevron-right",
+      "navigation",
+      "next",
+      "right"
+    ],
+    "lottie": "https://useanimations.com/icons/chevron-right.json"
+  },
+  {
+    "id": "delete",
+    "title": "Delete",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "delete"
+    ],
+    "lottie": "https://useanimations.com/icons/delete.json"
+  },
+  {
+    "id": "download",
+    "title": "Download",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "download",
+      "export",
+      "save"
+    ],
+    "lottie": "https://useanimations.com/icons/download.json"
+  },
+  {
+    "id": "download-cloud",
+    "title": "Download Cloud",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "cloud",
+      "download",
+      "download-cloud",
+      "export",
+      "save"
+    ],
+    "lottie": "https://useanimations.com/icons/download-cloud.json"
+  },
+  {
+    "id": "download-v2",
+    "title": "Download V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "download",
+      "download-v2",
+      "export",
+      "save"
+    ],
+    "lottie": "https://useanimations.com/icons/download-v2.json"
+  },
+  {
+    "id": "edit",
+    "title": "Edit",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "edit",
+      "edit-2",
+      "pencil",
+      "write"
+    ],
+    "lottie": "https://useanimations.com/icons/edit.json"
+  },
+  {
+    "id": "edit-2",
+    "title": "Edit 2",
+    "category": "Action",
+    "keywords": [
+      "2",
+      "action",
+      "edit",
+      "edit-2",
+      "pencil",
+      "write"
+    ],
+    "lottie": "https://useanimations.com/icons/edit-2.json"
+  },
+  {
+    "id": "edit-3",
+    "title": "Edit 3",
+    "category": "Action",
+    "keywords": [
+      "3",
+      "action",
+      "edit",
+      "edit-3",
+      "pencil",
+      "write"
+    ],
+    "lottie": "https://useanimations.com/icons/edit-3.json"
+  },
+  {
+    "id": "explore",
+    "title": "Explore",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "compass",
+      "discover",
+      "explore"
+    ],
+    "lottie": "https://useanimations.com/icons/explore.json"
+  },
+  {
+    "id": "filter",
+    "title": "Filter",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "filter",
+      "funnel",
+      "sort"
+    ],
+    "lottie": "https://useanimations.com/icons/filter.json"
+  },
+  {
+    "id": "flag",
+    "title": "Flag",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "flag"
+    ],
+    "lottie": "https://useanimations.com/icons/flag.json"
+  },
+  {
+    "id": "folder",
+    "title": "Folder",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "folder"
+    ],
+    "lottie": "https://useanimations.com/icons/folder.json"
+  },
+  {
+    "id": "heart",
+    "title": "Heart",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "favorite",
+      "heart",
+      "like",
+      "love"
+    ],
+    "lottie": "https://useanimations.com/icons/heart.json"
+  },
+  {
+    "id": "heart-v2",
+    "title": "Heart V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "favorite",
+      "heart",
+      "heart-v2",
+      "like",
+      "love"
+    ],
+    "lottie": "https://useanimations.com/icons/heart-v2.json"
+  },
+  {
+    "id": "help",
+    "title": "Help",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "help",
+      "question",
+      "support"
+    ],
+    "lottie": "https://useanimations.com/icons/help.json"
+  },
+  {
+    "id": "home",
+    "title": "Home",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "home",
+      "house"
+    ],
+    "lottie": "https://useanimations.com/icons/home.json"
+  },
+  {
+    "id": "info",
+    "title": "Info",
+    "category": "Action",
+    "keywords": [
+      "about",
+      "action",
+      "info",
+      "information"
+    ],
+    "lottie": "https://useanimations.com/icons/info.json"
+  },
+  {
+    "id": "key",
+    "title": "Key",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "key"
+    ],
+    "lottie": "https://useanimations.com/icons/key.json"
+  },
+  {
+    "id": "link",
+    "title": "Link",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "link"
+    ],
+    "lottie": "https://useanimations.com/icons/link.json"
+  },
+  {
+    "id": "link-2",
+    "title": "Link 2",
+    "category": "Action",
+    "keywords": [
+      "2",
+      "action",
+      "link",
+      "link-2"
+    ],
+    "lottie": "https://useanimations.com/icons/link-2.json"
+  },
+  {
+    "id": "lock",
+    "title": "Lock / Unlock",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "lock",
+      "password",
+      "security",
+      "unlock"
+    ],
+    "lottie": "https://useanimations.com/icons/lock.json"
+  },
+  {
+    "id": "maximize-minimize",
+    "title": "Maxi/Minimize",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "collapse",
+      "expand",
+      "fullscreen",
+      "maxi",
+      "maximize",
+      "minimize"
+    ],
+    "lottie": "https://useanimations.com/icons/maximize-minimize.json"
+  },
+  {
+    "id": "maximize-minimize-v2",
+    "title": "Maxi/Minimize V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "collapse",
+      "expand",
+      "fullscreen",
+      "maxi",
+      "maximize-2",
+      "minimize",
+      "minimize-2"
+    ],
+    "lottie": "https://useanimations.com/icons/maximize-minimize-v2.json"
+  },
+  {
+    "id": "maximize-2",
+    "title": "Maximize 2",
+    "category": "Action",
+    "keywords": [
+      "2",
+      "action",
+      "maximize",
+      "maximize-2"
+    ],
+    "lottie": "https://useanimations.com/icons/maximize-2.json"
+  },
+  {
+    "id": "minimize-2",
+    "title": "Minimize 2",
+    "category": "Action",
+    "keywords": [
+      "2",
+      "action",
+      "minimize",
+      "minimize-2"
+    ],
+    "lottie": "https://useanimations.com/icons/minimize-2.json"
+  },
+  {
+    "id": "minus",
+    "title": "Minus",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "minus"
+    ],
+    "lottie": "https://useanimations.com/icons/minus.json"
+  },
+  {
+    "id": "minus-circle",
+    "title": "Minus Circle",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "circle",
+      "minus",
+      "minus-circle"
+    ],
+    "lottie": "https://useanimations.com/icons/minus-circle.json"
+  },
+  {
+    "id": "minus-square",
+    "title": "Minus Square",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "minus",
+      "minus-square",
+      "square"
+    ],
+    "lottie": "https://useanimations.com/icons/minus-square.json"
+  },
+  {
+    "id": "plus-circle",
+    "title": "Plus Circle",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "circle",
+      "plus",
+      "plus-circle"
+    ],
+    "lottie": "https://useanimations.com/icons/plus-circle.json"
+  },
+  {
+    "id": "plus-square",
+    "title": "Plus Square",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "plus",
+      "plus-square",
+      "square"
+    ],
+    "lottie": "https://useanimations.com/icons/plus-square.json"
+  },
+  {
+    "id": "plus-to-x",
+    "title": "Plus/X",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "add",
+      "close",
+      "expand",
+      "plus",
+      "x"
+    ],
+    "lottie": "https://useanimations.com/icons/plus-to-x.json"
+  },
+  {
+    "id": "power",
+    "title": "Power",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "power"
+    ],
+    "lottie": "https://useanimations.com/icons/power.json"
+  },
+  {
+    "id": "refresh",
+    "title": "Refresh",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "refresh",
+      "reload",
+      "sync"
+    ],
+    "lottie": "https://useanimations.com/icons/refresh.json"
+  },
+  {
+    "id": "refresh-ccw",
+    "title": "Refresh Ccw",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "ccw",
+      "refresh",
+      "refresh-ccw",
+      "reload",
+      "sync"
+    ],
+    "lottie": "https://useanimations.com/icons/refresh-ccw.json"
+  },
+  {
+    "id": "refresh-v2",
+    "title": "Refresh V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "refresh",
+      "refresh-v2",
+      "reload",
+      "sync"
+    ],
+    "lottie": "https://useanimations.com/icons/refresh-v2.json"
+  },
+  {
+    "id": "rotate-ccw",
+    "title": "Rotate Ccw",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "ccw",
+      "rotate",
+      "rotate-ccw"
+    ],
+    "lottie": "https://useanimations.com/icons/rotate-ccw.json"
+  },
+  {
+    "id": "rotate-cw",
+    "title": "Rotate Cw",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "cw",
+      "rotate",
+      "rotate-cw"
+    ],
+    "lottie": "https://useanimations.com/icons/rotate-cw.json"
+  },
+  {
+    "id": "save",
+    "title": "Save",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "save"
+    ],
+    "lottie": "https://useanimations.com/icons/save.json"
+  },
+  {
+    "id": "search-to-x",
+    "title": "Search/X",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "clear",
+      "close",
+      "search",
+      "x"
+    ],
+    "lottie": "https://useanimations.com/icons/search-to-x.json"
+  },
+  {
+    "id": "settings",
+    "title": "Settings",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "cog",
+      "gear",
+      "preferences",
+      "settings"
+    ],
+    "lottie": "https://useanimations.com/icons/settings.json"
+  },
+  {
+    "id": "settings-v2",
+    "title": "Settings V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "cog",
+      "gear",
+      "preferences",
+      "settings",
+      "sliders"
+    ],
+    "lottie": "https://useanimations.com/icons/settings-v2.json"
+  },
+  {
+    "id": "shield",
+    "title": "Shield",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "shield"
+    ],
+    "lottie": "https://useanimations.com/icons/shield.json"
+  },
+  {
+    "id": "shield-off",
+    "title": "Shield Off",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "off",
+      "shield",
+      "shield-off",
+      "shield-off-off"
+    ],
+    "lottie": "https://useanimations.com/icons/shield-off.json"
+  },
+  {
+    "id": "slash",
+    "title": "Slash",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "slash"
+    ],
+    "lottie": "https://useanimations.com/icons/slash.json"
+  },
+  {
+    "id": "star",
+    "title": "Star",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "favorite",
+      "rating",
+      "star"
+    ],
+    "lottie": "https://useanimations.com/icons/star.json"
+  },
+  {
+    "id": "thumb-up",
+    "title": "Thumb up",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "like",
+      "thumb",
+      "thumb-up",
+      "up",
+      "upvote"
+    ],
+    "lottie": "https://useanimations.com/icons/thumb-up.json"
+  },
+  {
+    "id": "thumbs-down",
+    "title": "Thumbs Down",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "down",
+      "thumbs",
+      "thumbs-down"
+    ],
+    "lottie": "https://useanimations.com/icons/thumbs-down.json"
+  },
+  {
+    "id": "trash",
+    "title": "Trash",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "bin",
+      "delete",
+      "remove",
+      "trash"
+    ],
+    "lottie": "https://useanimations.com/icons/trash.json"
+  },
+  {
+    "id": "trash-v2",
+    "title": "Trash V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "bin",
+      "delete",
+      "remove",
+      "trash",
+      "trash-2"
+    ],
+    "lottie": "https://useanimations.com/icons/trash-v2.json"
+  },
+  {
+    "id": "upload",
+    "title": "Upload",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "upload"
+    ],
+    "lottie": "https://useanimations.com/icons/upload.json"
+  },
+  {
+    "id": "upload-cloud",
+    "title": "Upload Cloud",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "cloud",
+      "upload",
+      "upload-cloud"
+    ],
+    "lottie": "https://useanimations.com/icons/upload-cloud.json"
+  },
+  {
+    "id": "visibility",
+    "title": "Visibility",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "eye",
+      "eye-off",
+      "hide",
+      "password",
+      "show",
+      "visibility"
+    ],
+    "lottie": "https://useanimations.com/icons/visibility.json"
+  },
+  {
+    "id": "visibility-v2",
+    "title": "Visibility V2",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "eye",
+      "eye-off",
+      "hide",
+      "password",
+      "show",
+      "visibility"
+    ],
+    "lottie": "https://useanimations.com/icons/visibility-v2.json"
+  },
+  {
+    "id": "visibility-v3",
+    "title": "Visibility V3",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "eye",
+      "eye-off",
+      "hide",
+      "password",
+      "show",
+      "visibility"
+    ],
+    "lottie": "https://useanimations.com/icons/visibility-v3.json"
+  },
+  {
+    "id": "x-square",
+    "title": "X Square",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "square",
+      "x",
+      "x-square"
+    ],
+    "lottie": "https://useanimations.com/icons/x-square.json"
+  },
+  {
+    "id": "zoom-in",
+    "title": "Zoom In",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "in",
+      "magnifier",
+      "magnify",
+      "zoom"
+    ],
+    "lottie": "https://useanimations.com/icons/zoom-in.json"
+  },
+  {
+    "id": "zoom-out",
+    "title": "Zoom Out",
+    "category": "Action",
+    "keywords": [
+      "action",
+      "magnifier",
+      "magnify",
+      "out",
+      "zoom"
+    ],
+    "lottie": "https://useanimations.com/icons/zoom-out.json"
+  },
+  {
+    "id": "archive",
+    "title": "Archive",
+    "category": "Content",
+    "keywords": [
+      "archive",
+      "box",
+      "content",
+      "storage"
+    ],
+    "lottie": "https://useanimations.com/icons/archive.json"
+  },
+  {
+    "id": "book",
+    "title": "Book",
+    "category": "Content",
+    "keywords": [
+      "book",
+      "content"
+    ],
+    "lottie": "https://useanimations.com/icons/book.json"
+  },
+  {
+    "id": "book-open",
+    "title": "Book Open",
+    "category": "Content",
+    "keywords": [
+      "book",
+      "book-open",
+      "content",
+      "open"
+    ],
+    "lottie": "https://useanimations.com/icons/book-open.json"
+  },
+  {
+    "id": "clipboard",
+    "title": "Clipboard",
+    "category": "Content",
+    "keywords": [
+      "clipboard",
+      "content"
+    ],
+    "lottie": "https://useanimations.com/icons/clipboard.json"
+  },
+  {
+    "id": "copy",
+    "title": "Copy",
+    "category": "Content",
+    "keywords": [
+      "clipboard",
+      "content",
+      "copy",
+      "duplicate"
+    ],
+    "lottie": "https://useanimations.com/icons/copy.json"
+  },
+  {
+    "id": "file",
+    "title": "File",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "file"
+    ],
+    "lottie": "https://useanimations.com/icons/file.json"
+  },
+  {
+    "id": "file-minus",
+    "title": "File Minus",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "file",
+      "file-minus",
+      "minus"
+    ],
+    "lottie": "https://useanimations.com/icons/file-minus.json"
+  },
+  {
+    "id": "file-plus",
+    "title": "File Plus",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "file",
+      "file-plus",
+      "plus"
+    ],
+    "lottie": "https://useanimations.com/icons/file-plus.json"
+  },
+  {
+    "id": "file-text",
+    "title": "File Text",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "file",
+      "file-text",
+      "text"
+    ],
+    "lottie": "https://useanimations.com/icons/file-text.json"
+  },
+  {
+    "id": "folder-minus",
+    "title": "Folder Minus",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "folder",
+      "folder-minus",
+      "minus"
+    ],
+    "lottie": "https://useanimations.com/icons/folder-minus.json"
+  },
+  {
+    "id": "folder-plus",
+    "title": "Folder Plus",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "folder",
+      "folder-plus",
+      "plus"
+    ],
+    "lottie": "https://useanimations.com/icons/folder-plus.json"
+  },
+  {
+    "id": "image",
+    "title": "Image",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "image"
+    ],
+    "lottie": "https://useanimations.com/icons/image.json"
+  },
+  {
+    "id": "inbox",
+    "title": "Inbox",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "inbox"
+    ],
+    "lottie": "https://useanimations.com/icons/inbox.json"
+  },
+  {
+    "id": "mail",
+    "title": "Mail",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "email",
+      "envelope",
+      "mail",
+      "message"
+    ],
+    "lottie": "https://useanimations.com/icons/mail.json"
+  },
+  {
+    "id": "paperclip",
+    "title": "Paperclip",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "paperclip"
+    ],
+    "lottie": "https://useanimations.com/icons/paperclip.json"
+  },
+  {
+    "id": "share",
+    "title": "Share",
+    "category": "Content",
+    "keywords": [
+      "content",
+      "send",
+      "share",
+      "social"
+    ],
+    "lottie": "https://useanimations.com/icons/share.json"
+  },
+  {
+    "id": "user",
+    "title": "User",
+    "category": "Content",
+    "keywords": [
+      "account",
+      "content",
+      "person",
+      "profile",
+      "user"
+    ],
+    "lottie": "https://useanimations.com/icons/user.json"
+  },
+  {
+    "id": "user-check",
+    "title": "User Check",
+    "category": "Content",
+    "keywords": [
+      "account",
+      "check",
+      "content",
+      "person",
+      "profile",
+      "user",
+      "user-check"
+    ],
+    "lottie": "https://useanimations.com/icons/user-check.json"
+  },
+  {
+    "id": "user-minus",
+    "title": "User minus",
+    "category": "Content",
+    "keywords": [
+      "account",
+      "content",
+      "minus",
+      "person",
+      "profile",
+      "user",
+      "user-minus"
+    ],
+    "lottie": "https://useanimations.com/icons/user-minus.json"
+  },
+  {
+    "id": "user-plus",
+    "title": "User plus",
+    "category": "Content",
+    "keywords": [
+      "account",
+      "content",
+      "person",
+      "plus",
+      "profile",
+      "user",
+      "user-plus"
+    ],
+    "lottie": "https://useanimations.com/icons/user-plus.json"
+  },
+  {
+    "id": "user-x",
+    "title": "User X",
+    "category": "Content",
+    "keywords": [
+      "account",
+      "content",
+      "person",
+      "profile",
+      "user",
+      "user-x",
+      "x"
+    ],
+    "lottie": "https://useanimations.com/icons/user-x.json"
+  },
+  {
+    "id": "users",
+    "title": "Users",
+    "category": "Content",
+    "keywords": [
+      "account",
+      "content",
+      "person",
+      "profile",
+      "users"
+    ],
+    "lottie": "https://useanimations.com/icons/users.json"
+  },
+  {
+    "id": "check-box",
+    "title": "Checkbox",
+    "category": "Form",
+    "keywords": [
+      "check-square",
+      "checkbox",
+      "form",
+      "select"
+    ],
+    "lottie": "https://useanimations.com/icons/check-box.json"
+  },
+  {
+    "id": "radio-button",
+    "title": "Radio button",
+    "category": "Form",
+    "keywords": [
+      "button",
+      "check-circle",
+      "form",
+      "radio",
+      "select"
+    ],
+    "lottie": "https://useanimations.com/icons/radio-button.json"
+  },
+  {
+    "id": "toggle",
+    "title": "Toggle",
+    "category": "Form",
+    "keywords": [
+      "form",
+      "on off",
+      "switch",
+      "toggle",
+      "toggle-left",
+      "toggle-right"
+    ],
+    "lottie": "https://useanimations.com/icons/toggle.json"
+  },
+  {
+    "id": "airplay",
+    "title": "Airplay",
+    "category": "Media",
+    "keywords": [
+      "airplay",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/airplay.json"
+  },
+  {
+    "id": "aperture",
+    "title": "Aperture",
+    "category": "Media",
+    "keywords": [
+      "aperture",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/aperture.json"
+  },
+  {
+    "id": "camera",
+    "title": "Camera",
+    "category": "Media",
+    "keywords": [
+      "camera",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/camera.json"
+  },
+  {
+    "id": "camera-off",
+    "title": "Camera Off",
+    "category": "Media",
+    "keywords": [
+      "camera",
+      "camera-off",
+      "camera-off-off",
+      "media",
+      "off"
+    ],
+    "lottie": "https://useanimations.com/icons/camera-off.json"
+  },
+  {
+    "id": "cast",
+    "title": "Cast",
+    "category": "Media",
+    "keywords": [
+      "cast",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/cast.json"
+  },
+  {
+    "id": "disc",
+    "title": "Disc",
+    "category": "Media",
+    "keywords": [
+      "disc",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/disc.json"
+  },
+  {
+    "id": "fast-forward",
+    "title": "Fast Forward",
+    "category": "Media",
+    "keywords": [
+      "fast",
+      "fast-forward",
+      "forward",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/fast-forward.json"
+  },
+  {
+    "id": "film",
+    "title": "Film",
+    "category": "Media",
+    "keywords": [
+      "film",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/film.json"
+  },
+  {
+    "id": "headphones",
+    "title": "Headphones",
+    "category": "Media",
+    "keywords": [
+      "headphones",
+      "media"
+    ],
+    "lottie": "https://useanimations.com/icons/headphones.json"
+  },
+  {
+    "id": "mic-off",
+    "title": "Mic Off",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "mic",
+      "mic-off",
+      "mic-off-off",
+      "off"
+    ],
+    "lottie": "https://useanimations.com/icons/mic-off.json"
+  },
+  {
+    "id": "microphone",
+    "title": "Microphone",
+    "category": "Media",
+    "keywords": [
+      "audio",
+      "media",
+      "mic",
+      "mic-off",
+      "microphone",
+      "mute",
+      "record"
+    ],
+    "lottie": "https://useanimations.com/icons/microphone.json"
+  },
+  {
+    "id": "microphone-v2",
+    "title": "Microphone V2",
+    "category": "Media",
+    "keywords": [
+      "audio",
+      "media",
+      "mic",
+      "mic-off",
+      "microphone",
+      "mute",
+      "record"
+    ],
+    "lottie": "https://useanimations.com/icons/microphone-v2.json"
+  },
+  {
+    "id": "music",
+    "title": "Music",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "music"
+    ],
+    "lottie": "https://useanimations.com/icons/music.json"
+  },
+  {
+    "id": "play-pause",
+    "title": "Play/Pause",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "pause",
+      "play",
+      "player"
+    ],
+    "lottie": "https://useanimations.com/icons/play-pause.json"
+  },
+  {
+    "id": "play-pause-circle",
+    "title": "Play/Pause circle",
+    "category": "Media",
+    "keywords": [
+      "circle",
+      "media",
+      "pause",
+      "pause-circle",
+      "play",
+      "play-circle",
+      "player"
+    ],
+    "lottie": "https://useanimations.com/icons/play-pause-circle.json"
+  },
+  {
+    "id": "radio",
+    "title": "Radio",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "radio"
+    ],
+    "lottie": "https://useanimations.com/icons/radio.json"
+  },
+  {
+    "id": "repeat",
+    "title": "Repeat",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "repeat"
+    ],
+    "lottie": "https://useanimations.com/icons/repeat.json"
+  },
+  {
+    "id": "rewind",
+    "title": "Rewind",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "rewind"
+    ],
+    "lottie": "https://useanimations.com/icons/rewind.json"
+  },
+  {
+    "id": "shuffle",
+    "title": "Shuffle",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "shuffle"
+    ],
+    "lottie": "https://useanimations.com/icons/shuffle.json"
+  },
+  {
+    "id": "skip-back",
+    "title": "Skip back",
+    "category": "Media",
+    "keywords": [
+      "back",
+      "media",
+      "next",
+      "player",
+      "previous",
+      "skip",
+      "skip-back"
+    ],
+    "lottie": "https://useanimations.com/icons/skip-back.json"
+  },
+  {
+    "id": "skip-forward",
+    "title": "Skip forward",
+    "category": "Media",
+    "keywords": [
+      "forward",
+      "media",
+      "next",
+      "player",
+      "previous",
+      "skip",
+      "skip-forward"
+    ],
+    "lottie": "https://useanimations.com/icons/skip-forward.json"
+  },
+  {
+    "id": "speaker",
+    "title": "Speaker",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "speaker"
+    ],
+    "lottie": "https://useanimations.com/icons/speaker.json"
+  },
+  {
+    "id": "stop-circle",
+    "title": "Stop Circle",
+    "category": "Media",
+    "keywords": [
+      "circle",
+      "media",
+      "stop",
+      "stop-circle"
+    ],
+    "lottie": "https://useanimations.com/icons/stop-circle.json"
+  },
+  {
+    "id": "tv",
+    "title": "TV",
+    "category": "Media",
+    "keywords": [
+      "media",
+      "tv"
+    ],
+    "lottie": "https://useanimations.com/icons/tv.json"
+  },
+  {
+    "id": "video",
+    "title": "Video",
+    "category": "Media",
+    "keywords": [
+      "camera",
+      "media",
+      "video",
+      "video call",
+      "video-off"
+    ],
+    "lottie": "https://useanimations.com/icons/video.json"
+  },
+  {
+    "id": "video-off",
+    "title": "Video Off",
+    "category": "Media",
+    "keywords": [
+      "camera",
+      "media",
+      "off",
+      "video",
+      "video call",
+      "video-off",
+      "video-off-off"
+    ],
+    "lottie": "https://useanimations.com/icons/video-off.json"
+  },
+  {
+    "id": "video-v2",
+    "title": "Video V2",
+    "category": "Media",
+    "keywords": [
+      "camera",
+      "media",
+      "video",
+      "video call",
+      "video-off"
+    ],
+    "lottie": "https://useanimations.com/icons/video-v2.json"
+  },
+  {
+    "id": "volume",
+    "title": "Volume",
+    "category": "Media",
+    "keywords": [
+      "audio",
+      "media",
+      "mute",
+      "sound",
+      "speaker",
+      "volume",
+      "volume-1",
+      "volume-2",
+      "volume-x"
+    ],
+    "lottie": "https://useanimations.com/icons/volume.json"
+  },
+  {
+    "id": "align-center",
+    "title": "Align Center",
+    "category": "Text editing",
+    "keywords": [
+      "align",
+      "align-center",
+      "center",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/align-center.json"
+  },
+  {
+    "id": "align-justify",
+    "title": "Align Justify",
+    "category": "Text editing",
+    "keywords": [
+      "align",
+      "align-justify",
+      "justify",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/align-justify.json"
+  },
+  {
+    "id": "align-left",
+    "title": "Align Left",
+    "category": "Text editing",
+    "keywords": [
+      "align",
+      "align-left",
+      "left",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/align-left.json"
+  },
+  {
+    "id": "align-right",
+    "title": "Align Right",
+    "category": "Text editing",
+    "keywords": [
+      "align",
+      "align-right",
+      "right",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/align-right.json"
+  },
+  {
+    "id": "bold",
+    "title": "Bold",
+    "category": "Text editing",
+    "keywords": [
+      "bold",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/bold.json"
+  },
+  {
+    "id": "hash",
+    "title": "Hash",
+    "category": "Text editing",
+    "keywords": [
+      "hash",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/hash.json"
+  },
+  {
+    "id": "italic",
+    "title": "Italic",
+    "category": "Text editing",
+    "keywords": [
+      "italic",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/italic.json"
+  },
+  {
+    "id": "list",
+    "title": "List",
+    "category": "Text editing",
+    "keywords": [
+      "list",
+      "text editing"
+    ],
+    "lottie": "https://useanimations.com/icons/list.json"
+  },
+  {
+    "id": "type",
+    "title": "Type",
+    "category": "Text editing",
+    "keywords": [
+      "text editing",
+      "type"
+    ],
+    "lottie": "https://useanimations.com/icons/type.json"
+  },
+  {
+    "id": "underline",
+    "title": "Underline",
+    "category": "Text editing",
+    "keywords": [
+      "text editing",
+      "underline"
+    ],
+    "lottie": "https://useanimations.com/icons/underline.json"
+  },
+  {
+    "id": "at-sign",
+    "title": "At Sign",
+    "category": "Communication",
+    "keywords": [
+      "at",
+      "at-sign",
+      "communication",
+      "sign"
+    ],
+    "lottie": "https://useanimations.com/icons/at-sign.json"
+  },
+  {
+    "id": "message-circle",
+    "title": "Message Circle",
+    "category": "Communication",
+    "keywords": [
+      "circle",
+      "communication",
+      "message",
+      "message-circle"
+    ],
+    "lottie": "https://useanimations.com/icons/message-circle.json"
+  },
+  {
+    "id": "message-square",
+    "title": "Message Square",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "message",
+      "message-square",
+      "square"
+    ],
+    "lottie": "https://useanimations.com/icons/message-square.json"
+  },
+  {
+    "id": "phone",
+    "title": "Phone",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "phone"
+    ],
+    "lottie": "https://useanimations.com/icons/phone.json"
+  },
+  {
+    "id": "phone-call",
+    "title": "Phone Call",
+    "category": "Communication",
+    "keywords": [
+      "call",
+      "communication",
+      "phone",
+      "phone-call"
+    ],
+    "lottie": "https://useanimations.com/icons/phone-call.json"
+  },
+  {
+    "id": "phone-forwarded",
+    "title": "Phone Forwarded",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "forwarded",
+      "phone",
+      "phone-forwarded"
+    ],
+    "lottie": "https://useanimations.com/icons/phone-forwarded.json"
+  },
+  {
+    "id": "phone-incoming",
+    "title": "Phone Incoming",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "incoming",
+      "phone",
+      "phone-incoming"
+    ],
+    "lottie": "https://useanimations.com/icons/phone-incoming.json"
+  },
+  {
+    "id": "phone-missed",
+    "title": "Phone Missed",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "missed",
+      "phone",
+      "phone-missed"
+    ],
+    "lottie": "https://useanimations.com/icons/phone-missed.json"
+  },
+  {
+    "id": "phone-off",
+    "title": "Phone Off",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "off",
+      "phone",
+      "phone-off",
+      "phone-off-off"
+    ],
+    "lottie": "https://useanimations.com/icons/phone-off.json"
+  },
+  {
+    "id": "phone-outgoing",
+    "title": "Phone Outgoing",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "outgoing",
+      "phone",
+      "phone-outgoing"
+    ],
+    "lottie": "https://useanimations.com/icons/phone-outgoing.json"
+  },
+  {
+    "id": "rss",
+    "title": "RSS",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "rss"
+    ],
+    "lottie": "https://useanimations.com/icons/rss.json"
+  },
+  {
+    "id": "send",
+    "title": "Send",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "send"
+    ],
+    "lottie": "https://useanimations.com/icons/send.json"
+  },
+  {
+    "id": "voicemail",
+    "title": "Voicemail",
+    "category": "Communication",
+    "keywords": [
+      "communication",
+      "voicemail"
+    ],
+    "lottie": "https://useanimations.com/icons/voicemail.json"
+  },
+  {
+    "id": "battery",
+    "title": "Battery",
+    "category": "Devices",
+    "keywords": [
+      "battery",
+      "devices"
+    ],
+    "lottie": "https://useanimations.com/icons/battery.json"
+  },
+  {
+    "id": "battery-charging",
+    "title": "Battery Charging",
+    "category": "Devices",
+    "keywords": [
+      "battery",
+      "battery-charging",
+      "charging",
+      "devices"
+    ],
+    "lottie": "https://useanimations.com/icons/battery-charging.json"
+  },
+  {
+    "id": "bluetooth",
+    "title": "Bluetooth",
+    "category": "Devices",
+    "keywords": [
+      "bluetooth",
+      "devices"
+    ],
+    "lottie": "https://useanimations.com/icons/bluetooth.json"
+  },
+  {
+    "id": "cpu",
+    "title": "CPU",
+    "category": "Devices",
+    "keywords": [
+      "cpu",
+      "devices"
+    ],
+    "lottie": "https://useanimations.com/icons/cpu.json"
+  },
+  {
+    "id": "hard-drive",
+    "title": "Hard Drive",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "drive",
+      "hard",
+      "hard-drive"
+    ],
+    "lottie": "https://useanimations.com/icons/hard-drive.json"
+  },
+  {
+    "id": "monitor",
+    "title": "Monitor",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "monitor"
+    ],
+    "lottie": "https://useanimations.com/icons/monitor.json"
+  },
+  {
+    "id": "printer",
+    "title": "Printer",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "printer"
+    ],
+    "lottie": "https://useanimations.com/icons/printer.json"
+  },
+  {
+    "id": "smartphone",
+    "title": "Smartphone",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "smartphone"
+    ],
+    "lottie": "https://useanimations.com/icons/smartphone.json"
+  },
+  {
+    "id": "tablet",
+    "title": "Tablet",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "tablet"
+    ],
+    "lottie": "https://useanimations.com/icons/tablet.json"
+  },
+  {
+    "id": "watch",
+    "title": "Watch",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "watch"
+    ],
+    "lottie": "https://useanimations.com/icons/watch.json"
+  },
+  {
+    "id": "wifi",
+    "title": "WiFi",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "wifi"
+    ],
+    "lottie": "https://useanimations.com/icons/wifi.json"
+  },
+  {
+    "id": "wifi-off",
+    "title": "Wifi Off",
+    "category": "Devices",
+    "keywords": [
+      "devices",
+      "off",
+      "wifi",
+      "wifi-off",
+      "wifi-off-off"
+    ],
+    "lottie": "https://useanimations.com/icons/wifi-off.json"
+  },
+  {
+    "id": "cloud",
+    "title": "Cloud",
+    "category": "Weather",
+    "keywords": [
+      "cloud",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/cloud.json"
+  },
+  {
+    "id": "cloud-drizzle",
+    "title": "Cloud Drizzle",
+    "category": "Weather",
+    "keywords": [
+      "cloud",
+      "cloud-drizzle",
+      "drizzle",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/cloud-drizzle.json"
+  },
+  {
+    "id": "cloud-lightning",
+    "title": "Cloud Lightning",
+    "category": "Weather",
+    "keywords": [
+      "cloud",
+      "cloud-lightning",
+      "lightning",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/cloud-lightning.json"
+  },
+  {
+    "id": "cloud-off",
+    "title": "Cloud Off",
+    "category": "Weather",
+    "keywords": [
+      "cloud",
+      "cloud-off",
+      "cloud-off-off",
+      "off",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/cloud-off.json"
+  },
+  {
+    "id": "cloud-rain",
+    "title": "Cloud Rain",
+    "category": "Weather",
+    "keywords": [
+      "cloud",
+      "cloud-rain",
+      "rain",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/cloud-rain.json"
+  },
+  {
+    "id": "cloud-snow",
+    "title": "Cloud Snow",
+    "category": "Weather",
+    "keywords": [
+      "cloud",
+      "cloud-snow",
+      "snow",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/cloud-snow.json"
+  },
+  {
+    "id": "droplet",
+    "title": "Droplet",
+    "category": "Weather",
+    "keywords": [
+      "droplet",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/droplet.json"
+  },
+  {
+    "id": "moon",
+    "title": "Moon",
+    "category": "Weather",
+    "keywords": [
+      "moon",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/moon.json"
+  },
+  {
+    "id": "sun",
+    "title": "Sun",
+    "category": "Weather",
+    "keywords": [
+      "sun",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/sun.json"
+  },
+  {
+    "id": "sunrise",
+    "title": "Sunrise",
+    "category": "Weather",
+    "keywords": [
+      "sunrise",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/sunrise.json"
+  },
+  {
+    "id": "sunset",
+    "title": "Sunset",
+    "category": "Weather",
+    "keywords": [
+      "sunset",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/sunset.json"
+  },
+  {
+    "id": "thermometer",
+    "title": "Thermometer",
+    "category": "Weather",
+    "keywords": [
+      "thermometer",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/thermometer.json"
+  },
+  {
+    "id": "umbrella",
+    "title": "Umbrella",
+    "category": "Weather",
+    "keywords": [
+      "umbrella",
+      "weather"
+    ],
+    "lottie": "https://useanimations.com/icons/umbrella.json"
+  },
+  {
+    "id": "wind",
+    "title": "Wind",
+    "category": "Weather",
+    "keywords": [
+      "weather",
+      "wind"
+    ],
+    "lottie": "https://useanimations.com/icons/wind.json"
+  },
+  {
+    "id": "zap",
+    "title": "Zap",
+    "category": "Weather",
+    "keywords": [
+      "weather",
+      "zap"
+    ],
+    "lottie": "https://useanimations.com/icons/zap.json"
+  },
+  {
+    "id": "zap-off",
+    "title": "Zap Off",
+    "category": "Weather",
+    "keywords": [
+      "off",
+      "weather",
+      "zap",
+      "zap-off",
+      "zap-off-off"
+    ],
+    "lottie": "https://useanimations.com/icons/zap-off.json"
+  },
+  {
+    "id": "anchor",
+    "title": "Anchor",
+    "category": "Maps & location",
+    "keywords": [
+      "anchor",
+      "maps & location"
+    ],
+    "lottie": "https://useanimations.com/icons/anchor.json"
+  },
+  {
+    "id": "crosshair",
+    "title": "Crosshair",
+    "category": "Maps & location",
+    "keywords": [
+      "crosshair",
+      "maps & location"
+    ],
+    "lottie": "https://useanimations.com/icons/crosshair.json"
+  },
+  {
+    "id": "globe",
+    "title": "Globe",
+    "category": "Maps & location",
+    "keywords": [
+      "globe",
+      "maps & location"
+    ],
+    "lottie": "https://useanimations.com/icons/globe.json"
+  },
+  {
+    "id": "life-buoy",
+    "title": "Life Buoy",
+    "category": "Maps & location",
+    "keywords": [
+      "buoy",
+      "life",
+      "life-buoy",
+      "maps & location"
+    ],
+    "lottie": "https://useanimations.com/icons/life-buoy.json"
+  },
+  {
+    "id": "map",
+    "title": "Map",
+    "category": "Maps & location",
+    "keywords": [
+      "map",
+      "maps & location"
+    ],
+    "lottie": "https://useanimations.com/icons/map.json"
+  },
+  {
+    "id": "map-pin",
+    "title": "Map Pin",
+    "category": "Maps & location",
+    "keywords": [
+      "map",
+      "map-pin",
+      "maps & location",
+      "pin"
+    ],
+    "lottie": "https://useanimations.com/icons/map-pin.json"
+  },
+  {
+    "id": "navigation",
+    "title": "Navigation",
+    "category": "Maps & location",
+    "keywords": [
+      "maps & location",
+      "navigation"
+    ],
+    "lottie": "https://useanimations.com/icons/navigation.json"
+  },
+  {
+    "id": "navigation-2",
+    "title": "Navigation 2",
+    "category": "Maps & location",
+    "keywords": [
+      "2",
+      "maps & location",
+      "navigation",
+      "navigation-2"
+    ],
+    "lottie": "https://useanimations.com/icons/navigation-2.json"
+  },
+  {
+    "id": "target",
+    "title": "Target",
+    "category": "Maps & location",
+    "keywords": [
+      "maps & location",
+      "target"
+    ],
+    "lottie": "https://useanimations.com/icons/target.json"
+  },
+  {
+    "id": "box",
+    "title": "Box",
+    "category": "Commerce",
+    "keywords": [
+      "box",
+      "commerce"
+    ],
+    "lottie": "https://useanimations.com/icons/box.json"
+  },
+  {
+    "id": "briefcase",
+    "title": "Briefcase",
+    "category": "Commerce",
+    "keywords": [
+      "briefcase",
+      "commerce"
+    ],
+    "lottie": "https://useanimations.com/icons/briefcase.json"
+  },
+  {
+    "id": "credit-card",
+    "title": "Credit Card",
+    "category": "Commerce",
+    "keywords": [
+      "card",
+      "commerce",
+      "credit",
+      "credit-card"
+    ],
+    "lottie": "https://useanimations.com/icons/credit-card.json"
+  },
+  {
+    "id": "dollar-sign",
+    "title": "Dollar Sign",
+    "category": "Commerce",
+    "keywords": [
+      "commerce",
+      "dollar",
+      "dollar-sign",
+      "sign"
+    ],
+    "lottie": "https://useanimations.com/icons/dollar-sign.json"
+  },
+  {
+    "id": "gift",
+    "title": "Gift",
+    "category": "Commerce",
+    "keywords": [
+      "commerce",
+      "gift"
+    ],
+    "lottie": "https://useanimations.com/icons/gift.json"
+  },
+  {
+    "id": "package",
+    "title": "Package",
+    "category": "Commerce",
+    "keywords": [
+      "commerce",
+      "package"
+    ],
+    "lottie": "https://useanimations.com/icons/package.json"
+  },
+  {
+    "id": "percent",
+    "title": "Percent",
+    "category": "Commerce",
+    "keywords": [
+      "commerce",
+      "percent"
+    ],
+    "lottie": "https://useanimations.com/icons/percent.json"
+  },
+  {
+    "id": "shopping-bag",
+    "title": "Shopping Bag",
+    "category": "Commerce",
+    "keywords": [
+      "bag",
+      "commerce",
+      "shopping",
+      "shopping-bag"
+    ],
+    "lottie": "https://useanimations.com/icons/shopping-bag.json"
+  },
+  {
+    "id": "shopping-cart",
+    "title": "Shopping Cart",
+    "category": "Commerce",
+    "keywords": [
+      "cart",
+      "commerce",
+      "shopping",
+      "shopping-cart"
+    ],
+    "lottie": "https://useanimations.com/icons/shopping-cart.json"
+  },
+  {
+    "id": "tag",
+    "title": "Tag",
+    "category": "Commerce",
+    "keywords": [
+      "commerce",
+      "tag"
+    ],
+    "lottie": "https://useanimations.com/icons/tag.json"
+  },
+  {
+    "id": "truck",
+    "title": "Truck",
+    "category": "Commerce",
+    "keywords": [
+      "commerce",
+      "truck"
+    ],
+    "lottie": "https://useanimations.com/icons/truck.json"
+  },
+  {
+    "id": "bar-chart",
+    "title": "Bar Chart",
+    "category": "Charts",
+    "keywords": [
+      "bar",
+      "bar-chart",
+      "chart",
+      "charts"
+    ],
+    "lottie": "https://useanimations.com/icons/bar-chart.json"
+  },
+  {
+    "id": "bar-chart-2",
+    "title": "Bar Chart 2",
+    "category": "Charts",
+    "keywords": [
+      "2",
+      "bar",
+      "bar-chart-2",
+      "chart",
+      "charts"
+    ],
+    "lottie": "https://useanimations.com/icons/bar-chart-2.json"
+  },
+  {
+    "id": "pie-chart",
+    "title": "Pie Chart",
+    "category": "Charts",
+    "keywords": [
+      "chart",
+      "charts",
+      "pie",
+      "pie-chart"
+    ],
+    "lottie": "https://useanimations.com/icons/pie-chart.json"
+  },
+  {
+    "id": "trending-down",
+    "title": "Trending Down",
+    "category": "Charts",
+    "keywords": [
+      "charts",
+      "down",
+      "trending",
+      "trending-down"
+    ],
+    "lottie": "https://useanimations.com/icons/trending-down.json"
+  },
+  {
+    "id": "trending-up",
+    "title": "Trending Up",
+    "category": "Charts",
+    "keywords": [
+      "charts",
+      "trending",
+      "trending-up",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/trending-up.json"
+  },
+  {
+    "id": "code",
+    "title": "Code",
+    "category": "Development",
+    "keywords": [
+      "code",
+      "development"
+    ],
+    "lottie": "https://useanimations.com/icons/code.json"
+  },
+  {
+    "id": "command",
+    "title": "Command",
+    "category": "Development",
+    "keywords": [
+      "command",
+      "development"
+    ],
+    "lottie": "https://useanimations.com/icons/command.json"
+  },
+  {
+    "id": "database",
+    "title": "Database",
+    "category": "Development",
+    "keywords": [
+      "database",
+      "development"
+    ],
+    "lottie": "https://useanimations.com/icons/database.json"
+  },
+  {
+    "id": "git-branch",
+    "title": "Git Branch",
+    "category": "Development",
+    "keywords": [
+      "branch",
+      "development",
+      "git",
+      "git-branch"
+    ],
+    "lottie": "https://useanimations.com/icons/git-branch.json"
+  },
+  {
+    "id": "git-commit",
+    "title": "Git Commit",
+    "category": "Development",
+    "keywords": [
+      "commit",
+      "development",
+      "git",
+      "git-commit"
+    ],
+    "lottie": "https://useanimations.com/icons/git-commit.json"
+  },
+  {
+    "id": "git-merge",
+    "title": "Git Merge",
+    "category": "Development",
+    "keywords": [
+      "development",
+      "git",
+      "git-merge",
+      "merge"
+    ],
+    "lottie": "https://useanimations.com/icons/git-merge.json"
+  },
+  {
+    "id": "git-pull-request",
+    "title": "Git Pull Request",
+    "category": "Development",
+    "keywords": [
+      "development",
+      "git",
+      "git-pull-request",
+      "pull",
+      "request"
+    ],
+    "lottie": "https://useanimations.com/icons/git-pull-request.json"
+  },
+  {
+    "id": "server",
+    "title": "Server",
+    "category": "Development",
+    "keywords": [
+      "development",
+      "server"
+    ],
+    "lottie": "https://useanimations.com/icons/server.json"
+  },
+  {
+    "id": "terminal",
+    "title": "Terminal",
+    "category": "Development",
+    "keywords": [
+      "development",
+      "terminal"
+    ],
+    "lottie": "https://useanimations.com/icons/terminal.json"
+  },
+  {
+    "id": "columns",
+    "title": "Columns",
+    "category": "Design & layout",
+    "keywords": [
+      "columns",
+      "design & layout"
+    ],
+    "lottie": "https://useanimations.com/icons/columns.json"
+  },
+  {
+    "id": "crop",
+    "title": "Crop",
+    "category": "Design & layout",
+    "keywords": [
+      "crop",
+      "design & layout"
+    ],
+    "lottie": "https://useanimations.com/icons/crop.json"
+  },
+  {
+    "id": "grid",
+    "title": "Grid",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "grid"
+    ],
+    "lottie": "https://useanimations.com/icons/grid.json"
+  },
+  {
+    "id": "layers",
+    "title": "Layers",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "layers"
+    ],
+    "lottie": "https://useanimations.com/icons/layers.json"
+  },
+  {
+    "id": "layout",
+    "title": "Layout",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "layout"
+    ],
+    "lottie": "https://useanimations.com/icons/layout.json"
+  },
+  {
+    "id": "mouse-pointer",
+    "title": "Mouse Pointer",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "mouse",
+      "mouse-pointer",
+      "pointer"
+    ],
+    "lottie": "https://useanimations.com/icons/mouse-pointer.json"
+  },
+  {
+    "id": "move",
+    "title": "Move",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "move"
+    ],
+    "lottie": "https://useanimations.com/icons/move.json"
+  },
+  {
+    "id": "pen-tool",
+    "title": "Pen Tool",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "pen",
+      "pen-tool",
+      "tool"
+    ],
+    "lottie": "https://useanimations.com/icons/pen-tool.json"
+  },
+  {
+    "id": "scissors",
+    "title": "Scissors",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "scissors"
+    ],
+    "lottie": "https://useanimations.com/icons/scissors.json"
+  },
+  {
+    "id": "table",
+    "title": "Table",
+    "category": "Design & layout",
+    "keywords": [
+      "design & layout",
+      "table"
+    ],
+    "lottie": "https://useanimations.com/icons/table.json"
+  },
+  {
+    "id": "circle",
+    "title": "Circle",
+    "category": "Shapes & math",
+    "keywords": [
+      "circle",
+      "shapes & math"
+    ],
+    "lottie": "https://useanimations.com/icons/circle.json"
+  },
+  {
+    "id": "divide",
+    "title": "Divide",
+    "category": "Shapes & math",
+    "keywords": [
+      "divide",
+      "shapes & math"
+    ],
+    "lottie": "https://useanimations.com/icons/divide.json"
+  },
+  {
+    "id": "divide-circle",
+    "title": "Divide Circle",
+    "category": "Shapes & math",
+    "keywords": [
+      "circle",
+      "divide",
+      "divide-circle",
+      "shapes & math"
+    ],
+    "lottie": "https://useanimations.com/icons/divide-circle.json"
+  },
+  {
+    "id": "divide-square",
+    "title": "Divide Square",
+    "category": "Shapes & math",
+    "keywords": [
+      "divide",
+      "divide-square",
+      "shapes & math",
+      "square"
+    ],
+    "lottie": "https://useanimations.com/icons/divide-square.json"
+  },
+  {
+    "id": "hexagon",
+    "title": "Hexagon",
+    "category": "Shapes & math",
+    "keywords": [
+      "hexagon",
+      "shapes & math"
+    ],
+    "lottie": "https://useanimations.com/icons/hexagon.json"
+  },
+  {
+    "id": "octagon",
+    "title": "Octagon",
+    "category": "Shapes & math",
+    "keywords": [
+      "octagon",
+      "shapes & math"
+    ],
+    "lottie": "https://useanimations.com/icons/octagon.json"
+  },
+  {
+    "id": "square",
+    "title": "Square",
+    "category": "Shapes & math",
+    "keywords": [
+      "shapes & math",
+      "square"
+    ],
+    "lottie": "https://useanimations.com/icons/square.json"
+  },
+  {
+    "id": "triangle",
+    "title": "Triangle",
+    "category": "Shapes & math",
+    "keywords": [
+      "shapes & math",
+      "triangle"
+    ],
+    "lottie": "https://useanimations.com/icons/triangle.json"
+  },
+  {
+    "id": "infinity",
+    "title": "Infinity",
+    "category": "Loading",
+    "keywords": [
+      "infinity",
+      "loader",
+      "loading",
+      "loop",
+      "spinner"
+    ],
+    "lottie": "https://useanimations.com/icons/infinity.json"
+  },
+  {
+    "id": "loading",
+    "title": "Loading circular",
+    "category": "Loading",
+    "keywords": [
+      "circular",
+      "loader",
+      "loading",
+      "progress",
+      "spinner"
+    ],
+    "lottie": "https://useanimations.com/icons/loading.json"
+  },
+  {
+    "id": "loading-v2",
+    "title": "Loading V2",
+    "category": "Loading",
+    "keywords": [
+      "loader",
+      "loading",
+      "progress",
+      "spinner"
+    ],
+    "lottie": "https://useanimations.com/icons/loading-v2.json"
+  },
+  {
+    "id": "loading-v3",
+    "title": "Loading V3",
+    "category": "Loading",
+    "keywords": [
+      "loader",
+      "loading",
+      "progress",
+      "spinner"
+    ],
+    "lottie": "https://useanimations.com/icons/loading-v3.json"
+  },
+  {
+    "id": "loading-v4",
+    "title": "Loading V4",
+    "category": "Loading",
+    "keywords": [
+      "loader",
+      "loading",
+      "loadingv4",
+      "progress",
+      "spinner"
+    ],
+    "lottie": "https://useanimations.com/icons/loading-v4.json"
+  },
+  {
+    "id": "behance",
+    "title": "Behance",
+    "category": "Social media",
+    "keywords": [
+      "behance",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/behance.json"
+  },
+  {
+    "id": "chrome",
+    "title": "Chrome",
+    "category": "Social media",
+    "keywords": [
+      "chrome",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/chrome.json"
+  },
+  {
+    "id": "codepen",
+    "title": "Codepen",
+    "category": "Social media",
+    "keywords": [
+      "codepen",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/codepen.json"
+  },
+  {
+    "id": "codesandbox",
+    "title": "Codesandbox",
+    "category": "Social media",
+    "keywords": [
+      "codesandbox",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/codesandbox.json"
+  },
+  {
+    "id": "discord",
+    "title": "Discord",
+    "category": "Social media",
+    "keywords": [
+      "chat",
+      "community",
+      "discord",
+      "gaming",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/discord.json"
+  },
+  {
+    "id": "dribbble",
+    "title": "Dribbble",
+    "category": "Social media",
+    "keywords": [
+      "dribbble",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/dribbble.json"
+  },
+  {
+    "id": "facebook",
+    "title": "Facebook",
+    "category": "Social media",
+    "keywords": [
+      "facebook",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/facebook.json"
+  },
+  {
+    "id": "figma",
+    "title": "Figma",
+    "category": "Social media",
+    "keywords": [
+      "figma",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/figma.json"
+  },
+  {
+    "id": "framer",
+    "title": "Framer",
+    "category": "Social media",
+    "keywords": [
+      "framer",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/framer.json"
+  },
+  {
+    "id": "github",
+    "title": "Github",
+    "category": "Social media",
+    "keywords": [
+      "github",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/github.json"
+  },
+  {
+    "id": "gitlab",
+    "title": "GitLab",
+    "category": "Social media",
+    "keywords": [
+      "gitlab",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/gitlab.json"
+  },
+  {
+    "id": "instagram",
+    "title": "Instagram",
+    "category": "Social media",
+    "keywords": [
+      "instagram",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/instagram.json"
+  },
+  {
+    "id": "linkedin",
+    "title": "Linkedin",
+    "category": "Social media",
+    "keywords": [
+      "linkedin",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/linkedin.json"
+  },
+  {
+    "id": "pocket",
+    "title": "Pocket",
+    "category": "Social media",
+    "keywords": [
+      "pocket",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/pocket.json"
+  },
+  {
+    "id": "slack",
+    "title": "Slack",
+    "category": "Social media",
+    "keywords": [
+      "slack",
+      "social media"
+    ],
+    "lottie": "https://useanimations.com/icons/slack.json"
+  },
+  {
+    "id": "telegram",
+    "title": "Telegram",
+    "category": "Social media",
+    "keywords": [
+      "chat",
+      "messenger",
+      "paper plane",
+      "social media",
+      "telegram"
+    ],
+    "lottie": "https://useanimations.com/icons/telegram.json"
+  },
+  {
+    "id": "trello",
+    "title": "Trello",
+    "category": "Social media",
+    "keywords": [
+      "social media",
+      "trello"
+    ],
+    "lottie": "https://useanimations.com/icons/trello.json"
+  },
+  {
+    "id": "twitch",
+    "title": "Twitch",
+    "category": "Social media",
+    "keywords": [
+      "social media",
+      "twitch"
+    ],
+    "lottie": "https://useanimations.com/icons/twitch.json"
+  },
+  {
+    "id": "twitter",
+    "title": "Twitter",
+    "category": "Social media",
+    "keywords": [
+      "social media",
+      "twitter"
+    ],
+    "lottie": "https://useanimations.com/icons/twitter.json"
+  },
+  {
+    "id": "twitter-x",
+    "title": "Twitter X",
+    "category": "Social media",
+    "keywords": [
+      "social media",
+      "twitter",
+      "twitter-x",
+      "x"
+    ],
+    "lottie": "https://useanimations.com/icons/twitter-x.json"
+  },
+  {
+    "id": "youtube",
+    "title": "YouTube",
+    "category": "Social media",
+    "keywords": [
+      "social media",
+      "youtube"
+    ],
+    "lottie": "https://useanimations.com/icons/youtube.json"
+  },
+  {
+    "id": "youtube-v2",
+    "title": "YouTube V2",
+    "category": "Social media",
+    "keywords": [
+      "social media",
+      "youtube",
+      "youtube-2"
+    ],
+    "lottie": "https://useanimations.com/icons/youtube-v2.json"
+  },
+  {
+    "id": "activity",
+    "title": "Activity",
+    "category": "Other",
+    "keywords": [
+      "activity",
+      "other"
+    ],
+    "lottie": "https://useanimations.com/icons/activity.json"
+  },
+  {
+    "id": "arrow-down",
+    "title": "Arrow down",
+    "category": "Other",
+    "keywords": [
+      "arrow",
+      "arrow-down",
+      "direction",
+      "down",
+      "navigation",
+      "other"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-down.json"
+  },
+  {
+    "id": "arrow-up",
+    "title": "Arrow up",
+    "category": "Other",
+    "keywords": [
+      "arrow",
+      "arrow-up",
+      "direction",
+      "navigation",
+      "other",
+      "up"
+    ],
+    "lottie": "https://useanimations.com/icons/arrow-up.json"
+  },
+  {
+    "id": "clock",
+    "title": "Clock",
+    "category": "Other",
+    "keywords": [
+      "clock",
+      "other"
+    ],
+    "lottie": "https://useanimations.com/icons/clock.json"
+  },
+  {
+    "id": "coffee",
+    "title": "Coffee",
+    "category": "Other",
+    "keywords": [
+      "coffee",
+      "other"
+    ],
+    "lottie": "https://useanimations.com/icons/coffee.json"
+  },
+  {
+    "id": "frown",
+    "title": "Frown",
+    "category": "Other",
+    "keywords": [
+      "frown",
+      "other"
+    ],
+    "lottie": "https://useanimations.com/icons/frown.json"
+  },
+  {
+    "id": "meh",
+    "title": "Meh",
+    "category": "Other",
+    "keywords": [
+      "meh",
+      "other"
+    ],
+    "lottie": "https://useanimations.com/icons/meh.json"
+  },
+  {
+    "id": "scroll-down",
+    "title": "Scroll down",
+    "category": "Other",
+    "keywords": [
+      "down",
+      "indicator",
+      "mouse",
+      "other",
+      "scroll",
+      "scrolldown"
+    ],
+    "lottie": "https://useanimations.com/icons/scroll-down.json"
+  },
+  {
+    "id": "smile",
+    "title": "Smile",
+    "category": "Other",
+    "keywords": [
+      "other",
+      "smile"
+    ],
+    "lottie": "https://useanimations.com/icons/smile.json"
+  },
+  {
+    "id": "tool",
+    "title": "Tool",
+    "category": "Other",
+    "keywords": [
+      "other",
+      "tool"
+    ],
+    "lottie": "https://useanimations.com/icons/tool.json"
+  }
+]

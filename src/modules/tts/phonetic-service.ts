@@ -14,14 +14,6 @@ const LETTER_PHONETICS: Record<string, string> = {
   '6': 'सिक्स', '7': 'सेवन', '8': 'एट', '9': 'नाइन',
 };
 
-// Universal regex matching contiguous Devanagari letter sounds
-const DEVANAGARI_LETTER_SOUNDS =
-  '(?:ए|बी|सी|डी|ई|एफ़|जी|एच|आई|जे|के|एल|एम|एन|ओ|पी|क्यू|आर|एस|टी|यू|वी|डब्लू|एक्स|वाय|ज़ेड|वन|टू|थ्री|फोर|फाइव|सिक्स|सेवन|एट|नाइन)';
-const DEVANAGARI_ACRONYM_REGEX = new RegExp(
-  '(' + DEVANAGARI_LETTER_SOUNDS + ')(?=' + DEVANAGARI_LETTER_SOUNDS + ')',
-  'g'
-);
-
 /**
  * Universal Algorithmic Acronym Transliterator
  * Converts ANY English technical abbreviation (JWT, CRDT, BFT, S3, H3, GPS, TTL, OTP, etc.)
@@ -41,9 +33,6 @@ export function transliterateAcronymsUniversal(text: string): string {
   result = result
     .replace(/\bOAuth\b/gi, 'ओ-ऑथ')
     .replace(/\bgRPC\b/gi, 'जी-आर-पी-सी');
-
-  // 2. Hyphenate any contiguous Devanagari letter acronyms (e.g. ओटीपी -> ओ-टी-पी, जीपीएस -> जी-पी-एस, एचथ्री -> एच-थ्री)
-  result = result.replace(DEVANAGARI_ACRONYM_REGEX, '$1-');
 
   return result;
 }
@@ -102,7 +91,7 @@ export async function transliterateToPhoneticDevanagari(text: string): Promise<s
             {
               role: 'system',
               content:
-                'You are a phonetic transliterator for Indian Hindi TTS (Sarvam AI). Transliterate the given Roman Hinglish text completely into pure Devanagari script so that an Indian acoustic TTS model pronounces every word with 100% native natural accuracy. Rules: 1. Transliterate all English technical terms phonetically (Redis -> रेडिस, GPS -> जी-पी-एस, H3 -> एच-थ्री, API -> ए-पी-आई, TTL -> टी-टी-एल, Cache -> कैश, Server -> सर्वर, Zomato -> ज़ोमाटो, Swiggy -> स्विगी, CPU -> सी-पी-यू, RAM -> रैम, DB -> डी-बी, SQL -> एस-क्यू-एल, OTP -> ओ-टी-पी, HTTP -> एच-टी-टी-पी, SMS -> एस-एम-एस, UPI -> यू-पी-आई, NPCI -> एन-पी-सी-आई). 2. Write common Hindi words accurately in Devanagari (sirf -> सिर्फ़, matlab -> मतलब, lekin -> लेकिन, pehle -> पहले, kyun -> क्यों, zyada -> ज़्यादा, paas -> पास, chala -> चला, hazaaron -> हज़ारों). 3. Use natural Hindi punctuation (, and । and ?) to create natural vocal pauses. 4. Transliterate ALL sentences completely without omitting anything. 5. Output ONLY the Devanagari text string.',
+                'You are a phonetic transliterator for Indian Hindi TTS (Sarvam AI). Transliterate the given Roman Hinglish text completely into pure Devanagari script so that an Indian acoustic TTS model pronounces every word with 100% native natural accuracy. Rules: 1. Transliterate all English technical and everyday loan terms phonetically (same -> सेम, Redis -> रेडिस, GPS -> जी-पी-एस, H3 -> एच-थ्री, API -> ए-पी-आई, TTL -> टी-टी-एल, Cache -> कैश, Server -> सर्वर, Zomato -> ज़ोमाटो, Swiggy -> स्विगी, CPU -> सी-पी-यू, RAM -> रैम, DB -> डी-बी, SQL -> एस-क्यू-एल, OTP -> ओ-टी-पी, HTTP -> एच-टी-टी-पी, SMS -> एस-एम-एस, UPI -> यू-पी-आई, NPCI -> एन-पी-सी-आई). 2. Write common Hindi words accurately in Devanagari (sirf -> सिर्फ़, matlab -> मतलब, lekin -> लेकिन, pehle -> पहले, kyun -> क्यों, zyada -> ज़्यादा, paas -> पास, chala -> चला, hazaaron -> हज़ारों). 3. Use natural Hindi punctuation (, and । and ?) to create natural vocal pauses. 4. Transliterate ALL sentences completely without omitting anything. 5. Output ONLY the Devanagari text string.',
             },
             { role: 'user', content: clean },
           ],
@@ -185,6 +174,7 @@ function applyRuleBasedPhonetics(text: string): string {
     [/\bpaas\b/gi, 'पास'],
     [/\bchala\b/gi, 'चला'],
     [/\bhazaaron\b/gi, 'हज़ारों'],
+    [/\bsame\b/gi, 'सेम'],
     [/\bRedis\b/gi, 'रेडिस'],
     [/\bZomato\b/gi, 'ज़ोमाटो'],
     [/\bSwiggy\b/gi, 'स्विगी'],

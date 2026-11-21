@@ -18,7 +18,7 @@ export class EdgeTTSProvider implements TTSProvider {
     options?: { voice?: string; sceneId?: string; sceneIndex?: number; rate?: string; pitch?: string }
   ): Promise<SynthesizedAudioClip> {
     const voice = options?.voice || this.defaultVoice;
-    const rate = options?.rate || '+10%'; // 1.10x speed for natural conversational cadence
+    const rate = options?.rate || '+2%';
     const pitch = options?.pitch || '+2Hz';
     const dir = path.dirname(outputFilePath);
     if (!fs.existsSync(dir)) {
@@ -40,7 +40,7 @@ export class EdgeTTSProvider implements TTSProvider {
         const tts = new MsEdgeTTS();
         await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
 
-        const { audioStream } = tts.toStream(spokenText, { rate, pitch });
+        const { audioStream } = tts.toStream(spokenText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'), { rate, pitch });
 
         await new Promise<void>((resolve, reject) => {
           const fileStream = fs.createWriteStream(outputFilePath);

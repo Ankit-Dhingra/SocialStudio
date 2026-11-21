@@ -1,3 +1,4 @@
+import {compositionSignature} from '../src/modules/render/bundle-signature.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { bundle } from '@remotion/bundler';
@@ -34,6 +35,7 @@ async function main() {
     fs.cpSync(publicDir, distPublic, { recursive: true, force: true });
   }
 
+  fs.writeFileSync(path.join(outDir, 'composition.sha256'), compositionSignature());
   console.log(`[Build] Remotion composition pre-bundled successfully to: ${bundleLocation}`);
 }
 

@@ -10,6 +10,7 @@ dotenv.config();
 
 export interface GenerateScriptOptions {
   topic: string;
+  angle?: string;
   targetDurationSec?: number;
   provider?: 'gemini' | 'groq';
   mockTopicAware?: boolean;
@@ -67,7 +68,7 @@ function verifyTopicRelevance(topic: string, storyboard: Storyboard): { relevant
 }
 
 export async function generateHinglishScript(options: GenerateScriptOptions): Promise<Storyboard> {
-  const { topic, targetDurationSec = 45, provider = (process.env.LLM_PROVIDER as 'gemini' | 'groq') || 'gemini' } = options;
+  const { topic, angle, targetDurationSec = 105, provider = (process.env.LLM_PROVIDER as 'gemini' | 'groq') || 'gemini' } = options;
 
   if (!topic || topic.trim().length < 5) {
     throw new Error('Topic must be at least 5 characters long');
@@ -83,7 +84,7 @@ export async function generateHinglishScript(options: GenerateScriptOptions): Pr
     const file = new URL('../../../examples/' + reference.file + '.json', import.meta.url);
     brief = StoryboardSchema.parse(JSON.parse(await readFile(file, 'utf8'))).sourceBrief;
   }
-  const prompt = buildHinglishScriptPrompt(topic.trim(), targetDurationSec) + (brief
+  const prompt = buildHinglishScriptPrompt(topic.trim(), angle, targetDurationSec) + (brief
     ? '\nVerified source and scope: ' + JSON.stringify(brief) + '\nKeep every conclusion consistent with these facts.'
     : '');
   const systemInstruction =
@@ -123,9 +124,14 @@ export async function generateHinglishScript(options: GenerateScriptOptions): Pr
     try {
       const storyboard = StoryboardSchema.parse(JSON.parse(cleanJsonResponse(raw)));
       validateLesson(storyboard);
+      const count = storyboard.scenes.reduce((total, scene) =>
+        total + scene.narration.replace(/<[^>]+>/g, ' ').trim().split(/\s+/u).length, 0);
+      if (count < targetDurationSec * 2 || count > targetDurationSec * 2.85) {
+        throw new Error(`Draft has ${count} words. Aim for ${Math.round(targetDurationSec * 2.35)} spoken words in ${targetDurationSec}s.`);
+      }
       const relevance = verifyTopicRelevance(topic, storyboard);
       if (!relevance.relevant) throw new Error(relevance.reason);
-      return { ...storyboard, topic: topic.trim(), sourceBrief: brief };
+      return { ...storyboard, estimatedDurationSec: targetDurationSec, topic: topic.trim(), angle: angle || storyboard.angle, sourceBrief: brief };
     } catch (error) {
       feedback = '\nRevise the storyboard. Correct these validation errors: ' + String(error);
     }

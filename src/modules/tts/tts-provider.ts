@@ -1,4 +1,6 @@
 export interface SynthesizedAudioClip {
+  quietIntervals?: Array<{start: number; end: number}>;
+  spokenText?: string;
   alignment?: { text: string; starts: number[] };
   wordTimestamps?: Array<{ word: string; start: number; end: number }>;
   sceneId: string;

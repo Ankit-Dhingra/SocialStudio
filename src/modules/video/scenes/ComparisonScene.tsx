@@ -1,16 +1,5 @@
 import React from 'react';
-import {
-  AbsoluteFill,
-  Audio,
-  interpolate,
-  Sequence,
-  spring,
-  staticFile,
-  useCurrentFrame,
-  useVideoConfig,
-} from 'remotion';
-import { VideoDesignTokens } from '../design-system.js';
-import { LayercutWordBehind, EclipseHUDChip } from '../MotionStyles.js';
+import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 
 interface ComparisonSceneProps {
   leftTitle?: string;
@@ -21,284 +10,529 @@ interface ComparisonSceneProps {
   rightPoints?: string[];
   verdict?: string;
   onScreenText?: string;
+  metricAName?: string;
+  metricACount?: number | string;
+  metricBName?: string;
+  metricBCount?: number | string;
+  deficitRatio?: string;
+  stampTitle?: string;
+  stampSubtitle?: string;
 }
 
 export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
-  leftTitle = '❌ NAIVE DIRECT QUERY',
-  leftCode = 'fee = distance_km * 10 // Static calculation',
-  leftPoints = ['Assumes static conditions', 'Fails during peak rush', 'Riders get no incentive'],
-  rightTitle = '✅ REAL-TIME SPATIAL PRICING',
-  rightCode = 'fee = base_fee * surge_multiplier(hex_bin)',
-  rightPoints = ['In-memory spatial ratio', 'Dynamic 1.2X to 2.5X multiplier', 'Directly balances fleet availability'],
-  verdict = 'In-memory dynamic fleet balancing attracts riders to high-demand areas.',
-  onScreenText = 'DISTANCE MYTH vs SPATIAL RATIO',
+  leftTitle = 'THE DISTANCE MYTH',
+  leftCode = 'delivery_fee = distance_km * ₹10',
+  leftPoints = ['Assumes static conditions', 'Fails during heavy rain or peak dinner', 'Riders get zero incentive to move'],
+  rightTitle = 'DYNAMIC FLEET INCENTIVE',
+  rightCode = 'delivery_fee = base_fee * surge_mult(hex_id)',
+  rightPoints = ['Real-time 1.8X multiplier', 'Attracts 30+ idle drivers to your street', 'Fleet rebalanced in < 4 minutes'],
+  verdict = 'Surge fee is not distance. It is an algorithmic incentive to move drivers.',
+  onScreenText = 'DISTANCE vs REAL-TIME SUPPLY & DEMAND',
+  metricAName = 'Orders',
+  metricACount = 100,
+  metricBName = 'Riders',
+  metricBCount = 20,
+  deficitRatio,
+  stampTitle = '❌ CITY-WIDE SCAN FAILED',
+  stampSubtitle = 'Too Expensive & Latency Chokes Database!',
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Active camera drift
-  const cameraScale = interpolate(frame, [0, 90], [1.0, 1.03], { extrapolateRight: 'clamp' });
-
-  // Spring entrances
-  const entranceLeft = spring({
+  const entrance = spring({
     frame,
     fps,
-    config: { damping: 14, stiffness: 95 },
+    config: { damping: 14, stiffness: 85 },
   });
 
-  const entranceRight = spring({
-    frame: Math.max(0, frame - 12),
-    fps,
-    config: { damping: 14, stiffness: 95 },
-  });
-
-  const vsPulse = interpolate(Math.sin(frame / 8), [-1, 1], [0.95, 1.05]);
+  const vsPulse = 1 + Math.sin(frame / 6) * 0.08;
+  const computedRatio = deficitRatio || `${(Number(metricACount) / Math.max(1, Number(metricBCount))).toFixed(1)}X DEFICIT`;
 
   return (
     <AbsoluteFill
       style={{
-        transform: `scale(${cameraScale})`,
-        transformOrigin: 'center center',
-        paddingTop: 120,
-        paddingBottom: VideoDesignTokens.safeMargin.bottom,
-        paddingLeft: 40,
-        paddingRight: 40,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        fontFamily: VideoDesignTokens.typography.fontFamilySans,
-        color: '#FFFFFF',
         overflow: 'hidden',
+        background: 'transparent',
       }}
     >
-      {/* Cinematic Layercut Word Behind */}
-      <LayercutWordBehind word="VERSUS" topPercent={28} color="rgba(255, 255, 255, 0.05)" />
-
-      {/* SFX */}
-      <Sequence from={0} durationInFrames={20}>
-        <Audio src={staticFile('sfx/buzzer.wav')} volume={0.4} />
-      </Sequence>
-      <Sequence from={12} durationInFrames={25}>
-        <Audio src={staticFile('sfx/ding.wav')} volume={0.6} />
-      </Sequence>
-
-      {/* Header Pill */}
-      <div style={{ textAlign: 'center', zIndex: 10 }}>
+      {/* Top Floating Sleek Title HUD */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 180,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          zIndex: 40,
+          transform: `scale(${entrance})`,
+          padding: '0 140px 0 60px',
+        }}
+      >
         <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 10,
-            padding: '8px 24px',
-            borderRadius: 30,
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1.5px solid rgba(239, 68, 68, 0.6)',
-            boxShadow: '0 0 25px rgba(239, 68, 68, 0.3)',
+            gap: 12,
+            padding: '10px 28px',
+            background: 'rgba(15, 23, 42, 0.92)',
+            backdropFilter: 'blur(20px)',
+            border: '1.5px solid rgba(239, 68, 68, 0.5)',
+            borderRadius: 999,
+            boxShadow: '0 0 35px rgba(239, 68, 68, 0.35)',
+            marginBottom: 16,
           }}
         >
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 10px #EF4444' }} />
+          <div
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: '#EF4444',
+              boxShadow: '0 0 12px #EF4444',
+            }}
+          />
           <span
             style={{
-              color: '#F87171',
               fontSize: 20,
               fontWeight: 900,
-              letterSpacing: 2,
+              letterSpacing: 3,
+              color: '#F87171',
               textTransform: 'uppercase',
             }}
           >
-            {onScreenText}
+            SYSTEM DESIGN DEBUNKED
           </span>
         </div>
-      </div>
 
-      {/* Main Dynamic Split Layout (No Boring Note Cards) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, zIndex: 10 }}>
-        {/* OPTION 1: Flawed / Junior Approach (Floating Glass Capsule) */}
-        <div
+        <h1
           style={{
-            transform: `translateX(${(1 - entranceLeft) * -80}px)`,
-            opacity: entranceLeft,
-            background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(15, 23, 42, 0.85) 100%)',
-            backdropFilter: 'blur(20px)',
-            border: '1.5px solid rgba(239, 68, 68, 0.45)',
-            borderRadius: 28,
-            padding: '24px 28px',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(239, 68, 68, 0.2)',
-            position: 'relative',
+            fontSize: 52,
+            fontWeight: 900,
+            color: '#FFFFFF',
+            lineHeight: 1.15,
+            margin: '0 0 10px 0',
+            textShadow: '0 4px 30px rgba(0, 0, 0, 0.9)',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 32 }}>⚠️</span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#EF4444', letterSpacing: 2 }}>FLAWED APPROACH</div>
-                <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF' }}>{leftTitle.replace(/^[❌✅]\s*/, '')}</div>
-              </div>
-            </div>
-            <div
-              style={{
-                background: 'rgba(239, 68, 68, 0.25)',
-                color: '#FCA5A5',
-                padding: '6px 14px',
-                borderRadius: 12,
-                fontSize: 14,
-                fontWeight: 900,
-                border: '1px solid #EF4444',
-              }}
-            >
-              1450ms LATENCY
-            </div>
-          </div>
+          {onScreenText || 'DISTANCE vs SUPPLY & DEMAND'}
+        </h1>
 
-          {/* Code Highlight Capsule */}
+        <p
+          style={{
+            fontSize: 24,
+            fontWeight: 600,
+            color: '#94A3B8',
+            margin: 0,
+            textShadow: '0 2px 10px rgba(0, 0, 0, 0.9)',
+          }}
+        >
+          Why naive distance calculations fail under real-world demand
+        </p>
+      </div>
+
+      {/* Mode Switch: Cut 1.1 (Area Shortage Map + Failed Brute Force Scan) vs Cut 1.2 (Comparison Matrix) */}
+      {frame < 190 ? (
+        /* CUT 1.1: AREA SHORTAGE MAP & FAILED BRUTE FORCE CITY SCAN */
+        <div
+          style={{
+            position: 'absolute',
+            top: 360,
+            bottom: 530,
+            left: 60,
+            right: 140,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            zIndex: 30,
+          }}
+        >
+          {/* Critical Imbalance Card */}
           <div
             style={{
-              background: 'rgba(0, 0, 0, 0.65)',
-              borderRadius: 16,
-              padding: '14px 18px',
-              fontFamily: 'monospace',
-              fontSize: 20,
-              color: '#FCA5A5',
-              borderLeft: '4px solid #EF4444',
+              width: '100%',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(15, 23, 42, 0.95) 100%)',
+              border: '2px solid rgba(239, 68, 68, 0.6)',
+              borderRadius: 28,
+              padding: '24px 30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              boxShadow: '0 15px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(239, 68, 68, 0.3)',
             }}
           >
-            {leftCode}
-          </div>
-
-          {/* Quick Impact Tags */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            {leftPoints.slice(0, 2).map((pt, i) => (
-              <span
-                key={i}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div
                 style={{
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  color: '#FECACA',
-                  padding: '4px 12px',
-                  borderRadius: 8,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  width: 56,
+                  height: 56,
+                  borderRadius: 16,
+                  background: 'rgba(239, 68, 68, 0.25)',
+                  border: '1.5px solid #EF4444',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 28,
                 }}
               >
-                ✕ {pt}
-              </span>
-            ))}
+                🚨
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: '#FCA5A5', letterSpacing: 2 }}>
+                  LOCAL SUPPLY BOTTLENECK
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
+                  {metricACount} {metricAName} vs {metricBCount} {metricBName}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#EF4444',
+                color: '#FFFFFF',
+                padding: '8px 20px',
+                borderRadius: 999,
+                fontWeight: 900,
+                fontSize: 18,
+                letterSpacing: 1,
+                boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)',
+              }}
+            >
+              {computedRatio}
+            </div>
+          </div>
+
+          {/* Central Radar Simulation Canvas */}
+          <div
+            style={{
+              width: '100%',
+              height: 380,
+              borderRadius: 28,
+              background: 'rgba(10, 15, 30, 0.85)',
+              border: '1.5px solid rgba(56, 189, 248, 0.25)',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {/* Grid Pattern */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: 'radial-gradient(rgba(56, 189, 248, 0.15) 1px, transparent 1px)',
+                backgroundSize: '24px 24px',
+              }}
+            />
+
+            {/* Expanding Brute-Force Search Radar Wave */}
+            <div
+              style={{
+                position: 'absolute',
+                width: 320,
+                height: 320,
+                borderRadius: '50%',
+                border: '3px dashed #EF4444',
+                background: 'rgba(239, 68, 68, 0.08)',
+                transform: `scale(${1 + ((frame % 60) / 60) * 1.5})`,
+                opacity: 1 - (frame % 60) / 60,
+                boxShadow: '0 0 35px rgba(239, 68, 68, 0.4)',
+              }}
+            />
+
+            {/* 20 Green Rider Dots */}
+            {Array.from({ length: 20 }).map((_, i) => {
+              const angle = (i / 20) * Math.PI * 2;
+              const dist = 70 + (i % 3) * 35;
+              const x = Math.cos(angle) * dist;
+              const y = Math.sin(angle) * dist;
+              return (
+                <div
+                  key={`rider-${i}`}
+                  style={{
+                    position: 'absolute',
+                    transform: `translate(${x}px, ${y}px)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>🛵</span>
+                </div>
+              );
+            })}
+
+            {/* Center Hot Demand Cluster */}
+            <div
+              style={{
+                width: 110,
+                height: 110,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(239, 68, 68, 0.5) 0%, rgba(239, 68, 68, 0.1) 70%)',
+                border: '2px solid #EF4444',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 35px #EF4444',
+                zIndex: 10,
+              }}
+            >
+              <span style={{ fontSize: 24 }}>📦</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: '#FFFFFF' }}>{metricACount} {String(metricAName).toUpperCase()}</span>
+            </div>
+
+            {/* Giant Red Stamp at frame 90: FAILED BRUTE FORCE SCAN */}
+            {frame >= 90 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'rgba(15, 23, 42, 0.88)',
+                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 40,
+                  transform: `scale(${spring({ frame: frame - 90, fps, config: { damping: 12, stiffness: 120 } })}) rotate(-4deg)`,
+                }}
+              >
+                <div
+                  style={{
+                    border: '5px solid #EF4444',
+                    borderRadius: 20,
+                    padding: '16px 28px',
+                    textAlign: 'center',
+                    background: 'rgba(239, 68, 68, 0.25)',
+                    boxShadow: '0 0 50px rgba(239, 68, 68, 0.8)',
+                  }}
+                >
+                  <div style={{ fontSize: 32, fontWeight: 900, color: '#FFFFFF', letterSpacing: 2 }}>
+                    {stampTitle}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#FCA5A5', marginTop: 4 }}>
+                    {stampSubtitle}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Alert Pill */}
+          <div
+            style={{
+              width: '100%',
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: '1.5px solid rgba(239, 68, 68, 0.4)',
+              borderRadius: 20,
+              padding: '14px 22px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+            }}
+          >
+            <span style={{ fontSize: 24 }}>💡</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>
+              Distance alone cannot detect that 100 orders are chasing just 20 riders.
+            </span>
           </div>
         </div>
+      ) : (
+        /* CUT 1.2: SIDE-BY-SIDE ARCHITECTURAL COMPARISON MATRIX */
+        <div
+          style={{
+            position: 'absolute',
+            top: 350,
+            bottom: 530,
+            left: 60,
+            right: 140,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            zIndex: 30,
+          }}
+        >
+          {/* OPTION 1: THE FLAWED DISTANCE MYTH (Top Section) */}
+          <div
+            style={{
+              width: '100%',
+              borderRadius: 28,
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(15, 23, 42, 0.92) 100%)',
+              border: '2px solid rgba(239, 68, 68, 0.5)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(239, 68, 68, 0.25)',
+              padding: '22px 28px',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ fontSize: 32 }}>❌</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: '#EF4444', letterSpacing: 2 }}>
+                    NAIVE FORMULA
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
+                    {leftTitle}
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 999,
+                  background: '#EF4444',
+                  color: '#FFFFFF',
+                  fontSize: 14,
+                  fontWeight: 900,
+                }}
+              >
+                BLIND TO SHORTAGE
+              </div>
+            </div>
 
-        {/* Central Energy Divider with Floating VS Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '-10px 0', zIndex: 20 }}>
+            {/* Code Formula Box */}
+            <div
+              style={{
+                marginTop: 14,
+                background: 'rgba(0, 0, 0, 0.65)',
+                borderLeft: '5px solid #EF4444',
+                borderRadius: 14,
+                padding: '12px 18px',
+                fontFamily: 'monospace',
+                fontSize: 19,
+                color: '#FCA5A5',
+                fontWeight: 700,
+              }}
+            >
+              {leftCode}
+            </div>
+
+            {/* Point Pills */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+              {leftPoints.map((pt, i) => (
+                <span
+                  key={i}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    color: '#FECACA',
+                    padding: '6px 14px',
+                    borderRadius: 10,
+                    fontSize: 15,
+                    fontWeight: 700,
+                  }}
+                >
+                  • {pt}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Central VS Pulser */}
           <div
             style={{
               transform: `scale(${vsPulse})`,
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
               background: 'linear-gradient(135deg, #EF4444 0%, #10B981 100%)',
-              padding: '6px 20px',
-              borderRadius: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               fontWeight: 900,
-              fontSize: 20,
-              letterSpacing: 3,
-              boxShadow: '0 0 25px rgba(255, 255, 255, 0.4)',
+              fontSize: 18,
               color: '#FFFFFF',
+              boxShadow: '0 0 30px rgba(255, 255, 255, 0.4)',
+              zIndex: 35,
             }}
           >
             VS
           </div>
-        </div>
 
-        {/* OPTION 2: Senior / Production Approach (Floating Glass Capsule) */}
-        <div
-          style={{
-            transform: `translateX(${(1 - entranceRight) * 80}px)`,
-            opacity: entranceRight,
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(15, 23, 42, 0.85) 100%)',
-            backdropFilter: 'blur(20px)',
-            border: '1.5px solid rgba(16, 185, 129, 0.5)',
-            borderRadius: 28,
-            padding: '24px 28px',
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.7), 0 0 35px rgba(16, 185, 129, 0.25)',
-            position: 'relative',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 32 }}>⚡</span>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: '#34D399', letterSpacing: 2 }}>PRODUCTION READY</div>
-                <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF' }}>{rightTitle.replace(/^[❌✅]\s*/, '')}</div>
-              </div>
-            </div>
-            <div
-              style={{
-                background: 'rgba(16, 185, 129, 0.25)',
-                color: '#6EE7B7',
-                padding: '6px 14px',
-                borderRadius: 12,
-                fontSize: 14,
-                fontWeight: 900,
-                border: '1px solid #10B981',
-              }}
-            >
-              &lt; 2ms O(1)
-            </div>
-          </div>
-
-          {/* Code Highlight Capsule */}
+          {/* OPTION 2: REAL-TIME SPATIAL PRICING (Bottom Section) */}
           <div
             style={{
-              background: 'rgba(0, 0, 0, 0.65)',
-              borderRadius: 16,
-              padding: '14px 18px',
-              fontFamily: 'monospace',
-              fontSize: 20,
-              color: '#6EE7B7',
-              borderLeft: '4px solid #10B981',
+              width: '100%',
+              borderRadius: 28,
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(15, 23, 42, 0.92) 100%)',
+              border: '2px solid rgba(16, 185, 129, 0.6)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 40px rgba(16, 185, 129, 0.3)',
+              padding: '22px 28px',
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
-            {rightCode}
-          </div>
-
-          {/* Quick Impact Tags */}
-          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
-            {rightPoints.slice(0, 2).map((pt, i) => (
-              <span
-                key={i}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ fontSize: 32 }}>✅</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: '#34D399', letterSpacing: 2 }}>
+                    REAL TELEMETRY
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
+                    {rightTitle}
+                  </div>
+                </div>
+              </div>
+              <div
                 style={{
-                  background: 'rgba(16, 185, 129, 0.12)',
-                  color: '#A7F3D0',
-                  padding: '4px 12px',
-                  borderRadius: 8,
-                  fontSize: 15,
-                  fontWeight: 700,
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  padding: '6px 16px',
+                  borderRadius: 999,
+                  background: '#10B981',
+                  color: '#FFFFFF',
+                  fontSize: 14,
+                  fontWeight: 900,
                 }}
               >
-                ✓ {pt}
-              </span>
-            ))}
+                SUPPLY-AWARE
+              </div>
+            </div>
+
+            {/* Code Formula Box */}
+            <div
+              style={{
+                marginTop: 14,
+                background: 'rgba(0, 0, 0, 0.65)',
+                borderLeft: '5px solid #10B981',
+                borderRadius: 14,
+                padding: '12px 18px',
+                fontFamily: 'monospace',
+                fontSize: 19,
+                color: '#6EE7B7',
+                fontWeight: 700,
+              }}
+            >
+              {rightCode}
+            </div>
+
+            {/* Point Pills */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+              {rightPoints.map((pt, i) => (
+                <span
+                  key={i}
+                  style={{
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    color: '#A7F3D0',
+                    padding: '6px 14px',
+                    borderRadius: 10,
+                    fontSize: 15,
+                    fontWeight: 700,
+                  }}
+                >
+                  ✓ {pt}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Floating Verdict Chip */}
-      <div style={{ zIndex: 10 }}>
-        <div
-          style={{
-            background: 'rgba(15, 23, 42, 0.95)',
-            border: '1.5px solid rgba(56, 189, 248, 0.4)',
-            borderRadius: 20,
-            padding: '16px 22px',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(56, 189, 248, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 14,
-          }}
-        >
-          <span style={{ fontSize: 24 }}>💡</span>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#E0F2FE', lineHeight: 1.3 }}>
-            {verdict}
-          </span>
-        </div>
-      </div>
+      )}
     </AbsoluteFill>
   );
 };

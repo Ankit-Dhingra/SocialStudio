@@ -14,7 +14,7 @@ const dir = path.resolve('media/runs', id);
 fs.mkdirSync(dir, {recursive: true});
 const storyboard = topic.endsWith('.json')
   ? StoryboardSchema.parse(JSON.parse(fs.readFileSync(topic, 'utf8')))
-  : await generateHinglishScript({topic, targetDurationSec: 55});
+  : await generateHinglishScript({topic, targetDurationSec: 105});
 fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify(storyboard, null, 2));
 const audio = await synthesizeStoryboardNarration(storyboard, dir);
 const publicDir = path.resolve('remotion/public/audio/runs', id);

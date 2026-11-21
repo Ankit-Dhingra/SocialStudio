@@ -12,7 +12,7 @@ import { VideoTimeline } from './timeline.js';
 import { VideoDesignTokens } from './design-system.js';
 import { renderRegisteredScene } from './SceneRegistry.js';
 import { KineticCaptions } from './KineticCaptions.js';
-import { EclipseNeonRing, SpiralGlassRibbon, LayercutWordBehind, AnimatedBlackCyberGrid } from './MotionStyles.js';
+import { AnimatedBlackCyberGrid } from './MotionStyles.js';
 
 export interface StudioShortProps {
   storyboard: Storyboard;
@@ -38,8 +38,8 @@ function resolveAudioSource(src: string): string {
 }
 
 const SceneSequenceRenderer: React.FC<{
-  scene: any;
-  seg: any;
+  scene: Storyboard['scenes'][number];
+  seg: VideoTimeline['segments'][number];
   fps: number;
   isFirst: boolean;
 }> = ({ scene, seg, fps, isFirst }) => {
@@ -62,7 +62,7 @@ const SceneSequenceRenderer: React.FC<{
           transformOrigin: '50% 45%',
         }}
       >
-        {renderRegisteredScene(scene, seg.cueFrames)}
+        {renderRegisteredScene(scene, seg.cueFrames, seg.wordFrames, Math.ceil(seg.audioDurationMs * fps / 1000))}
       </AbsoluteFill>
 
       {/* Per-scene Narration Audio */}
@@ -72,39 +72,43 @@ const SceneSequenceRenderer: React.FC<{
       <Audio src={resolveAudioSource('sfx/whoosh.wav')} volume={0.15} />
       {isFirst && <Audio src={resolveAudioSource('sfx/pop.wav')} volume={0.16} />}
 
+      {/* Semantic Cue-Synchronized Sound Effects (Ding / Buzzer / Pop) */}
+      {seg.cueFrames?.map((cueF, cIdx) => {
+        if (cueF <= 5 || cueF >= seg.durationInFrames - 5) return null;
+        const isError = /reject|fail|crash|bottleneck|slow|error|drop|deadlock|stale|timeout|nahi/i.test(scene.narration);
+        const sfxTrack = isError ? 'sfx/buzzer.wav' : 'sfx/ding.wav';
+        const vol = isError ? 0.32 : 0.38;
+        return (
+          <Sequence key={`cue-sfx-${cIdx}`} from={cueF} durationInFrames={35}>
+            <Audio src={resolveAudioSource(sfxTrack)} volume={vol} />
+          </Sequence>
+        );
+      })}
+
       {/* Kinetic Dynamic Word-by-Word Subtitles */}
       <KineticCaptions
         wordFrames={seg.wordFrames}
         narration={scene.narration}
         durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * fps / 1000))}
-        highlightColor="#64E99A"
+        highlightColor="#00F2FE"
       />
     </>
   );
 };
 
-function safeClean(val: any, fallback = ''): string {
-  if (!val) return fallback;
-  if (typeof val === 'string') {
-    let s = val.trim();
-    if (s.startsWith('{') || s.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(s);
-        return safeClean(parsed, fallback);
-      } catch {
-        s = s.replace(/[\{\}\[\]"']/g, '').replace(/\b(text|position|color|size|delay|type|id|side)\b\s*:\s*/gi, '').trim();
-      }
+export function musicVolumeAtFrame(timeline: VideoTimeline, frame: number) {
+  const sec = frame / timeline.fps;
+  let presence = 0;
+  for (const seg of timeline.segments) {
+    if (!seg.audioSrc) continue;
+    const local = sec - seg.startFrame / timeline.fps;
+    const ranges = seg.speechRanges ?? [{start: 0, end: seg.audioDurationMs / 1000}];
+    for (const range of ranges) {
+      presence = Math.max(presence, Math.min(1, 1 + (local - range.start) / 0.10, 1 + (range.end - local) / 0.32));
     }
-    return s || fallback;
   }
-  if (Array.isArray(val)) {
-    const list = val.map((x) => safeClean(x, '')).filter(Boolean);
-    return list.slice(0, 3).join(' • ') || fallback;
-  }
-  if (typeof val === 'object') {
-    return val.text || val.title || val.headline || val.label || val.name || fallback;
-  }
-  return String(val).trim() || fallback;
+  const fade = Math.min(1, sec / 0.15, Math.max(0, (timeline.totalDurationInFrames-frame) / timeline.fps / 0.35));
+  return Math.min(0.085, timeline.bgmVolumeDucked) * (1 - presence * 0.72) * fade;
 }
 
 export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard, timeline }) => {
@@ -112,13 +116,6 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
 
   // Background music source (defaults to our synthesized ambient tech track)
   const bgmTrack = timeline.bgmSrc || 'music/tech-ambient.wav';
-
-  // Active scene calculation for Mute-Proof Top Action Anchor
-  const currentSceneIdx = timeline.segments.findIndex(
-    (seg) => frame >= seg.startFrame && frame < seg.startFrame + seg.durationInFrames
-  );
-  const activeScene = storyboard.scenes[currentSceneIdx >= 0 ? currentSceneIdx : 0];
-  const activeTag = activeScene?.onScreenText || 'SYSTEM ARCHITECTURE';
 
   return (
     <AbsoluteFill
@@ -129,61 +126,50 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
         overflow: 'hidden',
       }}
     >
-      {/* Root Animated Black Cyber Grid Background (Zero harsh blue) */}
+      {/* Root Animated Black Cyber Grid Background */}
       <AnimatedBlackCyberGrid />
-      {/* Top Header Safe Zone Status Bar (Mute-Proof Explainer Anchor) */}
+
+      {/* Ultra-sleek Instagram-Story Style Progress Bar (Top Edge Only) */}
       <div
         style={{
           position: 'absolute',
-          top: 36,
-          left: 48,
-          right: 48,
+          top: 16,
+          left: 36,
+          right: 36,
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          gap: 6,
           zIndex: 100,
         }}
       >
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '8px 20px',
-            background: 'rgba(15, 23, 42, 0.9)',
-            backdropFilter: 'blur(16px)',
-            border: '1.5px solid rgba(56, 189, 248, 0.4)',
-            borderRadius: 999,
-            boxShadow: '0 4px 25px rgba(0, 0, 0, 0.7)',
-            maxWidth: '68%',
-          }}
-        >
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 10px #10B981' }} />
-          <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: '1.4px', color: '#38BDF8', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {activeTag}
-          </span>
-        </div>
-
-        {/* Progress Segments */}
-        <div style={{ display: 'flex', gap: 6 }}>
-          {storyboard.scenes.map((_, idx) => {
-            const seg = timeline.segments[idx];
-            const isCompleted = seg && frame >= seg.startFrame + seg.durationInFrames;
-            const isCurrent = seg && frame >= seg.startFrame && frame < seg.startFrame + seg.durationInFrames;
-            return (
+        {storyboard.scenes.map((_, idx) => {
+          const seg = timeline.segments[idx];
+          const isCompleted = seg && frame >= seg.startFrame + seg.durationInFrames;
+          const isCurrent = seg && frame >= seg.startFrame && frame < seg.startFrame + seg.durationInFrames;
+          const currentProgress = isCurrent
+            ? Math.max(0, Math.min(1, (frame - seg.startFrame) / Math.max(1, seg.durationInFrames)))
+            : 0;
+          return (
+            <div
+              key={idx}
+              style={{
+                flex: 1,
+                height: 4,
+                borderRadius: 2,
+                background: 'rgba(255, 255, 255, 0.15)',
+                overflow: 'hidden',
+              }}
+            >
               <div
-                key={idx}
                 style={{
-                  width: Math.max(16, Math.min(32, Math.floor(320 / storyboard.scenes.length))),
-                  height: 5,
-                  borderRadius: 3,
-                  background: isCompleted ? '#3B82F6' : isCurrent ? '#FACC15' : 'rgba(255, 255, 255, 0.2)',
-                  transition: 'background 0.2s',
+                  height: '100%',
+                  width: isCompleted ? '100%' : isCurrent ? `${currentProgress * 100}%` : '0%',
+                  background: isCurrent ? 'linear-gradient(90deg, #38BDF8, #FACC15)' : '#38BDF8',
+                  boxShadow: isCurrent ? '0 0 8px #38BDF8' : 'none',
                 }}
               />
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Render Scenes by Timeline Segments */}
@@ -211,15 +197,8 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
       {bgmTrack && (
         <Audio
           src={resolveAudioSource(bgmTrack)}
-          volume={(f) => {
-            const baseVol = Math.min(0.035, timeline.bgmVolumeDucked);
-            // Smooth 1.5s (45 frames) audio fade out at the end
-            const framesRemaining = timeline.totalDurationInFrames - f;
-            if (framesRemaining < 45 && framesRemaining > 0) {
-              return baseVol * (framesRemaining / 45);
-            }
-            return baseVol;
-          }}
+          loopVolumeCurveBehavior="extend"
+          volume={(f) => musicVolumeAtFrame(timeline, f)}
           loop
         />
       )}

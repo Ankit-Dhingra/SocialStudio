@@ -40,7 +40,7 @@ export const HookPropsSchema = z.object({
 
 export const CodeWalkthroughPropsSchema = z.object({
   filename: z.string().default('example.ts'),
-  language: z.enum(['javascript', 'typescript', 'python', 'sql', 'bash', 'json']).default('typescript'),
+  language: z.enum(['javascript', 'typescript', 'python', 'sql', 'bash', 'json', 'lua', 'sh']).default('typescript'),
   code: z.string().default('console.log("Hello, World!");'),
   highlightLines: z.array(z.number()).default([1]),
   terminalOutputs: z.array(z.object({
@@ -73,6 +73,7 @@ export const RequestFlowPropsSchema = z.object({
 
 export const QueueTimelinePropsSchema = z.object({
   title: z.string().default('Queue Timeline Processing'),
+  mode: z.enum(['lock', 'queue', 'event-loop', 'timeline']).optional(),
   items: z
     .array(
       z.object({
@@ -135,30 +136,41 @@ export const RaceConditionPropsSchema = z.object({
 });
 
 export const SmartphoneMockupPropsSchema = z.object({
-  headline: z.string().default('HOW APPS HANDLE HIGH DEMAND'),
-  subtext: z.string().default('Dynamic pricing and inventory reservation'),
-  appName: z.string().default('ZOMATO'),
-  locationText: z.string().default('HSR Layout, Sector 4'),
-  itemName: z.string().default('Royal Chicken Dum Biryani'),
-  itemPrice: z.string().default('₹380'),
-  surgeAmount: z.string().default('+₹50'),
-  surgeMultiplier: z.string().default('1.8X'),
-  baseDeliveryFee: z.string().default('₹30'),
-  surgeDeliveryFee: z.string().default('₹80'),
-  surgeReason: z.string().default('HIGH DEMAND • 120+ ACTIVE ORDERS'),
+  headline: z.coerce.string().default('REAL-TIME DYNAMIC ADJUSTMENT'),
+  subtext: z.coerce.string().default('Dynamic pricing, surge tariffs, and inventory limits'),
+  appName: z.coerce.string().default('APP'),
+  appCategory: z.enum(['shop', 'ecommerce', 'delivery', 'food', 'ride', 'fintech', 'generic']).optional(),
+  locationText: z.coerce.string().default('Downtown • Main Hub'),
+  itemName: z.coerce.string().default('Selected Item'),
+  itemEmoji: z.coerce.string().optional(),
+  itemPrice: z.coerce.string().default('₹350'),
+  feeLabel: z.coerce.string().optional(),
+  surgeAmount: z.coerce.string().default('+₹50'),
+  surgeMultiplier: z.coerce.string().default('1.8X'),
+  baseDeliveryFee: z.coerce.string().default('₹30'),
+  surgeDeliveryFee: z.coerce.string().default('₹80'),
+  surgeReason: z.coerce.string().default('HIGH DEMAND • PEAK TRAFFIC'),
+  algorithmName: z.coerce.string().optional(),
+  ctaText: z.coerce.string().optional(),
+  lottieAsset: z.coerce.string().optional(),
 });
 
 export const H3SpatialMapPropsSchema = z.object({
-  title: z.string().default('GEOSPATIAL H3 INDEXING'),
-  subtitle: z.string().default('O(1) Hexagonal lookup narrows query radius'),
-  hexResolution: z.number().default(8),
-  activeHexCount: z.number().default(14),
-  demandCount: z.number().default(40),
-  supplyCount: z.number().default(10),
-  hotHexId: z.string().default('#88619A0A4'),
-  orderCount: z.number().default(52),
-  riderCount: z.number().default(5),
-  surgeMultiplier: z.string().default('1.8X'),
+  mode: z.enum(['hex-grid', 'naive-radius', 'stale-heartbeat']).optional(),
+  title: z.coerce.string().default('SPATIAL INDEXING & PARTITION MESH'),
+  subtitle: z.coerce.string().default('O(1) Spatial lookup narrows search radius'),
+  hexResolution: z.coerce.number().default(8),
+  activeHexCount: z.coerce.number().default(14),
+  demandCount: z.coerce.number().default(40),
+  supplyCount: z.coerce.number().default(10),
+  hotHexId: z.coerce.string().default('#ZONE_A4'),
+  orderCount: z.coerce.number().default(52),
+  riderCount: z.coerce.number().default(5),
+  surgeMultiplier: z.coerce.string().default('1.8X'),
+  entityLabel: z.coerce.string().optional(),
+  providerLabel: z.coerce.string().optional(),
+  entityEmoji: z.coerce.string().optional(),
+  providerEmoji: z.coerce.string().optional(),
 });
 
 export const ArchitecturePipelinePropsSchema = z.object({
@@ -166,6 +178,15 @@ export const ArchitecturePipelinePropsSchema = z.object({
   subtitle: z.string().default('In-memory coordination prevents database race conditions'),
   redisLatencyMs: z.number().default(4),
   atomicCommand: z.string().default('SET lock:seat_101 user_A NX EX 10'),
+  steps: z
+    .array(
+      z.object({
+        label: z.string(),
+        description: z.string(),
+        status: z.enum(['completed', 'active', 'pending']).default('completed'),
+      })
+    )
+    .optional(),
 });
 
 export const TradeoffHUDPropsSchema = z.object({
@@ -352,12 +373,13 @@ export type StoryboardScene = z.infer<typeof StoryboardSceneSchema>;
 export const StoryboardSchema = z.object({
   sourceBrief: z.object({ url: z.string().url(), claim: z.string().min(10) }).optional(),
   topic: z.string().min(3).max(200),
+  angle: z.string().max(300).optional(),
   title: z.string().min(5).max(100).describe('YouTube Shorts / Reel title with high CTR'),
   hook: z.string().min(10).describe('First 3 seconds Hinglish hook that stops the scroll'),
   learningObjective: z.string().min(10).describe('What viewer understands by the end'),
   targetAudience: z.string().default('Developers & CS students'),
   format: z.literal('short').default('short'),
-  estimatedDurationSec: z.number().int().min(10).max(180).default(45),
+  estimatedDurationSec: z.number().int().min(10).max(240).default(105),
   scenes: z.array(StoryboardSceneSchema).min(1).max(100),
   hashtags: z.array(z.string()).default(['#tech', '#programming', '#shorts']),
 });

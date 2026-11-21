@@ -1,3 +1,4 @@
+import {speechChunks} from './speech-text.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -6,7 +7,7 @@ import { TTSProvider, SynthesizedAudioClip } from './tts-provider.js';
 
 const sampleRate = 24000;
 
-function findFfmpeg(): string {
+export function findFfmpeg(): string {
   const candidates = [
     path.resolve('node_modules/@remotion/compositor-win32-x64-msvc/ffmpeg.exe'),
     path.resolve('node_modules/@remotion/compositor-linux-x64-gnu/ffmpeg'),
@@ -38,29 +39,7 @@ function findFfprobe(): string {
   return 'ffprobe';
 }
 
-function getWavDuration(filePath: string): number | null {
-  try {
-    const fd = fs.openSync(filePath, 'r');
-    const header = Buffer.alloc(44);
-    fs.readSync(fd, header, 0, 44, 0);
-    fs.closeSync(fd);
-    if (header.toString('ascii', 0, 4) === 'RIFF' && header.toString('ascii', 8, 12) === 'WAVE') {
-      const byteRate = header.readUInt32LE(28);
-      const dataSize = header.readUInt32LE(40);
-      if (byteRate > 0 && dataSize > 0) {
-        return dataSize / byteRate;
-      }
-    }
-  } catch {}
-  return null;
-}
-
-function durationSeconds(filePath: string): number {
-  const wavDuration = getWavDuration(filePath);
-  if (wavDuration !== null && Number.isFinite(wavDuration) && wavDuration > 0) {
-    return wavDuration;
-  }
-
+export function durationSeconds(filePath: string): number {
   const ffprobeBin = findFfprobe();
   const result = execFileSync(ffprobeBin, [
     '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath,
@@ -141,14 +120,7 @@ export class SarvamTTSProvider implements TTSProvider {
 
     // Convert SSML breaks and tags into natural punctuation for smooth, human-like neural TTS flow.
     // This prevents unnatural tempo jumps and dead silent gaps between sentence fragments.
-    let cleanText = text
-      .replace(/<break\s+time=["'](?:0\.[3-9]|[1-9]|\d{3,})s?["']\s*\/?>/gi, '... ')
-      .replace(/<break\s+time=["'](?:[3-9]\d{2}|\d{4})ms["']\s*\/?>/gi, '... ')
-      .replace(/<break\s+[^>]*\/?>/gi, ', ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
+    const cleanText = text.trim();
     if (!cleanText) throw new Error('No narration text to synthesize');
 
     const workDir = fs.mkdtempSync(path.join(dir, 'sarvam-'));
@@ -165,8 +137,7 @@ export class SarvamTTSProvider implements TTSProvider {
         ]);
       } else {
         // For very long text, split ONLY at natural sentence boundaries (।, ?, !)
-        const sentenceRegex = /([^।?!]+[।?!]+(?:\s+|$))/g;
-        const matches = cleanText.match(sentenceRegex) || [cleanText];
+        const matches = speechChunks(cleanText);
         const files: string[] = [];
 
         for (let i = 0; i < matches.length; i++) {

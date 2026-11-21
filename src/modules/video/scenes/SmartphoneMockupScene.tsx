@@ -1,42 +1,111 @@
 import React from 'react';
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Audio, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
 import { VideoDesignTokens } from '../design-system.js';
+import { LottieAsset } from '../LottieAsset.js';
 
 export interface SmartphoneMockupSceneProps {
   headline?: string;
   subtext?: string;
   appName?: string;
+  appCategory?: 'shop' | 'ecommerce' | 'delivery' | 'food' | 'ride' | 'fintech' | 'generic';
   locationText?: string;
   itemName?: string;
+  itemEmoji?: string;
   itemPrice?: string;
+  feeLabel?: string;
   baseDeliveryFee?: string;
   surgeDeliveryFee?: string;
   surgeMultiplier?: string;
   surgeReason?: string;
+  algorithmName?: string;
+  ctaText?: string;
+  lottieAsset?: string;
   onScreenText?: string;
+  cueFrames?: number[];
+  auditRow1Label?: string;
+  auditRow1Value?: string;
+  auditRow2Label?: string;
+  auditRow2Value?: string;
+  auditRow3Label?: string;
+  auditRow3Value?: string;
+  auditQuestion?: string;
 }
 
 export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
-  headline = 'REAL-TIME SURGE PRICING',
-  subtext = 'How delivery fees jump from ₹30 to ₹80 dynamically',
-  appName = 'ZOMATO',
-  locationText = 'HSR Layout, Sector 4',
-  itemName = 'Royal Chicken Dum Biryani',
+  headline = 'REAL-TIME DYNAMIC ADJUSTMENT',
+  subtext = 'How dynamic pricing and inventory limits adjust under heavy traffic',
+  appName,
+  appCategory,
+  locationText,
+  itemName,
+  itemEmoji,
   itemPrice = '₹350',
+  feeLabel,
   baseDeliveryFee = '₹30',
   surgeDeliveryFee = '₹80',
-  surgeMultiplier = '1.8X',
-  surgeReason = 'HIGH DEMAND • 120+ ACTIVE ORDERS',
+  surgeMultiplier = '2.7X',
+  surgeReason,
+  algorithmName,
+  ctaText,
+  lottieAsset,
   onScreenText,
+  cueFrames,
+  auditRow1Label,
+  auditRow1Value,
+  auditRow2Label,
+  auditRow2Value,
+  auditRow3Label,
+  auditRow3Value,
+  auditQuestion,
 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
 
+  // Topic & Category detection to prevent any hardcoding
+  const combinedContext = `${appName || ''} ${itemName || ''} ${onScreenText || ''} ${headline} ${subtext}`.toLowerCase();
+  const isShop = appCategory === 'shop' || appCategory === 'ecommerce' || /shop|store|cart|retail|product|sneaker|iphone|gadget|headphone/i.test(combinedContext);
+  const isFood = appCategory === 'food' || /food|restaurant|biryani|burger|pizza|meal|zomato|swiggy/i.test(combinedContext);
+  const isRide = appCategory === 'ride' || /ride|cab|taxi|uber|ola|driver/i.test(combinedContext);
+  const isFintech = appCategory === 'fintech' || /pay|wallet|bank|stock|crypto|crypto|upi|stripe|transfer/i.test(combinedContext);
+
+  const resolvedAppName = appName || (isShop ? 'STORE' : isFood ? 'FOOD' : isRide ? 'RIDE' : isFintech ? 'PAY' : 'APP');
+  const resolvedItemName = itemName || (isShop ? 'Wireless ANC Headphones' : isFood ? 'Royal Chicken Dum Biryani' : isRide ? 'City Sedan Ride' : isFintech ? 'Priority Transfer' : 'Selected Item');
+  const resolvedLocation = locationText || (isShop ? 'Express Shipping Hub' : isRide ? 'Airport Terminal 2' : isFintech ? 'Direct Settlement' : 'HSR Layout, Sector 4');
+  const resolvedEmoji = itemEmoji || (isShop ? '🛍️' : isFood ? '🍛' : isRide ? '🚗' : isFintech ? '💳' : '📦');
+  const resolvedReason = surgeReason || (isShop ? 'FLASH SALE • LIMITED WAREHOUSE STOCK' : 'HIGH DEMAND • 120+ ACTIVE REQUESTS');
+  const resolvedFeeLabel = feeLabel || (isShop ? 'EXPRESS HANDLING / SURGE' : isRide ? 'PEAK TRAFFIC TARIFF' : isFintech ? 'PRIORITY PROCESSING FEE' : 'DELIVERY PARTNER FEE');
+
+  const appBadgeColor = isShop
+    ? 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)'
+    : isFood
+    ? 'linear-gradient(135deg, #E23744 0%, #EF4444 100%)'
+    : isRide
+    ? 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)'
+    : isFintech
+    ? 'linear-gradient(135deg, #059669 0%, #10B981 100%)'
+    : 'linear-gradient(135deg, #0284C7 0%, #0369A1 100%)';
+
+  // Consistent, verified arithmetic (eliminates conflicting price calculations)
+  const parseAmount = (val: string | number | undefined, defaultVal: number): number => {
+    if (typeof val === 'number') return val;
+    const match = String(val || '').replace(/[^0-9]/g, '');
+    return match ? parseInt(match, 10) : defaultVal;
+  };
+
+  const foodPriceNum = parseAmount(itemPrice, 350);
+  const baseDeliveryNum = parseAmount(baseDeliveryFee, 30);
+  const surgeDeliveryNum = parseAmount(surgeDeliveryFee, 80);
+
+  const baseTotalNum = foodPriceNum + baseDeliveryNum;
+  const surgeTotalNum = foodPriceNum + surgeDeliveryNum;
+  const surgeDeltaNum = Math.max(0, surgeDeliveryNum - baseDeliveryNum);
+  const calculatedMultiplier = `${(surgeDeliveryNum / Math.max(1, baseDeliveryNum)).toFixed(1)}X`;
+
   // Timing milestones:
-  // 0 - 60 frames: Normal state (₹30 standard fee)
-  // 60 - 75 frames: Surge trigger (rain / demand pulse)
-  // 75+ frames: Live fee jump to ₹80 with spring animation
-  const fSurgeStart = Math.min(75, Math.floor((durationInFrames || 240) * 0.3));
+  // Synchronize surge with speech cueFrame if present, else trigger at ~30% of scene duration
+  const fSurgeStart = cueFrames && cueFrames.length > 0 && cueFrames[0] > 0
+    ? Math.min(cueFrames[0], Math.max(30, durationInFrames - 20))
+    : Math.min(75, Math.floor((durationInFrames || 240) * 0.35));
 
   // Entrance spring animation
   const entrance = spring({
@@ -54,6 +123,14 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
 
   const isSurgeActive = frame >= fSurgeStart;
 
+  // Synchronized shockwave ring on surge start
+  const shockwaveProgress = interpolate(frame - fSurgeStart, [0, 24], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const shockwaveScale = interpolate(shockwaveProgress, [0, 1], [0.85, 1.85]);
+  const shockwaveOpacity = interpolate(shockwaveProgress, [0, 0.2, 1], [0, 0.9, 0]);
+
   // Subtle 3D floating perspective tilt
   const rotY = Math.sin(frame / 35) * 3;
   const rotX = Math.cos(frame / 30) * 2 + 2;
@@ -69,6 +146,10 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
     ? 0.5 + Math.sin(frame / 8) * 0.3
     : 0;
 
+  // Cinematic Camera Zoom / Punch-In onto the price reveal
+  const phoneZoom = interpolate(surgeSpring, [0, 1], [1.0, 1.14]);
+  const phoneFocusY = interpolate(surgeSpring, [0, 1], [0, -45]);
+
   return (
     <AbsoluteFill
       style={{
@@ -82,6 +163,13 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
         background: 'transparent',
       }}
     >
+      {/* Audio SFX on Surge Price Reveal */}
+      {fSurgeStart > 0 && fSurgeStart < durationInFrames && (
+        <Sequence from={fSurgeStart} durationInFrames={35}>
+          <Audio src={staticFile('sfx/ding.wav')} volume={0.45} />
+        </Sequence>
+      )}
+
       {/* Top Header Badge */}
       <div
         style={{
@@ -127,6 +215,8 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           marginBottom: 20,
           transform: `scale(${entrance})`,
           padding: '0 50px',
+          opacity: frame >= 170 ? interpolate(frame, [170, 185], [1, 0.15], { extrapolateRight: 'clamp' }) : 1,
+          transition: 'opacity 0.3s ease',
         }}
       >
         <h1
@@ -153,10 +243,10 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
         </p>
       </div>
 
-      {/* Realistic iPhone 16 Pro 3D Mockup */}
+      {/* Realistic iPhone 16 Pro 3D Mockup with Dynamic Camera Punch-In */}
       <div
         style={{
-          transform: `perspective(1400px) rotateY(${rotY}deg) rotateX(${rotX}deg) translateY(${floatY}px) scale(${entrance})`,
+          transform: `perspective(1400px) rotateY(${rotY}deg) rotateX(${rotX}deg) translateY(${floatY + phoneFocusY}px) scale(${entrance * phoneZoom})`,
           width: 520,
           height: 1040,
           background: 'linear-gradient(180deg, #0d1117 0%, #06090e 100%)',
@@ -232,21 +322,23 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
               style={{
-                background: '#E23744',
+                background: appBadgeColor,
                 color: '#FFF',
                 fontWeight: 900,
                 fontSize: 18,
-                padding: '6px 12px',
+                padding: '6px 14px',
                 borderRadius: 10,
                 letterSpacing: 1.2,
-                boxShadow: '0 4px 15px rgba(226, 55, 68, 0.4)',
+                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.4)',
               }}
             >
-              {appName}
+              {resolvedAppName}
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#F8FAFC' }}>Delivery to Work</div>
-              <div style={{ fontSize: 13, color: '#94A3B8' }}>{locationText}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: '#F8FAFC' }}>
+                {isShop ? 'Online Checkout' : isRide ? 'Instant Trip' : isFintech ? 'Direct Settlement' : 'Delivery to Work'}
+              </div>
+              <div style={{ fontSize: 13, color: '#94A3B8' }}>{resolvedLocation}</div>
             </div>
           </div>
           <div
@@ -259,8 +351,65 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
               color: '#38BDF8',
             }}
           >
-            ⏱️ 18-24 MINS
+            {isShop ? '⚡ IN STOCK' : isRide ? '⏱️ 3 MINS AWAY' : isFintech ? '🔒 256-BIT' : '⏱️ 18-24 MINS'}
           </div>
+        </div>
+
+        {/* HERO 3D ANIMATED SHOWCASE */}
+        <div
+          style={{
+            marginTop: 14,
+            height: 180,
+            borderRadius: 22,
+            background: 'radial-gradient(ellipse at center, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.95) 100%)',
+            border: '1.5px solid rgba(255, 255, 255, 0.12)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: 'inset 0 0 30px rgba(0, 0, 0, 0.7), 0 12px 30px rgba(0, 0, 0, 0.45)',
+          }}
+        >
+          {/* Glowing Ambient Core */}
+          <div
+            style={{
+              position: 'absolute',
+              width: 170,
+              height: 170,
+              borderRadius: '50%',
+              background: isShop ? '#4F46E5' : isFood ? '#EF4444' : isRide ? '#38BDF8' : '#10B981',
+              filter: 'blur(45px)',
+              opacity: 0.5,
+            }}
+          />
+          {/* Large Hero 3D Animated Lottie with Theme Color Grading */}
+          <LottieAsset
+            name={
+              lottieAsset ||
+              (isShop
+                ? 'ecommerce-shop'
+                : isRide
+                ? 'scooter-3d'
+                : isFood
+                ? 'scooter-3d'
+                : isFintech
+                ? 'money-3d'
+                : 'scooter-3d')
+            }
+            style={{
+              width: 340,
+              height: 175,
+              transform: `scale(${1 + Math.sin(frame / 20) * 0.035}) translateY(${Math.sin(frame / 15) * 3}px)`,
+              filter: isRide
+                ? 'hue-rotate(185deg) saturate(1.25) drop-shadow(0 10px 25px rgba(56, 189, 248, 0.45))'
+                : isShop
+                ? 'hue-rotate(240deg) saturate(1.2) drop-shadow(0 10px 25px rgba(79, 70, 229, 0.45))'
+                : isFintech
+                ? 'hue-rotate(90deg) saturate(1.2) drop-shadow(0 10px 25px rgba(16, 185, 129, 0.45))'
+                : 'drop-shadow(0 10px 25px rgba(239, 68, 68, 0.45))',
+            }}
+          />
         </div>
 
         {/* Order Item Card */}
@@ -277,24 +426,34 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           }}
         >
           <div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#FFFFFF' }}>{itemName}</div>
-            <div style={{ fontSize: 14, color: '#10B981', marginTop: 4, fontWeight: 700 }}>★ 4.9 (3.2k reviews)</div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>{itemPrice}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#FFFFFF' }}>{resolvedItemName}</div>
+            <div style={{ fontSize: 14, color: '#10B981', marginTop: 4, fontWeight: 700 }}>★ 4.9 (Verified item)</div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: '#F1F5F9', marginTop: 6 }}>₹{foodPriceNum}</div>
           </div>
           <div
             style={{
               width: 76,
               height: 76,
               borderRadius: 18,
-              background: 'linear-gradient(135deg, #FF6B6B 0%, #E23744 100%)',
+              background: appBadgeColor,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 36,
-              boxShadow: '0 8px 20px rgba(226, 55, 68, 0.3)',
+              boxShadow: '0 8px 20px rgba(0, 0, 0, 0.3)',
             }}
           >
-            🍛
+            {lottieAsset ? (
+              <LottieAsset name={lottieAsset} style={{ width: 52, height: 52 }} />
+            ) : isShop ? (
+              <LottieAsset name="shopping-cart" style={{ width: 52, height: 52 }} />
+            ) : isRide ? (
+              <LottieAsset name="truck" style={{ width: 52, height: 52 }} />
+            ) : isFintech ? (
+              <LottieAsset name="credit-card" style={{ width: 52, height: 52 }} />
+            ) : (
+              resolvedEmoji
+            )}
           </div>
         </div>
 
@@ -321,7 +480,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           {/* Card Title Row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 24 }}>{isSurgeActive ? '⚡' : '🛵'}</span>
+              <span style={{ fontSize: 24 }}>{isSurgeActive ? '⚡' : resolvedEmoji}</span>
               <span
                 style={{
                   fontSize: 18,
@@ -331,7 +490,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
                   textTransform: 'uppercase',
                 }}
               >
-                {isSurgeActive ? 'SURGE PRICING ACTIVE' : 'DELIVERY PARTNER FEE'}
+                {isSurgeActive ? 'SURGE PRICING ACTIVE' : resolvedFeeLabel}
               </span>
             </div>
             {isSurgeActive && (
@@ -347,25 +506,56 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
                   transform: `scale(${surgeSpring})`,
                 }}
               >
-                {surgeMultiplier}
+                {calculatedMultiplier} SURGE
               </div>
             )}
           </div>
+
+          {/* Neon Shockwave on Surge Trigger */}
+          {frame >= fSurgeStart && frame < fSurgeStart + 26 && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: -10,
+                borderRadius: 28,
+                border: '3px solid #EF4444',
+                boxShadow: '0 0 45px #EF4444, inset 0 0 20px #EF4444',
+                transform: `scale(${shockwaveScale})`,
+                opacity: shockwaveOpacity,
+                pointerEvents: 'none',
+                zIndex: 40,
+              }}
+            />
+          )}
 
           {/* Price Flip Display */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginTop: 14 }}>
             {isSurgeActive ? (
               <>
-                {/* Strikethrough Base Price */}
-                <div
-                  style={{
-                    fontSize: 26,
-                    fontWeight: 700,
-                    color: '#64748B',
-                    textDecoration: 'line-through',
-                  }}
-                >
-                  {baseDeliveryFee}
+                {/* Strikethrough Base Price with Animated Red Slash */}
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <div
+                    style={{
+                      fontSize: 26,
+                      fontWeight: 700,
+                      color: '#64748B',
+                      opacity: 0.7,
+                    }}
+                  >
+                    ₹{baseDeliveryNum}
+                  </div>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: 0,
+                      width: `${Math.min(100, Math.round(surgeSpring * 100))}%`,
+                      height: 3,
+                      background: '#EF4444',
+                      boxShadow: '0 0 8px #EF4444',
+                      transform: 'translateY(-50%)',
+                    }}
+                  />
                 </div>
                 {/* Animated Surge Fee */}
                 <div
@@ -379,13 +569,13 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
                     gap: 8,
                   }}
                 >
-                  <span style={{ color: '#EF4444' }}>{surgeDeliveryFee}</span>
-                  <span style={{ fontSize: 18, fontWeight: 700, color: '#FCA5A5' }}>(+₹50 Surge)</span>
+                  <span style={{ color: '#EF4444', textShadow: '0 0 20px rgba(239, 68, 68, 0.6)' }}>₹{surgeDeliveryNum}</span>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: '#FCA5A5' }}>(+₹{surgeDeltaNum} Surge)</span>
                 </div>
               </>
             ) : (
               <div style={{ fontSize: 36, fontWeight: 900, color: '#10B981' }}>
-                {baseDeliveryFee}
+                ₹{baseDeliveryNum}
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#94A3B8', marginLeft: 10 }}>Standard Rate</span>
               </div>
             )}
@@ -393,7 +583,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
 
           {/* Subtext info */}
           <div style={{ fontSize: 14, color: isSurgeActive ? '#FCA5A5' : '#64748B', marginTop: 8, lineHeight: 1.4 }}>
-            {isSurgeActive ? surgeReason : 'Calculated by distance & route traffic'}
+            {isSurgeActive ? resolvedReason : 'Calculated by dynamic system balancing'}
           </div>
         </div>
 
@@ -411,7 +601,9 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           }}
         >
           <span style={{ fontSize: 14, color: '#94A3B8', fontWeight: 600 }}>Algorithm:</span>
-          <span style={{ fontSize: 14, color: '#38BDF8', fontWeight: 800 }}>H3 Geospatial Index (&lt;10ms)</span>
+          <span style={{ fontSize: 14, color: '#38BDF8', fontWeight: 800 }}>
+            {algorithmName || (isShop ? 'Inventory Balancing & Demand Surge' : isRide ? 'Geospatial Dispatch Matching' : isFood ? 'H3 Hexagonal Indexing' : 'Dynamic SLA State Machine')}
+          </span>
         </div>
 
         {/* Bottom Checkout CTA Button */}
@@ -424,7 +616,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
             textAlign: 'center',
             color: '#FFFFFF',
             fontWeight: 900,
-            fontSize: 22,
+            fontSize: 20,
             letterSpacing: 1.2,
             boxShadow: isSurgeActive
               ? '0 10px 30px rgba(220, 38, 38, 0.5)'
@@ -433,8 +625,149 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
             transition: 'background 0.3s ease',
           }}
         >
-          {isSurgeActive ? 'PAY ₹430 • SURGE APPLIED' : 'PROCEED TO PAY • ₹380'}
+          {ctaText ||
+            (isSurgeActive
+              ? `CHECKOUT • ₹${surgeTotalNum} (₹${foodPriceNum} + ₹${surgeDeliveryNum} Surge)`
+              : `PROCEED • ₹${baseTotalNum} (₹${foodPriceNum} + ₹${baseDeliveryNum} Standard)`)}
         </div>
+
+        {/* Cut 0.2: Receipt Mystery Audit Card (Triggered at frame 170+ / ~6s) */}
+        {frame >= 170 && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(10, 15, 29, 0.94)',
+              backdropFilter: 'blur(25px)',
+              borderRadius: 52,
+              padding: '36px 28px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 60,
+              transform: `scale(${spring({ frame: frame - 170, fps, config: { damping: 14, stiffness: 100 } })})`,
+              boxShadow: 'inset 0 0 40px rgba(0, 0, 0, 0.8), 0 0 50px rgba(239, 68, 68, 0.4)',
+              border: '2px solid rgba(239, 68, 68, 0.6)',
+            }}
+          >
+            {/* Mystery Pill */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 20px',
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: '1.5px solid rgba(239, 68, 68, 0.6)',
+                borderRadius: 999,
+                marginBottom: 20,
+              }}
+            >
+              <span style={{ fontSize: 18 }}>🔍</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: '#FCA5A5', letterSpacing: 2 }}>
+                RECEIPT AUDIT CHECK
+              </span>
+            </div>
+
+            <div
+              style={{
+                fontSize: 32,
+                fontWeight: 900,
+                color: '#FFFFFF',
+                textAlign: 'center',
+                lineHeight: 1.2,
+                marginBottom: 24,
+              }}
+            >
+              EVERYTHING IS IDENTICAL
+            </div>
+
+            {/* Comparison Rows (100% Dynamic) */}
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 28 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  padding: '12px 18px',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                <span style={{ fontSize: 18, color: '#94A3B8', fontWeight: 700 }}>
+                  {auditRow1Label || (isFood ? '🏪 Restaurant' : isRide ? '🚗 Service' : isFintech ? '💳 Account' : '📦 Entity')}
+                </span>
+                <span style={{ fontSize: 18, color: '#34D399', fontWeight: 900 }}>
+                  {auditRow1Value || `${resolvedItemName} (SAME) ✓`}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  padding: '12px 18px',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                <span style={{ fontSize: 18, color: '#94A3B8', fontWeight: 700 }}>
+                  {auditRow2Label || (isFood ? '🏠 Drop Location' : isRide ? '📍 Destination' : isFintech ? '🏦 Target Bank' : '📍 Destination')}
+                </span>
+                <span style={{ fontSize: 18, color: '#34D399', fontWeight: 900 }}>
+                  {auditRow2Value || `${resolvedLocation} (SAME) ✓`}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  padding: '12px 18px',
+                  borderRadius: 14,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                <span style={{ fontSize: 18, color: '#94A3B8', fontWeight: 700 }}>
+                  {auditRow3Label || (isFood ? '📏 Distance' : isRide ? '📏 Route KM' : isFintech ? '🔒 Protocol' : '📏 Parameter')}
+                </span>
+                <span style={{ fontSize: 18, color: '#34D399', fontWeight: 900 }}>
+                  {auditRow3Value || (isFood ? '3.2 KM (UNCHANGED) ✓' : 'UNCHANGED ✓')}
+                </span>
+              </div>
+            </div>
+
+            {/* Giant Pulsing Mystery Callout */}
+            <div
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(185, 28, 28, 0.2) 100%)',
+                border: '2px solid #EF4444',
+                borderRadius: 20,
+                padding: '18px 20px',
+                textAlign: 'center',
+                boxShadow: '0 0 30px rgba(239, 68, 68, 0.4)',
+                transform: `scale(${1 + Math.sin(frame / 6) * 0.03})`,
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#FCA5A5', letterSpacing: 1.5, marginBottom: 4 }}>
+                THE CORE QUESTION
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 900, color: '#FFFFFF', lineHeight: 1.2 }}>
+                {auditQuestion || (isFood ? `EXTRA +₹${surgeDeltaNum} KAHAN SE AAYE? 🤔` : 'WHY DID THIS SUDDENLY SPIKE? 🤔')}
+              </div>
+              <div style={{ fontSize: 14, color: '#38BDF8', fontWeight: 700, marginTop: 6 }}>
+                {resolvedFeeLabel}: ₹{baseDeliveryNum} ➔ ₹{surgeDeliveryNum} Spike
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AbsoluteFill>
   );
