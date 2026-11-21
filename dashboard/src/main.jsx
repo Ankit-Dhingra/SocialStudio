@@ -115,6 +115,46 @@ function detectKeys(text) {
   }
 }
 
+function extractSevenKeyScript(session, customText) {
+  if (session?.sevenKeyScript) return session.sevenKeyScript;
+  if (session?.currentMarkdown) {
+    try {
+      const obj = JSON.parse(session.currentMarkdown);
+      if (obj && (obj.hook || obj.hooks || obj.tech_explained || obj.problem)) return obj;
+    } catch {}
+  }
+  if (customText) {
+    try {
+      const obj = JSON.parse(customText);
+      if (obj && (obj.hook || obj.hooks || obj.tech_explained || obj.problem)) return obj;
+    } catch {}
+  }
+  return {
+    title: session?.topic || '',
+    hook: session?.sections?.hookOptions || '',
+    problem: '',
+    solution: '',
+    tech_explained: session?.sections?.voiceoverScript || '',
+    conclusion: '',
+    cta: 'ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Stack को अभी follow करो।',
+  };
+}
+
+function calcScriptStats(script) {
+  if (!script) return { words: 0, durationSec: 0 };
+  const allSpoken = [
+    script.hook || '',
+    script.problem || '',
+    script.solution || '',
+    script.tech_explained || '',
+    script.conclusion || '',
+    script.cta || '',
+  ].join(' ');
+  const words = allSpoken.trim().split(/\s+/).filter(Boolean).length;
+  const durationSec = Math.max(15, Math.round(words / 2.35));
+  return { words, durationSec };
+}
+
 function App() {
   // Sidebar Navigation: 'overview' or 'create'
   const [activeNav, setActiveNav] = useState('overview');
@@ -126,6 +166,13 @@ function App() {
   const [scriptMode, setScriptMode] = useState('ai');
   const [customScriptText, setCustomScriptText] = useState(SAMPLE_6KEY_JSON);
   const [pasteSuccess, setPasteSuccess] = useState(false);
+
+  // Script Viewer & Edit States
+  const [isEditingScript, setIsEditingScript] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [aiRefinePrompt, setAiRefinePrompt] = useState('');
+  const [refiningAi, setRefiningAi] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
 
   // Studio Pipeline State
   const [topic, setTopic] = useState(VIRAL_TECH_PRESETS[0].topic);
@@ -275,10 +322,11 @@ function App() {
     }
   }
 
-  // 1. Generate Script via AI
+  // 1. Generate Script via AI (Contract V4)
   async function handleGenerateScript() {
     if (!topic.trim()) return;
     setStudioLoading(true);
+    setIsEditingScript(false);
     try {
       const res = await fetch(toApiUrl('/api/pipeline/script/start'), {
         method: 'POST',
@@ -299,11 +347,12 @@ function App() {
     }
   }
 
-  // 1b. Parse Creator Custom Script (6-Key JSON / Text)
+  // 1b. Parse Creator Custom Script (6-Key / 7-Key JSON or Text)
   async function handleParseCustomScript() {
     if (!customScriptText.trim()) return;
     setStudioLoading(true);
     setPasteSuccess(false);
+    setIsEditingScript(false);
     try {
       let payload;
       try {
@@ -328,6 +377,56 @@ function App() {
       alert(`Script Parsing Error: ${err.message}`);
     } finally {
       setStudioLoading(false);
+    }
+  }
+
+  // 1c. Save Script Changes from Script Viewer
+  async function handleSaveScriptEdits() {
+    if (!editForm || !session?.id) return;
+    setSavingEdits(true);
+    try {
+      const res = await fetch(toApiUrl('/api/pipeline/script/custom'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customScript: editForm,
+          topic: editForm.title || session.topic,
+          sessionId: session.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update script');
+      setSession(data);
+      setIsEditingScript(false);
+      loadSessions();
+    } catch (err) {
+      alert(`Save Error: ${err.message}`);
+    } finally {
+      setSavingEdits(false);
+    }
+  }
+
+  // 1d. AI Refine from within Script Viewer
+  async function handleAiRefine() {
+    if (!aiRefinePrompt.trim() || !session?.id) return;
+    setRefiningAi(true);
+    try {
+      const res = await fetch(toApiUrl('/api/pipeline/script/chat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id, message: aiRefinePrompt.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Refinement failed');
+      setSession(data);
+      const updatedScript = extractSevenKeyScript(data);
+      setEditForm(updatedScript);
+      setAiRefinePrompt('');
+      loadSessions();
+    } catch (err) {
+      alert(`Refine Error: ${err.message}`);
+    } finally {
+      setRefiningAi(false);
     }
   }
 
@@ -828,506 +927,445 @@ function App() {
                     </button>
                   </div>
 
-                  {/* MODE A: GENERATE SCRIPT (AI) */}
-                  {scriptMode === 'ai' && (
+                  {/* SCRIPT GENERATOR / PASTE INPUTS (Shown when no script has been generated yet) */}
+                  {!session ? (
                     <>
-                      {/* TOP BAR: TOPIC & ANGLE GENERATOR */}
-                      <section className="topic-generator-card">
-                        <div className="topic-inputs-grid">
-                          <div>
-                            <div className="input-label-row">
-                              <span className="input-label">Tech Topic / Engineering Mystery</span>
-                            </div>
-                            <input
-                              type="text"
-                              className="text-field"
-                              value={topic}
-                              onChange={(e) => setTopic(e.target.value)}
-                              placeholder="e.g. How Zomato Decides Delivery & Surge Charges"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="input-label-row">
-                              <span className="input-label">Story Angle (Optional)</span>
-                            </div>
-                            <input
-                              type="text"
-                              className="text-field"
-                              value={angle}
-                              onChange={(e) => setAngle(e.target.value)}
-                              placeholder="e.g. Offline queueing and real-time GPS sync"
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            id="btn-generate-reel"
-                            disabled={studioLoading || rendering || !topic.trim()}
-                            onClick={handleGenerateReel}
-                            style={{
-                              height: 38,
-                              padding: '0 18px',
-                              gap: 8,
-                            }}
-                          >
-                            {rendering || studioLoading ? (
-                              <RefreshCw size={13} className="animate-spin" />
-                            ) : (
-                              <Zap size={13} />
-                            )}
-                            <span>
-                              {rendering
-                                ? `Rendering (${renderProgress}%)`
-                                : studioLoading
-                                ? 'Processing Reel...'
-                                : 'Generate Full Reel'}
-                            </span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            disabled={studioLoading || rendering || !topic.trim()}
-                            onClick={handleGenerateScript}
-                            style={{ height: 38, padding: '0 16px', gap: 8 }}
-                          >
-                            {studioLoading ? (
-                              <RefreshCw size={13} className="animate-spin" />
-                            ) : (
-                              <Wand2 size={13} />
-                            )}
-                            <span>Generate Script</span>
-                          </button>
-                        </div>
-
-                        {/* PRESETS */}
-                        <div className="presets-wrap" style={{ marginTop: 2 }}>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Quick Presets:</span>
-                          {VIRAL_TECH_PRESETS.map((p, idx) => (
-                            <button
-                              key={idx}
-                              type="button"
-                              className="preset-chip"
-                              onClick={() => {
-                                setTopic(p.topic);
-                                setAngle(p.angle);
-                              }}
-                            >
-                              {p.topic.split('&')[0]}
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-
-                      {/* AI SCRIPT ASSISTANT SPLIT VIEW */}
-                      {session ? (
-                        <div className="chat-refine-grid">
-                          {/* LEFT COLUMN: CHATGPT ASSISTANT */}
-                          <div className="chat-assistant-pane">
-                            <div className="chat-pane-header">
-                              <div className="chat-pane-title">
-                                <Bot size={16} />
-                                <span>AI Script Assistant</span>
-                                <span className="badge-mono" style={{ fontSize: 10 }}>
-                                  Hinglish Refinement
-                                </span>
+                      {/* MODE A: GENERATE SCRIPT (AI) */}
+                      {scriptMode === 'ai' && (
+                        <section className="topic-generator-card">
+                          <div className="topic-inputs-grid">
+                            <div>
+                              <div className="input-label-row">
+                                <span className="input-label">Tech Topic / Engineering Mystery</span>
                               </div>
-                              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                {session.messages?.length || 0} messages
-                              </span>
-                            </div>
-
-                            {/* CHAT MESSAGE STREAM */}
-                            <div className="chat-message-stream" ref={chatScrollRef}>
-                              <div className="chat-bubble-ai">
-                                <strong>Master Script Ready</strong>
-                                <br />
-                                Script master standard ke hisaab se ready hai. Agar aapko koi Hook change karwana ho ya koi term add/fix karni ho, toh neeche prompt likhiye.
-                              </div>
-
-                              {session.messages?.map((msg, idx) => (
-                                <div
-                                  key={idx}
-                                  className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}
-                                >
-                                  <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 4, display: 'flex', gap: 4 }}>
-                                    {msg.role === 'user' ? <User size={10} /> : <Bot size={10} />}
-                                    <span>{msg.role === 'user' ? 'You' : 'Antigravity AI'}</span>
-                                  </div>
-                                  <div style={{ whiteSpace: 'pre-wrap' }}>
-                                    {msg.role === 'assistant'
-                                      ? msg.content.slice(0, 350) +
-                                        (msg.content.length > 350
-                                          ? '\n\n[Full updated script reflected in inspector on right]'
-                                          : '')
-                                      : msg.content}
-                                  </div>
-                                </div>
-                              ))}
-
-                              {chatSending && (
-                                <div
-                                  className="chat-bubble-ai"
-                                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                                >
-                                  <RefreshCw size={12} className="animate-spin" />
-                                  <span>Refining script and updating scene JSON...</span>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* QUICK SUGGESTION PILLS */}
-                            <div className="chat-quick-suggestions">
-                              {QUICK_CHAT_SUGGESTIONS.map((sug, i) => (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  className="quick-pill"
-                                  onClick={() => handleSendChat(sug)}
-                                  disabled={chatSending}
-                                >
-                                  {sug}
-                                </button>
-                              ))}
-                            </div>
-
-                            {/* CHAT INPUT BAR */}
-                            <form
-                              className="chat-input-bar"
-                              onSubmit={(e) => {
-                                e.preventDefault();
-                                handleSendChat();
-                              }}
-                            >
                               <input
                                 type="text"
-                                className="chat-input-field"
-                                placeholder="Tell AI: 'Act 3 me H3 ki jagah Geohash explain karo'..."
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                disabled={chatSending}
+                                className="text-field"
+                                value={topic}
+                                onChange={(e) => setTopic(e.target.value)}
+                                placeholder="e.g. How Zomato Surge Pricing Works During Rain"
+                                onKeyDown={(e) => e.key === 'Enter' && handleGenerateScript()}
                               />
-                              <button
-                                type="submit"
-                                className="btn btn-primary btn-sm"
-                                disabled={chatSending || !chatInput.trim()}
-                                style={{ padding: '0 14px', height: 34 }}
-                              >
-                                {chatSending ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                              </button>
-                            </form>
+                            </div>
+
+                            <div>
+                              <div className="input-label-row">
+                                <span className="input-label">Story Angle (Optional)</span>
+                              </div>
+                              <input
+                                type="text"
+                                className="text-field"
+                                value={angle}
+                                onChange={(e) => setAngle(e.target.value)}
+                                placeholder="e.g. Late-night heavy rain, GPS cell mapping"
+                                onKeyDown={(e) => e.key === 'Enter' && handleGenerateScript()}
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              id="btn-generate-script"
+                              disabled={studioLoading || !topic.trim()}
+                              onClick={handleGenerateScript}
+                              style={{ height: 38, padding: '0 20px', gap: 8 }}
+                            >
+                              {studioLoading ? (
+                                <RefreshCw size={13} className="animate-spin" />
+                              ) : (
+                                <Wand2 size={13} />
+                              )}
+                              <span>{studioLoading ? 'Generating Script...' : 'Generate Script'}</span>
+                            </button>
                           </div>
 
-                          {/* RIGHT COLUMN: LIVE SCRIPT INSPECTOR */}
-                          <div className="script-inspector-pane">
-                            <div className="script-inspector-header">
-                              <div className="script-tabs">
-                                <button
-                                  type="button"
-                                  className={`script-tab-btn ${activeScriptTab === 'full' ? 'active' : ''}`}
-                                  onClick={() => setActiveScriptTab('full')}
-                                >
-                                  <FileText size={12} /> Full Script
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`script-tab-btn ${activeScriptTab === 'acts' ? 'active' : ''}`}
-                                  onClick={() => setActiveScriptTab('acts')}
-                                >
-                                  <Volume2 size={12} /> Voiceover Script
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`script-tab-btn ${activeScriptTab === 'scenes' ? 'active' : ''}`}
-                                  onClick={() => setActiveScriptTab('scenes')}
-                                >
-                                  <Layers size={12} /> Remotion Scenes
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`script-tab-btn ${activeScriptTab === 'cheat' ? 'active' : ''}`}
-                                  onClick={() => setActiveScriptTab('cheat')}
-                                >
-                                  <Cpu size={12} /> SDE Cheat-Sheet
-                                </button>
-                              </div>
+                          {/* PRESETS */}
+                          <div className="presets-wrap" style={{ marginTop: 2 }}>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Quick Presets:</span>
+                            {VIRAL_TECH_PRESETS.map((p, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                className="preset-chip"
+                                onClick={() => {
+                                  setTopic(p.topic);
+                                  setAngle(p.angle);
+                                }}
+                              >
+                                {p.topic.split('&')[0]}
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <button
-                                  type="button"
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={handleCopyCurrentScript}
-                                  title="Copy Markdown"
-                                >
-                                  {copiedScript ? <Check size={11} /> : <Copy size={11} />}
-                                  <span>{copiedScript ? 'Copied' : 'Copy'}</span>
-                                </button>
-                              </div>
+                      {/* MODE B: PASTE SCRIPT */}
+                      {scriptMode === 'paste' && (
+                        <div className="paste-script-card">
+                          <div className="paste-script-header">
+                            <div>
+                              <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>
+                                Paste 6-Key / 7-Key Storyboard Script
+                              </h3>
+                              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                                Enter raw JSON with keys: <code>title</code>, <code>hook</code>, <code>problem</code>, <code>solution</code>, <code>tech_explained</code>, <code>conclusion</code>, <code>cta</code>.
+                              </p>
                             </div>
 
-                            {/* INSPECTOR TAB CONTENT */}
-                            <div className="script-inspector-content">
-                              {activeScriptTab === 'full' && (
-                                <div className="script-markdown-view">{session.currentMarkdown}</div>
-                              )}
-
-                              {activeScriptTab === 'acts' && (
-                                <div className="acts-cards-stream">
-                                  <div className="act-card-item">
-                                    <div className="act-card-top">
-                                      <span className="act-card-badge">Section 1: Hook Options</span>
-                                    </div>
-                                    <pre
-                                      style={{
-                                        fontSize: 12,
-                                        color: 'var(--text-secondary)',
-                                        whiteSpace: 'pre-wrap',
-                                      }}
-                                    >
-                                      {session.sections?.hookOptions || 'Analyzing hook variations...'}
-                                    </pre>
-                                  </div>
-
-                                  <div className="act-card-item">
-                                    <div className="act-card-top">
-                                      <span className="act-card-badge">
-                                        Section 2: Final Voiceover Script
-                                      </span>
-                                    </div>
-                                    <div className="act-card-text" style={{ whiteSpace: 'pre-wrap' }}>
-                                      {session.sections?.voiceoverScript || 'Generating voiceover...'}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {activeScriptTab === 'scenes' && (
-                                <div className="acts-cards-stream">
-                                  {session.storyboard?.scenes?.map((scene, idx) => (
-                                    <div key={idx} className="act-card-item">
-                                      <div className="act-card-top">
-                                        <span className="act-card-badge">
-                                          Act {idx + 1} • {scene.type}
-                                        </span>
-                                        <span className="badge-mono" style={{ fontSize: 11 }}>
-                                          ~{scene.durationTargetSec || 14}s
-                                        </span>
-                                      </div>
-                                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                        {scene.onScreenText}
-                                      </div>
-                                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                        "{scene.narration}"
-                                      </div>
-                                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                        Visual: {scene.technicalKeyPoint}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {activeScriptTab === 'cheat' && (
-                                <div className="acts-cards-stream">
-                                  <div className="act-card-item">
-                                    <div className="act-card-top">
-                                      <span className="act-card-badge">Interview Cheat Sheet</span>
-                                    </div>
-                                    <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                      {session.sections?.interviewCheatSheet || 'Cheat sheet content'}
-                                    </div>
-                                  </div>
-
-                                  <div className="act-card-item">
-                                    <div className="act-card-top">
-                                      <span className="act-card-badge">SDE-3 Architecture Tradeoff</span>
-                                    </div>
-                                    <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                      {session.sections?.tradeoffDilemma || 'Tradeoff analysis'}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* BOTTOM PROCEED BAR */}
-                            <div
-                              style={{
-                                padding: '12px 18px',
-                                background: 'var(--bg-surface)',
-                                borderTop: '1px solid var(--border)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                              }}
-                            >
-                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                                Ready to produce audio? Lock in script and advance to voiceover.
-                              </div>
-
+                            <div style={{ display: 'flex', gap: 8 }}>
                               <button
                                 type="button"
-                                className="btn btn-emerald"
-                                onClick={handleFinalizeScript}
-                                disabled={studioLoading}
-                                style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, gap: 8 }}
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setCustomScriptText(SAMPLE_6KEY_JSON);
+                                  setPasteSuccess(false);
+                                }}
                               >
-                                <CheckCircle2 size={14} />
-                                <span>Proceed to Voiceover</span>
-                                <ArrowRight size={14} />
+                                <Copy size={12} />
+                                <span>Load Sample 6-Key JSON</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => {
+                                  setCustomScriptText('');
+                                  setPasteSuccess(false);
+                                }}
+                              >
+                                Clear
                               </button>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="panel-card empty-placeholder" style={{ padding: '60px 20px' }}>
-                          <Wand2 size={24} style={{ margin: '0 auto 12px', color: 'var(--text-muted)' }} />
-                          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
-                            Ready to Generate Viral Tech Reel
-                          </h3>
-                          <p style={{ maxWidth: 500, margin: '0 auto', color: 'var(--text-muted)' }}>
-                            Enter your topic and angle above or choose a preset. Antigravity AI will create a complete
-                            master script and Remotion scene structure.
-                          </p>
+
+                          {/* 6-KEY VALIDATION CHECKLIST BAR */}
+                          <div className="key-checklist-bar">
+                            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginRight: 4 }}>
+                              Detected Keys:
+                            </span>
+                            <span className={`key-pill ${detectedKeys.title ? 'present' : 'missing'}`}>
+                              {detectedKeys.title ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} title
+                            </span>
+                            <span className={`key-pill ${detectedKeys.hook ? 'present' : 'missing'}`}>
+                              {detectedKeys.hook ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} hook
+                            </span>
+                            <span className={`key-pill ${detectedKeys.problem ? 'present' : 'missing'}`}>
+                              {detectedKeys.problem ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} problem
+                            </span>
+                            <span className={`key-pill ${detectedKeys.solution ? 'present' : 'missing'}`}>
+                              {detectedKeys.solution ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} solution
+                            </span>
+                            <span className={`key-pill ${detectedKeys.tech_explained ? 'present' : 'missing'}`}>
+                              {detectedKeys.tech_explained ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} tech_explained
+                            </span>
+                            <span className={`key-pill ${detectedKeys.conclusion ? 'present' : 'missing'}`}>
+                              {detectedKeys.conclusion ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} conclusion
+                            </span>
+                            <span className={`key-pill ${detectedKeys.cta ? 'present' : 'missing'}`}>
+                              {detectedKeys.cta ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} cta
+                            </span>
+                          </div>
+
+                          {/* CODE EDITOR TEXTAREA */}
+                          <textarea
+                            className="paste-script-textarea"
+                            value={customScriptText}
+                            onChange={(e) => {
+                              setCustomScriptText(e.target.value);
+                              setPasteSuccess(false);
+                            }}
+                            placeholder={`{\n  "title": "Topic Name",\n  "hook": "...",\n  "problem": "...",\n  "solution": "...",\n  "tech_explained": "...",\n  "conclusion": "...",\n  "cta": "..."\n}`}
+                          />
+
+                          {/* ACTION BUTTON */}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={handleParseCustomScript}
+                              disabled={studioLoading || !customScriptText.trim()}
+                              style={{
+                                padding: '8px 20px',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                gap: 8,
+                              }}
+                            >
+                              {studioLoading ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                              <span>Validate & Parse Script</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>
-                  )}
+                  ) : (
+                    /* SCRIPT VIEWER: OPENS FOR BOTH GENERATE AND PASTE MODES */
+                    (() => {
+                      const activeScript = extractSevenKeyScript(session, customScriptText);
+                      const stats = calcScriptStats(activeScript);
 
-                  {/* MODE B: PASTE SCRIPT */}
-                  {scriptMode === 'paste' && (
-                    <div className="paste-script-card">
-                      <div className="paste-script-header">
-                        <div>
-                          <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
-                            Paste Creator 6-Key JSON Script
-                          </h3>
-                          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
-                            Paste your exact technical script. The zero-hardcoding parser automatically extracts numbers,
-                            ratios, and the 5-stage backend pipeline.
-                          </p>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => {
-                              setCustomScriptText(SAMPLE_6KEY_JSON);
-                              setPasteSuccess(false);
-                            }}
-                          >
-                            <Copy size={12} />
-                            <span>Load Sample 6-Key JSON</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => {
-                              setCustomScriptText('');
-                              setPasteSuccess(false);
-                            }}
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 6-KEY VALIDATION CHECKLIST BAR */}
-                      <div className="key-checklist-bar">
-                        <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginRight: 4 }}>
-                          Detected Keys:
-                        </span>
-                        <span className={`key-pill ${detectedKeys.title ? 'present' : 'missing'}`}>
-                          {detectedKeys.title ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} title
-                        </span>
-                        <span className={`key-pill ${detectedKeys.hook ? 'present' : 'missing'}`}>
-                          {detectedKeys.hook ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} hook
-                        </span>
-                        <span className={`key-pill ${detectedKeys.problem ? 'present' : 'missing'}`}>
-                          {detectedKeys.problem ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} problem
-                        </span>
-                        <span className={`key-pill ${detectedKeys.solution ? 'present' : 'missing'}`}>
-                          {detectedKeys.solution ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} solution
-                        </span>
-                        <span className={`key-pill ${detectedKeys.tech_explained ? 'present' : 'missing'}`}>
-                          {detectedKeys.tech_explained ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} tech_explained
-                        </span>
-                        <span className={`key-pill ${detectedKeys.conclusion ? 'present' : 'missing'}`}>
-                          {detectedKeys.conclusion ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} conclusion
-                        </span>
-                        <span className={`key-pill ${detectedKeys.cta ? 'present' : 'missing'}`}>
-                          {detectedKeys.cta ? <Check size={11} strokeWidth={2.5} /> : <X size={11} strokeWidth={2} />} cta
-                        </span>
-                      </div>
-
-                      {/* CODE EDITOR TEXTAREA */}
-                      <textarea
-                        className="paste-script-textarea"
-                        value={customScriptText}
-                        onChange={(e) => {
-                          setCustomScriptText(e.target.value);
-                          setPasteSuccess(false);
-                        }}
-                        placeholder={`{\n  "title": "Topic Name",\n  "hook": "...",\n  "problem": "...",\n  "solution": "...",\n  "tech_explained": "...",\n  "conclusion": "...",\n  "cta": "..."\n}`}
-                      />
-
-                      {/* PARSE / SUCCESS BANNER */}
-                      {pasteSuccess && session && (
-                        <div
-                          style={{
-                            padding: '12px 18px',
-                            background: 'rgba(16, 185, 129, 0.1)',
-                            border: '1px solid rgba(16, 185, 129, 0.3)',
-                            borderRadius: 10,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#34D399' }}>
-                            <CheckCircle2 size={18} />
-                            <div>
-                              <strong>Script Successfully Parsed & Validated!</strong>
-                              <div style={{ fontSize: 12, opacity: 0.9 }}>
-                                Title: "{session.topic}" • {session.storyboard?.scenes?.length || 5} Dynamic Scenes Ready
+                      return (
+                        <div className="script-viewer-card">
+                          {/* VIEWER HEADER */}
+                          <div className="script-viewer-header">
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                <span className="badge-mono" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                                  <Check size={11} strokeWidth={2.5} /> Script Ready • 7-Key Format
+                                </span>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                  ~{stats.words} words • ~{stats.durationSec}s duration
+                                </span>
                               </div>
+                              <h2 style={{ fontSize: 18, fontWeight: 700, color: '#fafafa', margin: 0, letterSpacing: '-0.02em' }}>
+                                {activeScript.title || session.topic}
+                              </h2>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(JSON.stringify(activeScript, null, 2));
+                                  setCopiedScript(true);
+                                  setTimeout(() => setCopiedScript(false), 2000);
+                                }}
+                                title="Copy JSON"
+                              >
+                                {copiedScript ? <Check size={13} color="#4ade80" /> : <Copy size={13} />}
+                                <span>{copiedScript ? 'Copied' : 'Copy JSON'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                  setSession(null);
+                                  setIsEditingScript(false);
+                                  setPasteSuccess(false);
+                                }}
+                                title="Reset and start a new script"
+                              >
+                                <RotateCcw size={12} />
+                                <span>New Script</span>
+                              </button>
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            className="btn btn-emerald"
-                            onClick={() => setStage(2)}
-                            style={{ gap: 6, fontWeight: 700 }}
-                          >
-                            <span>Proceed to Voiceover</span>
-                            <ArrowRight size={14} />
-                          </button>
-                        </div>
-                      )}
+                          {/* VIEWER BODY: DISPLAY OR INLINE EDIT */}
+                          {!isEditingScript ? (
+                            <div className="script-sections-flow">
+                              {/* 1. HOOK */}
+                              <div className="script-section-block">
+                                <div className="script-section-top">
+                                  <span className="script-act-tag">0–7s • Hook</span>
+                                  <span className="script-act-label">Opening Relatable Mystery</span>
+                                </div>
+                                <p className="script-section-text">{activeScript.hook || '—'}</p>
+                              </div>
 
-                      {/* ACTION BUTTON */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={handleParseCustomScript}
-                          disabled={studioLoading || !customScriptText.trim()}
-                          style={{
-                            padding: '8px 20px',
-                            fontSize: 13,
-                            fontWeight: 600,
-                            gap: 8,
-                          }}
-                        >
-                          {studioLoading ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                          <span>Validate & Parse Script</span>
-                        </button>
-                      </div>
-                    </div>
+                              {/* 2. PROBLEM */}
+                              <div className="script-section-block">
+                                <div className="script-section-top">
+                                  <span className="script-act-tag">7–18s • Problem</span>
+                                  <span className="script-act-label">Naive Approach & Real Bottleneck</span>
+                                </div>
+                                <p className="script-section-text">{activeScript.problem || '—'}</p>
+                              </div>
+
+                              {/* 3. SOLUTION */}
+                              <div className="script-section-block">
+                                <div className="script-section-top">
+                                  <span className="script-act-tag">18–30s • Solution</span>
+                                  <span className="script-act-label">Hero Architectural Concept</span>
+                                </div>
+                                <p className="script-section-text">{activeScript.solution || '—'}</p>
+                              </div>
+
+                              {/* 4. TECH EXPLAINED */}
+                              <div className="script-section-block script-section-highlight">
+                                <div className="script-section-top">
+                                  <span className="script-act-tag">30–67s • Deep Dive</span>
+                                  <span className="script-act-label">Under-The-Hood Architecture & Edge Case</span>
+                                </div>
+                                <p className="script-section-text" style={{ fontSize: 14 }}>{activeScript.tech_explained || '—'}</p>
+                              </div>
+
+                              {/* 5. CONCLUSION */}
+                              <div className="script-section-block">
+                                <div className="script-section-top">
+                                  <span className="script-act-tag">67–80s • Conclusion</span>
+                                  <span className="script-act-label">Recap & Key Architectural Takeaway</span>
+                                </div>
+                                <p className="script-section-text">{activeScript.conclusion || '—'}</p>
+                              </div>
+
+                              {/* 6. CTA */}
+                              <div className="script-section-block">
+                                <div className="script-section-top">
+                                  <span className="script-act-tag">Last 4–6s • Branded CTA</span>
+                                  <span className="script-act-label">Behind The Stack</span>
+                                </div>
+                                <p className="script-section-text">{activeScript.cta || '—'}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="script-edit-container">
+                              <div className="script-edit-field">
+                                <label className="input-label">Title</label>
+                                <input
+                                  type="text"
+                                  className="text-field"
+                                  value={editForm.title || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                />
+                              </div>
+
+                              <div className="script-edit-field">
+                                <label className="input-label">Hook (0–7s)</label>
+                                <textarea
+                                  className="text-field script-edit-textarea"
+                                  rows={2}
+                                  value={editForm.hook || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, hook: e.target.value })}
+                                />
+                              </div>
+
+                              <div className="script-edit-field">
+                                <label className="input-label">Problem (7–18s)</label>
+                                <textarea
+                                  className="text-field script-edit-textarea"
+                                  rows={2}
+                                  value={editForm.problem || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, problem: e.target.value })}
+                                />
+                              </div>
+
+                              <div className="script-edit-field">
+                                <label className="input-label">Solution (18–30s)</label>
+                                <textarea
+                                  className="text-field script-edit-textarea"
+                                  rows={2}
+                                  value={editForm.solution || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, solution: e.target.value })}
+                                />
+                              </div>
+
+                              <div className="script-edit-field">
+                                <label className="input-label">Tech Explained (30–67s)</label>
+                                <textarea
+                                  className="text-field script-edit-textarea"
+                                  rows={5}
+                                  value={editForm.tech_explained || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, tech_explained: e.target.value })}
+                                />
+                              </div>
+
+                              <div className="script-edit-field">
+                                <label className="input-label">Conclusion (67–80s)</label>
+                                <textarea
+                                  className="text-field script-edit-textarea"
+                                  rows={2}
+                                  value={editForm.conclusion || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, conclusion: e.target.value })}
+                                />
+                              </div>
+
+                              <div className="script-edit-field">
+                                <label className="input-label">CTA</label>
+                                <input
+                                  type="text"
+                                  className="text-field"
+                                  value={editForm.cta || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, cta: e.target.value })}
+                                />
+                              </div>
+
+                              {/* AI Refine Prompt */}
+                              <div style={{ padding: 12, background: '#141417', borderRadius: 8, border: '1px solid #222226' }}>
+                                <span className="input-label" style={{ marginBottom: 6, display: 'block' }}>Or Refine with AI Prompt:</span>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <input
+                                    type="text"
+                                    className="text-field"
+                                    placeholder="e.g. Hook ko aur punchy banao ya Redis ka part thoda aur detail me samjhao..."
+                                    value={aiRefinePrompt}
+                                    onChange={(e) => setAiRefinePrompt(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAiRefine()}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={handleAiRefine}
+                                    disabled={refiningAi || !aiRefinePrompt.trim()}
+                                    style={{ gap: 6, whiteSpace: 'nowrap' }}
+                                  >
+                                    {refiningAi ? <RefreshCw size={13} className="animate-spin" /> : <Wand2 size={13} />}
+                                    <span>Refine</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* BOTTOM ACTION BAR */}
+                          <div className="script-action-bar">
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              {!isEditingScript ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary"
+                                  onClick={() => {
+                                    setEditForm({ ...activeScript });
+                                    setIsEditingScript(true);
+                                  }}
+                                  style={{ gap: 6 }}
+                                >
+                                  <Sliders size={13} />
+                                  <span>Make Changes</span>
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    onClick={handleSaveScriptEdits}
+                                    disabled={savingEdits}
+                                    style={{ gap: 6 }}
+                                  >
+                                    {savingEdits ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} strokeWidth={2.5} />}
+                                    <span>Save Changes</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    onClick={() => setIsEditingScript(false)}
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              )}
+                            </div>
+
+                            {/* PROCEED TO VOICEOVER */}
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              onClick={() => setStage(2)}
+                              style={{
+                                padding: '0 22px',
+                                height: 38,
+                                gap: 8,
+                                fontWeight: 600,
+                              }}
+                            >
+                              <span>Proceed to Voiceover</span>
+                              <ArrowRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               )}

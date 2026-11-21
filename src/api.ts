@@ -180,14 +180,14 @@ app.post('/api/pipeline/script/start', async (req, res) => {
   }
 });
 
-// 2b. Start session from Creator Custom Script (6-Key JSON or text)
+// 2b. Start session from Creator Custom Script (6-Key / 7-Key JSON or text)
 app.post('/api/pipeline/script/custom', async (req, res) => {
-  const { customScript, topic } = req.body;
+  const { customScript, topic, sessionId } = req.body;
   if (!customScript) {
     return res.status(400).json({ error: 'Please provide customScript (6-Key JSON or text).' });
   }
   try {
-    const session = await masterScriptService.createCustomSession(customScript, topic);
+    const session = await masterScriptService.createCustomSession(customScript, topic, sessionId);
     res.status(201).json(session);
   } catch (err: any) {
     console.error('[API /pipeline/script/custom Error]:', err);

@@ -37,6 +37,16 @@ export interface ScriptSession {
   angle?: string;
   messages: ChatMessage[];
   currentMarkdown: string;
+  sevenKeyScript?: {
+    title?: string;
+    hook?: string;
+    problem?: string;
+    solution?: string;
+    tech_explained?: string;
+    conclusion?: string;
+    cta?: string;
+    [k: string]: any;
+  };
   sections: ParsedScriptSections;
   storyboard: Storyboard;
   finalized?: boolean;
@@ -177,6 +187,35 @@ export function parseTolerantJson(jsonStr: string): any {
     }
   }
 
+  return null;
+}
+
+export function tryParseSevenKeyJson(text: string): Record<string, any> | null {
+  if (!text || typeof text !== 'string') return null;
+  const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    const obj = JSON.parse(stripped);
+    if (obj && typeof obj === 'object' && (obj.hook || obj.hooks || obj.tech_explained || obj.problem || obj.solution)) {
+      return obj;
+    }
+  } catch {}
+
+  const startIdx = text.indexOf('{');
+  const endIdx = text.lastIndexOf('}');
+  if (startIdx !== -1 && endIdx > startIdx) {
+    const candidate = text.substring(startIdx, endIdx + 1);
+    try {
+      const obj = JSON.parse(candidate);
+      if (obj && typeof obj === 'object' && (obj.hook || obj.hooks || obj.tech_explained || obj.problem || obj.solution)) {
+        return obj;
+      }
+    } catch {
+      const tolerant = parseTolerantJson(candidate);
+      if (tolerant && typeof tolerant === 'object' && (tolerant.hook || tolerant.hooks || tolerant.tech_explained || tolerant.problem || tolerant.solution)) {
+        return tolerant;
+      }
+    }
+  }
   return null;
 }
 
@@ -1108,6 +1147,13 @@ export class MasterScriptService {
     console.log(`[MasterScript] Generating initial master script for Topic: "${topic}"...`);
     let responseText = await this.callLLM(userPrompt, systemPrompt);
 
+    // Try parsing as 7-key JSON (Contract V4)
+    const sevenKeyObj = tryParseSevenKeyJson(responseText);
+    if (sevenKeyObj) {
+      console.log(`[MasterScript] Successfully parsed 7-key JSON script: "${sevenKeyObj.title || topic}"`);
+      return this.createCustomSession(sevenKeyObj, topic, existingSessionId, angle);
+    }
+
     let sections = parseSectionsFromMarkdown(responseText);
 
     // Automatic recovery if Section 4 JSON was truncated or has fewer than 10 scenes
@@ -1199,6 +1245,34 @@ Rules:
       throw new Error(`Session ${sessionId} not found. Please start a new script session.`);
     }
 
+    if (session.sevenKeyScript) {
+      const systemPrompt =
+        getMasterPromptTemplate() +
+        `\n\nCRITICAL EDITING INSTRUCTION:
+The user is requesting a refinement, edit, or tweak to the current 7-key JSON script.
+Apply the user's specific feedback directly into the script.
+Maintain the exact seven fields in valid JSON format:
+{
+  "title": "...",
+  "hook": "...",
+  "problem": "...",
+  "solution": "...",
+  "tech_explained": "...",
+  "conclusion": "...",
+  "cta": "..."
+}
+Output ONLY the raw valid JSON object.`;
+
+      const prompt = `Current 7-Key Script JSON:\n${JSON.stringify(session.sevenKeyScript, null, 2)}\n\nUser Revision Request:\n${userInstruction}\n\nDeliver the updated complete 7-key JSON script:`;
+
+      console.log(`[MasterScript] Refining 7-key script for session ${sessionId}...`);
+      const responseText = await this.callLLM(prompt, systemPrompt);
+      const updatedObj = tryParseSevenKeyJson(responseText);
+      if (updatedObj) {
+        return this.createCustomSession(updatedObj, session.topic, sessionId, session.angle);
+      }
+    }
+
     const systemPrompt =
       getMasterPromptTemplate() +
       `\n\nCRITICAL EDITING INSTRUCTION:
@@ -1271,17 +1345,40 @@ Always return the full updated 7 sections so the script remains complete and sel
     return session;
   }
 
-  async createCustomSession(customScript: string | Record<string, any>, topicFallback = 'Creator Custom Script'): Promise<ScriptSession> {
+  async createCustomSession(
+    customScript: string | Record<string, any>,
+    topicFallback = 'Creator Custom Script',
+    existingSessionId?: string,
+    angleOverride?: string
+  ): Promise<ScriptSession> {
     const { parseCustomScriptToStoryboard } = await import('./custom-script-parser.js');
-    const storyboard = await parseCustomScriptToStoryboard(customScript, topicFallback);
-    const id = `session_${randomUUID()}`;
-    const rawText = typeof customScript === 'string' ? customScript : JSON.stringify(customScript, null, 2);
+    let scriptObj: Record<string, any> = {};
+    if (typeof customScript === 'string') {
+      try {
+        scriptObj = JSON.parse(customScript);
+      } catch {
+        const parsed = tryParseSevenKeyJson(customScript);
+        scriptObj = parsed || { title: topicFallback, hook: customScript };
+      }
+    } else {
+      scriptObj = customScript;
+    }
+
+    const storyboard = await parseCustomScriptToStoryboard(scriptObj, topicFallback);
+    const existing = existingSessionId ? this.getSession(existingSessionId) : undefined;
+    const id = existingSessionId || `session_${randomUUID()}`;
+    const rawText = typeof customScript === 'string' ? customScript : JSON.stringify(scriptObj, null, 2);
+
     const session: ScriptSession = {
+      ...(existing || {}),
       id,
-      topic: storyboard.title || topicFallback,
-      angle: 'Creator Custom Script',
-      messages: [{ role: 'assistant', content: 'Creator custom script parsed and validated successfully.' }],
+      topic: scriptObj.title || storyboard.title || topicFallback,
+      angle: angleOverride || existing?.angle || 'Behind The Stack Tech Reel',
+      messages: existing?.messages || [
+        { role: 'assistant', content: 'Script parsed and validated successfully.' }
+      ],
       currentMarkdown: rawText,
+      sevenKeyScript: scriptObj,
       sections: {
         voiceoverScript: storyboard.scenes.map((s) => s.narration).join('\n\n'),
         remotionSceneJson: {
@@ -1291,7 +1388,7 @@ Always return the full updated 7 sections so the script remains complete and sel
       },
       storyboard,
       finalized: true,
-      createdAt: Date.now(),
+      createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
     sessions.set(id, session);
