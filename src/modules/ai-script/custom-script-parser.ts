@@ -104,20 +104,20 @@ export function extractDynamicReelContext(obj: any): DynamicReelContext {
 
   // Item details
   const itemName = isFood
-    ? 'Royal Chicken Dum Biryani'
+    ? 'Food Delivery Order'
     : isRide
-    ? 'City Premier Ride'
+    ? 'City Cab Ride'
     : isFintech
-    ? 'Instant UPI Transfer'
-    : 'Selected Request';
+    ? 'Instant Payment Transfer'
+    : `${appName} Resource Request`;
   const itemPrice = isFood ? '₹350' : isRide ? '₹450' : isFintech ? '₹5,000' : '₹100';
 
   // Surge reason
   const surgeReason = /rain|बारिश/i.test(fullText)
-    ? '🌧️ HEAVY RAIN DETECTED • HIGH DEMAND'
+    ? 'HEAVY RAIN DETECTED • HIGH DEMAND'
     : /traffic|peak|rush/i.test(fullText)
-    ? '🚗 PEAK HOUR TRAFFIC • HIGH DEMAND'
-    : '⚡ TRAFFIC SURGE • LOCAL DEFICIT';
+    ? 'PEAK HOUR TRAFFIC • HIGH DEMAND'
+    : 'TRAFFIC SURGE • LOCAL DEFICIT';
 
   // 4. Audit Rows (Cut 0.2)
   const auditRow1Label = isFood ? '🏪 Restaurant' : isRide ? '🚗 Service' : isFintech ? '💳 Account' : '📦 Entity';
@@ -238,9 +238,9 @@ export function extractDynamicReelContext(obj: any): DynamicReelContext {
     'Heartbeat TTL guards against stale ghost rider caches in Redis',
   ];
 
-  let channelName = 'Behind The Stack';
+  let channelName = 'Behind The Tech';
   let channelHandle = '@behindthestack';
-  const channelMatch = String(obj.cta || '').match(/(behind the stack|code with \w+|\w+ tech)/i);
+  const channelMatch = String(obj.cta || '').match(/(Behind The Tech|code with \w+|\w+ tech)/i);
   if (channelMatch) {
     channelName = channelMatch[1].trim();
     channelHandle = `@${channelName.toLowerCase().replace(/\s+/g, '')}`;
@@ -301,7 +301,7 @@ function chunkIntoCuts(sentences: string[], maxWords = 24): string[] {
 
   for (const s of sentences) {
     const words = s.split(/\s+/).filter(Boolean).length;
-    if (current.length > 0 && currentWords + words > maxWords) {
+    if (current.length > 0 && currentWords >= 16 && currentWords + words > maxWords) {
       cuts.push(current.join(' '));
       current = [s];
       currentWords = words;
@@ -328,20 +328,26 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
     : title.toUpperCase();
 
   const fullText = `${title} ${hook} ${problem} ${solution} ${techExplained}`.toLowerCase();
-  const isSurge = /surge|zomato|swiggy|uber|delivery|food|ride|cab|fare|pricing/i.test(fullText);
+  
+  // Stricter domain detection so general tech scripts aren't misclassified as food surge
+  const priceMatches = Array.from(String(hook).matchAll(/[₹$]?\s*(\d+)/g))
+    .map((m) => parseInt(m[1], 10))
+    .filter((n) => n > 5 && n < 10000);
+
+  const isSurge = (/zomato|swiggy|delivery\s*(?:charge|fee)|surge\s*pricing/i.test(fullText) || (/uber|ola/i.test(fullText) && /surge|pricing|fare/i.test(fullText))) && priceMatches.length >= 2;
   const isRedis = /redis|lock|redlock|mutex|distributed lock|concurrency|race condition|double booking/i.test(fullText);
   const isKafka = /kafka|consumer|partition|broker|rebalance|topic|offset/i.test(fullText);
   const isDatabase = /database|postgres|mysql|sqlite|mvcc|vacuum|dead tuple|table bloat|index|btree/i.test(fullText);
 
   const ctx = extractDynamicReelContext(obj);
 
-  // 1. Dynamic sentence chunks per section based on script content
-  const hookCuts = chunkIntoCuts(splitSentences(hook), 22);
-  const problemCuts = chunkIntoCuts(splitSentences(problem), 24);
-  const solutionCuts = chunkIntoCuts(splitSentences(solution), 24);
-  const techCuts = chunkIntoCuts(splitSentences(techExplained), 22);
-  const conclusionCuts = chunkIntoCuts(splitSentences(conclusion), 25);
-  const ctaCuts = chunkIntoCuts(splitSentences(cta), 25);
+  // Dynamic sentence chunks per section with balanced retention pacing (~30-40 words per cut)
+  const hookCuts = chunkIntoCuts(splitSentences(hook), 45);
+  const problemCuts = chunkIntoCuts(splitSentences(problem), 35);
+  const solutionCuts = chunkIntoCuts(splitSentences(solution), 35);
+  const techCuts = chunkIntoCuts(splitSentences(techExplained), 32);
+  const conclusionCuts = chunkIntoCuts(splitSentences(conclusion), 45);
+  const ctaCuts = chunkIntoCuts(splitSentences(cta), 45);
 
   const rawScenes: Array<{
     section: 'hook' | 'problem' | 'solution' | 'tech' | 'conclusion' | 'cta';
@@ -361,7 +367,9 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
     rawScenes.push({ section: 'hook', narration: hook || title, subIndex: 0, totalSub: 1 });
   }
 
-  // 2. Map every chunk dynamically to an engaging visual component
+  // 2. Map every chunk dynamically to an engaging, non-repeating visual component
+  let lastAssignedType = '';
+
   const scenes: Storyboard['scenes'] = rawScenes.map((item, idx) => {
     const textLower = item.narration.toLowerCase();
     let type: Storyboard['scenes'][number]['type'] = 'architecturePipeline';
@@ -370,10 +378,10 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
     let visualProps: Record<string, any> = {};
 
     if (item.section === 'hook') {
-      if (item.subIndex === 0 && (isSurge || /app|order|book|charge|₹|\$/i.test(textLower))) {
+      if (item.subIndex === 0 && isSurge) {
         type = 'smartphoneMockup';
-        onScreenText = isSurge ? `₹30 VS ₹90? • SURGE PRICING` : `${shortTitle} • TRIGGER`;
-        technicalKeyPoint = 'Client Request Anomaly';
+        onScreenText = `${ctx.baseDeliveryFee} VS ${ctx.surgeDeliveryFee}? • SURGE PRICING`;
+        technicalKeyPoint = 'Client Dynamic Pricing Anomaly';
         visualProps = {
           headline: onScreenText,
           subtext: ctx.surgeReason,
@@ -393,71 +401,100 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
         technicalKeyPoint = 'The Engineering Mystery';
         visualProps = {
           headline: shortTitle,
-          questionKicker: item.narration.slice(0, 100),
-          badgeText: isRedis ? 'CONCURRENCY BUG' : isSurge ? 'DYNAMIC PRICING' : isKafka ? 'STREAMING PUZZLE' : 'SYSTEM DESIGN',
+          questionKicker: item.narration.slice(0, 110),
+          badgeText: isRedis ? 'CONCURRENCY BUG' : isSurge ? 'DYNAMIC PRICING' : isKafka ? 'STREAMING PUZZLE' : isDatabase ? 'DATABASE INTERNALS' : 'SYSTEM DESIGN',
           accentColor: '#00F2FE',
         };
       }
     } else if (item.section === 'problem') {
-      if (/race\s*condition|concurrency|simultaneous|double\s*booking|last\s*seat|conflict/i.test(textLower) || isRedis) {
-        type = 'raceCondition';
-        onScreenText = 'RACE CONDITION DETECTED';
-        technicalKeyPoint = 'Two Workers Competing for Same Mutex';
-        visualProps = {
-          title: 'CONCURRENCY COLLISION',
-          itemTitle: 'Concert Seat #123 (Stock = 1)',
-          user1Name: 'User A (Worker 1)',
-          user2Name: 'User B (Worker 2)',
-          atomicQuery: 'SET lock:seat_123 uuid NX PX 10000;',
-          onScreenText: 'Simultaneous Requests Collision',
-        };
+      if (item.subIndex === 0) {
+        if (/race\s*condition|concurrency|simultaneous|double\s*booking|last\s*seat|conflict/i.test(textLower) || isRedis) {
+          type = 'raceCondition';
+          onScreenText = 'RACE CONDITION DETECTED';
+          technicalKeyPoint = 'Two Workers Competing for Same Mutex';
+          visualProps = {
+            title: 'CONCURRENCY COLLISION',
+            itemTitle: 'Concert Seat #123 (Stock = 1)',
+            user1Name: 'User A (Worker 1)',
+            user2Name: 'User B (Worker 2)',
+            atomicQuery: 'SET lock:seat_123 uuid NX PX 10000;',
+            onScreenText: 'Simultaneous Requests Collision',
+          };
+        } else {
+          type = 'comparison';
+          onScreenText = `${ctx.metricACount} ${ctx.metricAName.toUpperCase()} vs ${ctx.metricBCount} ${ctx.metricBName.toUpperCase()}`;
+          technicalKeyPoint = 'Static Model Breakdown Under Peak Traffic';
+          visualProps = {
+            leftTitle: ctx.naiveTitle,
+            leftCode: ctx.naiveCode,
+            leftPoints: ctx.naivePoints,
+            rightTitle: ctx.telemetryTitle,
+            rightCode: ctx.telemetryCode,
+            rightPoints: ctx.telemetryPoints,
+            verdict: ctx.verdict,
+            metricAName: ctx.metricAName,
+            metricACount: ctx.metricACount,
+            metricBName: ctx.metricBName,
+            metricBCount: ctx.metricBCount,
+            deficitRatio: ctx.deficitRatio,
+          };
+        }
       } else {
         type = 'comparison';
-        onScreenText = `${ctx.metricACount} ${ctx.metricAName.toUpperCase()} vs ${ctx.metricBCount} ${ctx.metricBName.toUpperCase()}`;
-        technicalKeyPoint = 'Static Model Breakdown Under Peak Traffic';
+        onScreenText = 'DATABASE OVERLAP ANOMALY';
+        technicalKeyPoint = 'Unsynchronised Decrement Leads to -1 Stock';
         visualProps = {
-          leftTitle: ctx.naiveTitle,
-          leftCode: ctx.naiveCode,
-          leftPoints: ctx.naivePoints,
-          rightTitle: ctx.telemetryTitle,
-          rightCode: ctx.telemetryCode,
-          rightPoints: ctx.telemetryPoints,
-          verdict: ctx.verdict,
-          metricAName: ctx.metricAName,
-          metricACount: ctx.metricACount,
-          metricBName: ctx.metricBName,
-          metricBCount: ctx.metricBCount,
-          deficitRatio: ctx.deficitRatio,
+          leftTitle: 'Request 1 (User A)',
+          leftCode: 'SELECT stock -> 1\nUPDATE stock = 0',
+          leftPoints: ['Reads stock = 1 before commit', 'Proceeds with checkout'],
+          rightTitle: 'Request 2 (User B)',
+          rightCode: 'SELECT stock -> 1\nUPDATE stock = -1',
+          rightPoints: ['Reads stale stock = 1 in parallel', 'Result: Double Booking Overlap!'],
+          verdict: 'Result: Seat count drops below zero without a mutex.',
         };
       }
     } else if (item.section === 'solution') {
-      if (/h3|spatial|hexagon|cell|location|zone|area|city|map|gps/i.test(textLower) || isSurge) {
-        type = 'h3SpatialMap';
-        onScreenText = ctx.solutionTitle;
-        technicalKeyPoint = 'O(1) Spatial Hexagon Partitioning';
-        visualProps = {
-          title: ctx.solutionTitle,
-          subtitle: ctx.solutionSubtitle,
-          hotHexId: ctx.hotHexId,
-          orderCount: ctx.metricACount,
-          riderCount: ctx.metricBCount,
-          surgeMultiplier: ctx.surgeMultiplier,
-          mode: 'hex-grid',
-          entityLabel: ctx.metricAName,
-          providerLabel: ctx.metricBName,
-        };
+      if (item.subIndex === 0) {
+        if (isSurge) {
+          type = 'h3SpatialMap';
+          onScreenText = ctx.solutionTitle;
+          technicalKeyPoint = 'O(1) Spatial Hexagon Partitioning';
+          visualProps = {
+            title: ctx.solutionTitle,
+            subtitle: ctx.solutionSubtitle,
+            hotHexId: ctx.hotHexId,
+            orderCount: ctx.metricACount,
+            riderCount: ctx.metricBCount,
+            surgeMultiplier: ctx.surgeMultiplier,
+            mode: 'hex-grid',
+            entityLabel: ctx.metricAName,
+            providerLabel: ctx.metricBName,
+          };
+        } else {
+          type = 'architecturePipeline';
+          onScreenText = 'DISTRIBUTED LOCK ARCHITECTURE';
+          technicalKeyPoint = 'Single Mutex In-Memory Coordination';
+          visualProps = {
+            title: 'DISTRIBUTED MUTEX PATTERN',
+            subtitle: 'Only one worker can hold the key',
+            redisLatencyMs: 1.2,
+            steps: [
+              { label: '1. Acquire Key', description: 'SET NX conditional atomic write', status: 'active' },
+              { label: '2. Exclusive Hold', description: 'Worker holds mutex resource', status: 'completed' },
+              { label: '3. DB Mutation', description: 'Safely decrement stock in DB', status: 'pending' },
+            ],
+          };
+        }
       } else {
-        type = 'architecturePipeline';
-        onScreenText = 'DISTRIBUTED LOCK ARCHITECTURE';
-        technicalKeyPoint = 'In-Memory Distributed Coordination';
+        type = 'requestFlow';
+        onScreenText = 'EXCLUSIVE MUTEX ACCESS';
+        technicalKeyPoint = 'Competing Workers Queued or Rejected';
         visualProps = {
-          title: 'DISTRIBUTED LOCK PATTERN',
-          subtitle: 'Single Mutex In-Memory Coordination',
-          redisLatencyMs: 1.5,
+          title: 'PARALLEL REQUEST COORDINATION',
           steps: [
-            { label: 'Client Booking', description: 'User sends reservation request', status: 'completed' },
-            { label: 'Acquire Lock', description: 'SET NX conditional atomic write', status: 'active' },
-            { label: 'DB Decrement', description: 'Safe decrement stock count', status: 'pending' },
+            { label: 'User A Request', description: 'Lock acquired • 200 OK', status: 'completed' },
+            { label: 'User B Request', description: 'Key held • Blocked / Rejected', status: 'active' },
+            { label: 'Database Integrity', description: 'Stock decremented exactly once', status: 'pending' },
           ],
         };
       }
@@ -476,79 +513,63 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
           ],
           explanationCallout: 'NX = only if not exists • PX = 10s auto-expiry',
         };
-      } else if (/h3|spatial|hexagon|cell|honeycomb/i.test(textLower)) {
-        type = 'h3SpatialMap';
-        onScreenText = 'H3 SPATIAL INDEXING';
-        technicalKeyPoint = 'Coordinates to 64-bit Hex ID';
-        visualProps = {
-          title: 'H3 SPATIAL INDEXING',
-          subtitle: 'h3.geoToH3(lat, lng, res=8) ➔ #88619A0A4',
-          hotHexId: '#88619A0A4',
-          orderCount: 100,
-          riderCount: 20,
-          surgeMultiplier: '3.0X',
-        };
       } else if (/offline|stale|ghost|crash|deadlock|timeout|ttl|expire|catch/i.test(textLower)) {
         type = 'queueTimeline';
-        onScreenText = 'CRITICAL EDGE CASE SAFEGUARD';
+        onScreenText = 'CRITICAL DEADLOCK SAFEGUARD';
         technicalKeyPoint = 'Auto-Expiry TTL Prevents Deadlocks';
         visualProps = {
-          title: 'EDGE CASE & LEASE AUTO-EXPIRY',
+          title: 'LEASE AUTO-EXPIRY & RECOVERY',
           items: [
             { name: '1. Lock Acquired', detail: 'Worker holds mutex with 10s TTL' },
-            { name: '2. Node Crashes', detail: 'Network partition / unhandled exception' },
-            { name: '3. TTL Auto-Expires', detail: 'Key evicted automatically from memory' },
-            { name: '4. Deadlock Averted', detail: 'Next worker acquires without block' },
+            { name: '2. Worker Node Crashes', detail: 'Server dies before manual lock release' },
+            { name: '3. Redis Evicts Key', detail: 'TTL auto-expires in memory after 10s' },
+            { name: '4. Deadlock Averted', detail: 'Resource unblocked for subsequent workers' },
           ],
           activeItemIndex: 2,
         };
-      } else if (/gps|heartbeat|stream|ingestion|app sends|telemetry/i.test(textLower)) {
+      } else if (/gps|heartbeat|stream|ingestion|app sends|telemetry|confirm|booking/i.test(textLower)) {
         type = 'requestFlow';
-        onScreenText = 'LIVE TELEMETRY INGESTION';
-        technicalKeyPoint = 'Streaming Client Heartbeats';
+        onScreenText = 'ATOMIC EXECUTION FLOW';
+        technicalKeyPoint = 'Client State Transition';
         visualProps = {
-          title: 'CLIENT TELEMETRY STREAM',
+          title: 'DISTRIBUTED EXECUTION LIFECYCLE',
           steps: [
-            { label: 'Mobile GPS Ping', status: 'completed' },
-            { label: 'API Gateway Ingestion', status: 'active' },
-            { label: 'In-Memory Cache Write', status: 'pending' },
+            { label: 'Acquire Mutex', status: 'completed' },
+            { label: 'Execute Critical Section', status: 'active' },
+            { label: 'Release / Auto-Expire', status: 'pending' },
           ],
-        };
-      } else if (/formula|multiplier|pricing engine|imbalance|average|calculate/i.test(textLower)) {
-        type = 'comparison';
-        onScreenText = 'DYNAMIC EVALUATION ENGINE';
-        technicalKeyPoint = 'Elastic Multiplier Calculation';
-        visualProps = {
-          leftTitle: 'Current Demand',
-          leftCode: 'Orders: 100 | Available Riders: 20',
-          leftPoints: ['Ratio: 5.0 Orders/Rider', 'Deficit: 80 Riders Short'],
-          rightTitle: 'Pricing Engine Output',
-          rightCode: 'Base ₹30 + Rain ₹30 + Surge ₹30 = ₹90',
-          rightPoints: ['Dynamic Surge: 3.0X', 'Sub-50ms Calculation'],
-          verdict: 'Result: App displays updated ₹90 fee instantly.',
         };
       } else {
         type = 'architecturePipeline';
         onScreenText = 'IN-MEMORY CACHE & ENGINE';
         technicalKeyPoint = 'Sub-Millisecond Pipeline State';
         visualProps = {
-          title: 'BACKEND ARCHITECTURE DEEP DIVE',
-          subtitle: 'In-memory state & sub-millisecond calculation',
-          redisLatencyMs: 1.8,
-          steps: ctx.pipelineSteps,
-          deepDiveStages: ctx.deepDiveStages,
+          title: 'DISTRIBUTED ENGINE ARCHITECTURE',
+          subtitle: 'In-memory coordination & sub-millisecond execution',
+          redisLatencyMs: 1.5,
+          steps: [
+            { label: 'Client Ingestion', description: 'Incoming reservation requests', status: 'completed' },
+            { label: 'In-Memory Mutex', description: 'Atomic SET NX coordination', status: 'active' },
+            { label: 'Relational DB', description: 'Guaranteed durable write', status: 'pending' },
+          ],
         };
+      }
+
+      // Avoid repeating the exact same type as previous cut
+      if (type === lastAssignedType) {
+        if (type === 'architecturePipeline') type = 'requestFlow';
+        else if (type === 'code') type = 'queueTimeline';
       }
     } else if (item.section === 'conclusion') {
       type = 'summary';
       onScreenText = 'CORE ARCHITECTURAL TAKEAWAY';
-      technicalKeyPoint = 'Elastic Supply-Demand Synchronization';
+      technicalKeyPoint = 'Concurrency Synchronization';
       visualProps = {
         headline: 'SENIOR SDE MENTAL MODEL',
         takeaways: [
-          'State should be partitioned in-memory for sub-millisecond latency',
-          'Atomic locks must have auto-expiring leases (TTL) to guard crashes',
-          'Demand signals dynamically balance traffic without database contention',
+          'State should be guarded in-memory with atomic primitives (SET NX)',
+          'All locks MUST carry an auto-expiring TTL lease to prevent deadlocks',
+          'Eliminating race conditions protects database consistency under load',
         ],
         callToAction: cta,
       };
@@ -559,12 +580,19 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
       visualProps = {
         title: 'SDE INTERVIEW CHEAT-SHEET',
         subtitle: 'Defend this architecture in your interviews',
-        interviewPoints: ctx.interviewPoints,
+        interviewPoints: [
+          'Use Redis SET NX PX for single-instance distributed locking',
+          'Always supply a unique worker token for safe release verification',
+          'Configure safety TTL based on max P99 critical section execution time',
+          'Use Redlock algorithm if synchronizing across multiple Redis masters',
+        ],
         callToAction: cta,
         channelName: ctx.channelName,
         channelHandle: ctx.channelHandle,
       };
     }
+
+    lastAssignedType = type;
 
     const words = item.narration.trim().split(/\s+/).filter(Boolean).length;
     const durationTargetSec = Math.max(3, Math.min(20, Math.round(words / 2.35)));

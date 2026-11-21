@@ -1317,24 +1317,8 @@ Always return the full updated 7 sections so the script remains complete and sel
       session.storyboard = storyboard;
     }
 
-    // Enforce 12-16 valid scenes
-    if (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16) {
-      if (!session.storyboard?.scenes || session.storyboard.scenes.length === 0) {
-        session.storyboard = buildStoryboardFromParsed(session.topic, session.sections, session.currentMarkdown, session.angle);
-      } else if (session.storyboard.scenes.length < 12) {
-        const allVoiceoverText = (session.sections.voiceoverScript || session.currentMarkdown).trim();
-        const topicFallbacks = buildTopicGroundedFallbackScenes(session.topic, session.angle, allVoiceoverText);
-        for (let sIdx = session.storyboard.scenes.length; sIdx < 12; sIdx++) {
-          const fallbackTemplate = topicFallbacks[sIdx % topicFallbacks.length];
-          session.storyboard.scenes.push({
-            ...fallbackTemplate,
-            id: `scene-${session.storyboard.scenes.length + 1}`,
-            sceneIndex: session.storyboard.scenes.length,
-          });
-        }
-      } else if (session.storyboard.scenes.length > 16) {
-        session.storyboard.scenes = session.storyboard.scenes.slice(0, 16);
-      }
+    if (!session.storyboard?.scenes || session.storyboard.scenes.length === 0) {
+      session.storyboard = buildStoryboardFromParsed(session.topic, session.sections, session.currentMarkdown, session.angle);
     }
 
     session.finalized = true;
@@ -1373,7 +1357,7 @@ Always return the full updated 7 sections so the script remains complete and sel
       ...(existing || {}),
       id,
       topic: scriptObj.title || storyboard.title || topicFallback,
-      angle: angleOverride || existing?.angle || 'Behind The Stack Tech Reel',
+      angle: angleOverride || existing?.angle || 'Behind The Tech Tech Reel',
       messages: existing?.messages || [
         { role: 'assistant', content: 'Script parsed and validated successfully.' }
       ],

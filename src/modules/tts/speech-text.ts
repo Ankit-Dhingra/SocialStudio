@@ -13,7 +13,7 @@ const terms: Array<[RegExp, string, string]> = [
   [/\bSpatial\b/gi, 'Spatial', 'स्पेशल'],
   [/\bIndexing\b/gi, 'Indexing', 'इंडेक्सिंग'],
   [/\bPricing Engine\b/gi, 'Pricing Engine', 'प्राइसिंग इंजन'],
-  [/\bBehind The Stack\b/gi, 'Behind The Stack', 'बिहाइंड द स्टैक'],
+  [/\bBehind The Tech\b/gi, 'Behind The Tech', 'बिहाइंड द स्टैक'],
   [/\bheartbeat\b/gi, 'heartbeat', 'हार्टबीट'],
   [/\btimestamps?\b/gi, 'timestamp', 'टाइमस्टैम्प'],
   [/\boffline\b/gi, 'offline', 'ऑफलाइन'],

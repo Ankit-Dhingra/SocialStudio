@@ -1582,9 +1582,16 @@ function App() {
 
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className={`btn ${activeAudio ? 'btn-secondary' : 'btn-disabled'}`}
+                          disabled={!activeAudio}
                           onClick={() => setStage(3)}
-                          style={{ padding: '9px 18px', gap: 6, fontWeight: 500 }}
+                          style={{
+                            padding: '9px 18px',
+                            gap: 6,
+                            fontWeight: 500,
+                            opacity: activeAudio ? 1 : 0.45,
+                            cursor: activeAudio ? 'pointer' : 'not-allowed',
+                          }}
                         >
                           <span>Next: Visuals</span>
                           <ArrowRight size={13} />
@@ -1731,75 +1738,96 @@ function App() {
               {/* STAGE 3: VISUAL STILLS REVIEW */}
               {stage === 3 && (
                 <section className="stills-review-card">
-                  <div className="stills-header" style={{ marginBottom: 24 }}>
-                    <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                        Stage 3: Visual Stills Review ({session?.storyboard?.scenes?.length || 'Dynamic'} Cuts)
-                      </h3>
-                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
-                        Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
+                  {!audioResult && !session?.audioResult ? (
+                    <div className="panel-card empty-placeholder" style={{ padding: '48px 24px', textAlign: 'center' }}>
+                      <Volume2 size={32} style={{ margin: '0 auto 12px', color: '#60a5fa' }} />
+                      <h4 style={{ fontSize: 16, fontWeight: 600, color: '#fafafa', marginBottom: 6 }}>Voiceover Audio Required</h4>
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 440, margin: '0 auto 18px' }}>
+                        Visual keyframes are synchronized to actual spoken word timestamps. Please synthesize voiceover in Stage 2 first.
                       </p>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24 }}>
                       <button
                         type="button"
                         className="btn btn-primary"
-                        disabled={generatingStills}
-                        onClick={handleGenerateStills}
-                        style={{ padding: '8px 20px', fontSize: 13, gap: 8 }}
+                        onClick={() => setStage(2)}
+                        style={{ padding: '9px 22px', fontSize: 13, gap: 8 }}
                       >
-                        {generatingStills ? (
-                          <RefreshCw size={13} className="animate-spin" />
-                        ) : (
-                          <Camera size={13} />
-                        )}
-                        <span>{generatingStills ? 'Capturing Previews...' : `Generate ${session?.storyboard?.scenes?.length || ''} Previews`}</span>
+                        <Volume2 size={14} />
+                        <span>Go to Stage 2: Voiceover Synthesis</span>
                       </button>
-
-                      <button
-                        type="button"
-                        className="btn btn-emerald"
-                        onClick={() => setStage(4)}
-                        style={{ padding: '8px 18px', gap: 6 }}
-                      >
-                        <span>Next: Render Video</span>
-                        <ArrowRight size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* STILLS GRID */}
-                  {stills && stills.length > 0 ? (
-                    <div className="stills-gallery-grid" style={{ marginTop: 24 }}>
-                      {stills.map((still, idx) => {
-                        const scene = session?.storyboard?.scenes?.[idx];
-                        return (
-                          <div
-                            key={idx}
-                            className="still-card-wrapper"
-                            onClick={() => setSelectedStill(still)}
-                          >
-                            <div className="still-thumbnail-box">
-                              <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
-                              <span className="still-thumbnail-badge">CUT {String(idx + 1).padStart(2, '0')}</span>
-                              <span className="still-thumbnail-frame">{still.type || scene?.type || 'SCENE'}</span>
-                            </div>
-                            <div className="still-card-meta">
-                              <span className="still-card-title">{scene?.onScreenText || still.label || `Cut ${idx + 1}`}</span>
-                              <span className="still-card-sub">{scene?.technicalKeyPoint || 'Visual Keyframe'}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
                     </div>
                   ) : (
-                    <div className="panel-card empty-placeholder" style={{ padding: '40px 20px' }}>
-                      <Camera size={24} style={{ margin: '0 auto 10px', color: 'var(--text-muted)' }} />
-                      <p style={{ color: 'var(--text-muted)' }}>
-                        Click "Generate Previews" to instantly capture high-res frame previews of every scene cut.
-                      </p>
-                    </div>
+                    <>
+                      <div className="stills-header" style={{ marginBottom: 24 }}>
+                        <div>
+                          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+                            Stage 3: Visual Stills Review ({session?.storyboard?.scenes?.length || 'Dynamic'} Cuts)
+                          </h3>
+                          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
+                            Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24 }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={generatingStills}
+                            onClick={handleGenerateStills}
+                            style={{ padding: '8px 20px', fontSize: 13, gap: 8 }}
+                          >
+                            {generatingStills ? (
+                              <RefreshCw size={13} className="animate-spin" />
+                            ) : (
+                              <Camera size={13} />
+                            )}
+                            <span>{generatingStills ? 'Capturing Previews...' : `Generate ${session?.storyboard?.scenes?.length || ''} Previews`}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-emerald"
+                            onClick={() => setStage(4)}
+                            style={{ padding: '8px 18px', gap: 6 }}
+                          >
+                            <span>Next: Render Video</span>
+                            <ArrowRight size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* STILLS GRID */}
+                      {stills && stills.length > 0 ? (
+                        <div className="stills-gallery-grid" style={{ marginTop: 24 }}>
+                          {stills.map((still, idx) => {
+                            const scene = session?.storyboard?.scenes?.[idx];
+                            return (
+                              <div
+                                key={idx}
+                                className="still-card-wrapper"
+                                onClick={() => setSelectedStill(still)}
+                              >
+                                <div className="still-thumbnail-box">
+                                  <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
+                                  <span className="still-thumbnail-badge">CUT {String(idx + 1).padStart(2, '0')}</span>
+                                  <span className="still-thumbnail-frame">{still.type || scene?.type || 'SCENE'}</span>
+                                </div>
+                                <div className="still-card-meta">
+                                  <span className="still-card-title">{scene?.onScreenText || still.label || `Cut ${idx + 1}`}</span>
+                                  <span className="still-card-sub">{scene?.technicalKeyPoint || 'Visual Keyframe'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="panel-card empty-placeholder" style={{ padding: '40px 20px' }}>
+                          <Camera size={24} style={{ margin: '0 auto 10px', color: 'var(--text-muted)' }} />
+                          <p style={{ color: 'var(--text-muted)' }}>
+                            Click "Generate Previews" to instantly capture high-res frame previews of every scene cut.
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </section>
               )}

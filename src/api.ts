@@ -362,6 +362,12 @@ app.post('/api/pipeline/stills', async (req, res) => {
     return res.status(404).json({ error: 'Session not found' });
   }
 
+  if (!session.audioResult?.clips?.length) {
+    return res.status(400).json({
+      error: 'Audio not synthesized yet. Please synthesize voiceover before generating visual previews.',
+    });
+  }
+
   try {
     if (!session.timeline) {
       session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {

@@ -33,7 +33,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
     'Heartbeat TTL freshness checks prevent ghost rider cache bugs',
   ],
   callToAction = 'Save this reel for your System Design Interview & follow for more!',
-  channelName = 'Behind The Stack',
+  channelName = 'Behind The Tech',
   channelHandle = '@behindthestack',
 }) => {
   const frame = useCurrentFrame();
@@ -115,7 +115,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
               textTransform: 'uppercase',
             }}
           >
-            {frame >= 350 ? 'BEHIND THE STACK • EXCLUSIVE' : 'SENIOR SDE INTERVIEW MATRIX'}
+            {frame >= 350 ? 'Behind The Tech • EXCLUSIVE' : 'SENIOR SDE INTERVIEW MATRIX'}
           </span>
         </div>
         <h1 style={{ fontSize: 48, fontWeight: 900, color: '#FFFFFF', margin: '0 0 6px 0' }}>
@@ -126,7 +126,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
         </p>
       </div>
 
-      {/* Dynamic Cut Switch: Cut 4.1 (SDE Cheat-Sheet HUD) vs Cut 4.2 (Screenshot Moment & Behind The Stack Follow CTA) */}
+      {/* Dynamic Cut Switch: Cut 4.1 (SDE Cheat-Sheet HUD) vs Cut 4.2 (Screenshot Moment & Behind The Tech Follow CTA) */}
       {frame < 350 ? (
         /* CUT 4.1: SDE INTERVIEW CHEAT-SHEET HUD (Frames 0 to 350 / 0s - 12s) */
         <div
@@ -250,7 +250,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
           </div>
         </div>
       ) : (
-        /* CUT 4.2: VIRAL SCREENSHOT MOMENT & BEHIND THE STACK FOLLOW CTA (Frames 350 to end / 12s - 24s) */
+        /* CUT 4.2: VIRAL SCREENSHOT MOMENT & Behind The Tech FOLLOW CTA (Frames 350 to end / 12s - 24s) */
         <div
           style={{
             position: 'absolute',
@@ -288,7 +288,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
             </div>
           </div>
 
-          {/* Behind The Stack Follow Card */}
+          {/* Behind The Tech Follow Card */}
           <div
             style={{
               width: '100%',
