@@ -39,6 +39,7 @@ import {
   Film,
   ExternalLink,
   Sliders,
+  Headphones,
 } from 'lucide-react';
 import './style.css';
 
@@ -153,6 +154,92 @@ function calcScriptStats(script) {
   const words = allSpoken.trim().split(/\s+/).filter(Boolean).length;
   const durationSec = Math.max(15, Math.round(words / 2.35));
   return { words, durationSec };
+}
+
+function getSceneVisualMeta(type) {
+  switch (type) {
+    case 'smartphoneMockup':
+      return {
+        label: 'Smartphone UI Mockup',
+        icon: '📱',
+        color: '#06b6d4',
+        badgeBg: 'rgba(6, 182, 212, 0.1)',
+        borderColor: 'rgba(6, 182, 212, 0.3)',
+      };
+    case 'comparison':
+      return {
+        label: 'Split Comparison',
+        icon: '⚖️',
+        color: '#f59e0b',
+        badgeBg: 'rgba(245, 158, 11, 0.1)',
+        borderColor: 'rgba(245, 158, 11, 0.3)',
+      };
+    case 'h3SpatialMap':
+      return {
+        label: 'H3 Spatial Hexagons',
+        icon: '🌐',
+        color: '#10b981',
+        badgeBg: 'rgba(16, 185, 129, 0.1)',
+        borderColor: 'rgba(16, 185, 129, 0.3)',
+      };
+    case 'architecturePipeline':
+      return {
+        label: 'Backend Architecture',
+        icon: '🏗️',
+        color: '#3b82f6',
+        badgeBg: 'rgba(59, 130, 246, 0.1)',
+        borderColor: 'rgba(59, 130, 246, 0.3)',
+      };
+    case 'tradeoffHUD':
+    case 'tradeoffHLD':
+      return {
+        label: 'Tradeoff Matrix & CTA',
+        icon: '📊',
+        color: '#8b5cf6',
+        badgeBg: 'rgba(139, 92, 246, 0.1)',
+        borderColor: 'rgba(139, 92, 246, 0.3)',
+      };
+    case 'raceCondition':
+      return {
+        label: 'Race Condition Spike',
+        icon: '⚡',
+        color: '#ef4444',
+        badgeBg: 'rgba(239, 68, 68, 0.1)',
+        borderColor: 'rgba(239, 68, 68, 0.3)',
+      };
+    case 'code':
+      return {
+        label: 'Code Walkthrough',
+        icon: '💻',
+        color: '#a855f7',
+        badgeBg: 'rgba(168, 85, 247, 0.1)',
+        borderColor: 'rgba(168, 85, 247, 0.3)',
+      };
+    case 'requestFlow':
+      return {
+        label: 'Request Flow Pipeline',
+        icon: '🔄',
+        color: '#0ea5e9',
+        badgeBg: 'rgba(14, 165, 233, 0.1)',
+        borderColor: 'rgba(14, 165, 233, 0.3)',
+      };
+    case 'hook':
+      return {
+        label: 'Hook & Problem Frame',
+        icon: '🎯',
+        color: '#eab308',
+        badgeBg: 'rgba(234, 179, 8, 0.1)',
+        borderColor: 'rgba(234, 179, 8, 0.3)',
+      };
+    default:
+      return {
+        label: type || 'Visual Scene Cut',
+        icon: '🎬',
+        color: '#6366f1',
+        badgeBg: 'rgba(99, 102, 241, 0.1)',
+        borderColor: 'rgba(99, 102, 241, 0.3)',
+      };
+  }
 }
 
 function App() {
@@ -843,8 +930,44 @@ function App() {
             VIEW 2: CREATE REEL (WORKFLOW TIMELINE NAVBAR)
             ===================================================================== */}
         {activeNav === 'create' && (
-          <div className="dashboard-viewport" style={{ padding: '20px 24px' }}>
+          <div className="dashboard-viewport" style={{ padding: '24px 32px' }}>
             <div className="studio-main-container">
+              {/* STUDIO WORKFLOW BREADCRUMB / HEADER */}
+              <div className="studio-workflow-header">
+                <div>
+                  <div className="studio-breadcrumbs">
+                    <span>Studio</span>
+                    <span style={{ opacity: 0.4 }}>/</span>
+                    <span className="breadcrumb-active">System Design Reel</span>
+                  </div>
+                  <h1 className="studio-project-title">
+                    {session?.topic || topic || 'Create High-Retention Tech Reel'}
+                  </h1>
+                  {session?.angle && (
+                    <p className="studio-project-subtitle">{session.angle}</p>
+                  )}
+                </div>
+
+                <div className="studio-header-right">
+                  <div className="studio-tag-group">
+                    <span className="studio-meta-tag">
+                      <Film size={12} />
+                      <span>1080×1920 (9:16)</span>
+                    </span>
+                    <span className="studio-meta-tag">
+                      <Clock size={12} />
+                      <span>~80s Fast-Paced</span>
+                    </span>
+                    {session && (
+                      <span className="studio-meta-tag active">
+                        <CheckCircle2 size={12} color="#4ade80" />
+                        <span>{session.storyboard?.scenes?.length || 5} Storyboard Cuts</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* TOP TIMELINE STEPPER NAVBAR */}
               <nav className="timeline-stepper">
                 <button
@@ -852,9 +975,10 @@ function App() {
                   className={`timeline-step ${stage === 1 ? 'active' : stage > 1 ? 'completed' : ''}`}
                   onClick={() => setStage(1)}
                 >
-                  <div className="timeline-step-circle">{stage > 1 ? <Check size={13} /> : '1'}</div>
+                  <div className="timeline-step-circle">{stage > 1 ? <Check size={13} strokeWidth={2.5} /> : '1'}</div>
                   <div className="timeline-step-text">
                     <span className="timeline-step-title">1. Generate Script</span>
+                    <span className="timeline-step-sub">7-Key Master Prompt</span>
                   </div>
                 </button>
 
@@ -865,11 +989,12 @@ function App() {
                   className={`timeline-step ${stage === 2 ? 'active' : stage > 2 ? 'completed' : ''}`}
                   onClick={() => session && setStage(2)}
                   disabled={!session}
-                  style={{ opacity: session ? 1 : 0.45 }}
+                  style={{ opacity: session ? 1 : 0.4 }}
                 >
-                  <div className="timeline-step-circle">{stage > 2 ? <Check size={13} /> : '2'}</div>
+                  <div className="timeline-step-circle">{stage > 2 ? <Check size={13} strokeWidth={2.5} /> : '2'}</div>
                   <div className="timeline-step-text">
                     <span className="timeline-step-title">2. Generate Voiceover</span>
+                    <span className="timeline-step-sub">Sarvam AI sunny_hi</span>
                   </div>
                 </button>
 
@@ -880,11 +1005,12 @@ function App() {
                   className={`timeline-step ${stage === 3 ? 'active' : stage > 3 ? 'completed' : ''}`}
                   onClick={() => (audioResult || session?.audioResult) && setStage(3)}
                   disabled={!audioResult && !session?.audioResult}
-                  style={{ opacity: audioResult || session?.audioResult ? 1 : 0.45 }}
+                  style={{ opacity: audioResult || session?.audioResult ? 1 : 0.4 }}
                 >
-                  <div className="timeline-step-circle">{stage > 3 ? <Check size={13} /> : '3'}</div>
+                  <div className="timeline-step-circle">{stage > 3 ? <Check size={13} strokeWidth={2.5} /> : '3'}</div>
                   <div className="timeline-step-text">
-                    <span className="timeline-step-title">3. Generate Visuals</span>
+                    <span className="timeline-step-title">3. Visual Stills Review</span>
+                    <span className="timeline-step-sub">13 Visual Cuts QA</span>
                   </div>
                 </button>
 
@@ -895,11 +1021,12 @@ function App() {
                   className={`timeline-step ${stage === 4 ? 'active' : ''}`}
                   onClick={() => (renderedMediaUrl || rendering) && setStage(4)}
                   disabled={!renderedMediaUrl && !rendering}
-                  style={{ opacity: renderedMediaUrl || rendering ? 1 : 0.45 }}
+                  style={{ opacity: renderedMediaUrl || rendering ? 1 : 0.4 }}
                 >
                   <div className="timeline-step-circle">4</div>
                   <div className="timeline-step-text">
-                    <span className="timeline-step-title">4. Finalize & Render Reel</span>
+                    <span className="timeline-step-title">4. Final 1080×1920 MP4</span>
+                    <span className="timeline-step-sub">Render & Export</span>
                   </div>
                 </button>
               </nav>
@@ -1156,54 +1283,54 @@ function App() {
                           {!isEditingScript ? (
                             <div className="script-sections-flow">
                               {/* 1. HOOK */}
-                              <div className="script-section-block">
+                              <div className="script-section-block sec-hook">
                                 <div className="script-section-top">
-                                  <span className="script-act-tag">0–7s • Hook</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}>0–7s • Hook</span>
                                   <span className="script-act-label">Opening Relatable Mystery</span>
                                 </div>
                                 <p className="script-section-text">{activeScript.hook || '—'}</p>
                               </div>
 
                               {/* 2. PROBLEM */}
-                              <div className="script-section-block">
+                              <div className="script-section-block sec-problem">
                                 <div className="script-section-top">
-                                  <span className="script-act-tag">7–18s • Problem</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(244, 63, 94, 0.4)', color: '#f43f5e' }}>7–18s • Problem</span>
                                   <span className="script-act-label">Naive Approach & Real Bottleneck</span>
                                 </div>
                                 <p className="script-section-text">{activeScript.problem || '—'}</p>
                               </div>
 
                               {/* 3. SOLUTION */}
-                              <div className="script-section-block">
+                              <div className="script-section-block sec-solution">
                                 <div className="script-section-top">
-                                  <span className="script-act-tag">18–30s • Solution</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(16, 185, 129, 0.4)', color: '#10b981' }}>18–30s • Solution</span>
                                   <span className="script-act-label">Hero Architectural Concept</span>
                                 </div>
                                 <p className="script-section-text">{activeScript.solution || '—'}</p>
                               </div>
 
                               {/* 4. TECH EXPLAINED */}
-                              <div className="script-section-block script-section-highlight">
+                              <div className="script-section-block sec-tech">
                                 <div className="script-section-top">
-                                  <span className="script-act-tag">30–67s • Deep Dive</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(6, 182, 212, 0.4)', color: '#38bdf8' }}>30–67s • Deep Dive</span>
                                   <span className="script-act-label">Under-The-Hood Architecture & Edge Case</span>
                                 </div>
                                 <p className="script-section-text" style={{ fontSize: 14 }}>{activeScript.tech_explained || '—'}</p>
                               </div>
 
                               {/* 5. CONCLUSION */}
-                              <div className="script-section-block">
+                              <div className="script-section-block sec-conclusion">
                                 <div className="script-section-top">
-                                  <span className="script-act-tag">67–80s • Conclusion</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(139, 92, 246, 0.4)', color: '#a78bfa' }}>67–80s • Conclusion</span>
                                   <span className="script-act-label">Recap & Key Architectural Takeaway</span>
                                 </div>
                                 <p className="script-section-text">{activeScript.conclusion || '—'}</p>
                               </div>
 
                               {/* 6. CTA */}
-                              <div className="script-section-block">
+                              <div className="script-section-block sec-cta">
                                 <div className="script-section-top">
-                                  <span className="script-act-tag">Last 4–6s • Branded CTA</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(34, 197, 94, 0.4)', color: '#4ade80' }}>Last 4–6s • Branded CTA</span>
                                   <span className="script-act-label">Behind The Stack</span>
                                 </div>
                                 <p className="script-section-text">{activeScript.cta || '—'}</p>
@@ -1371,92 +1498,215 @@ function App() {
               )}
 
               {/* STAGE 2: VOICEOVER GENERATION */}
-              {stage === 2 && (
-                <section className="voiceover-hub-card">
-                  <div className="voiceover-hero-header">
-                    <div>
-                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                        Stage 2: Voiceover Synthesis
-                      </h3>
-                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                        Powered by <strong>Sarvam AI</strong> (Hinglish Neural Voice <code>sunny_hi_reels</code>) with
-                        exact millisecond silence injection.
-                      </p>
-                    </div>
+              {stage === 2 && (() => {
+                const activeAudio = audioResult || session?.audioResult;
+                const scenes = session?.storyboard?.scenes || [];
+                const totalTargetSec = scenes.reduce((acc, s) => acc + (s.durationTargetSec || 8), 0);
 
-                    <div className="voice-badge-chip">
-                      <Music size={13} />
-                      <span>sunny_hi_reels (Pace 1.0)</span>
-                    </div>
-                  </div>
+                return (
+                  <section className="voiceover-hub-card">
+                    {/* HERO HEADER */}
+                    <div className="voiceover-hero-header">
+                      <div>
+                        <div className="voiceover-header-badge">
+                          <Headphones size={12} />
+                          <span>AI Spoken Audio Studio</span>
+                        </div>
+                        <h2 className="voiceover-hero-title">
+                          Stage 2: Voiceover Synthesis
+                        </h2>
+                        <p className="voiceover-hero-desc">
+                          High-retention neural Hinglish voiceover powered by <strong>Sarvam AI</strong> (<code>sunny_hi_reels</code>) with exact millisecond silence injection across all cuts.
+                        </p>
+                      </div>
 
-                  {/* ACTION BANNER */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px 20px',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-md)',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>Synthesize Spoken Audio</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                        Synthesizes complete storyboard narration and builds master timeline audio.
+                      <div className="voice-badge-chip">
+                        <span className="voice-dot-live" />
+                        <span>sunny_hi_reels (Pace 1.0)</span>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={audioSynthesizing}
-                        onClick={handleSynthesizeAudio}
-                        style={{ padding: '8px 22px', fontSize: 13, gap: 8 }}
-                      >
-                        {audioSynthesizing ? (
-                          <RefreshCw size={13} className="animate-spin" />
-                        ) : (
-                          <Volume2 size={13} />
-                        )}
-                        <span>{audioSynthesizing ? 'Synthesizing Audio...' : 'Synthesize Voiceover'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setStage(3)}
-                        style={{ padding: '8px 16px', gap: 6 }}
-                      >
-                        <span>Next: Visuals</span>
-                        <ArrowRight size={13} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* SCENE VOICE LIST */}
-                  <div className="scenes-voice-stream">
-                    {session?.storyboard?.scenes?.map((scene, idx) => (
-                      <div key={scene.id} className="scene-voice-card">
-                        <div className="scene-voice-header">
-                          <span className="badge-mono">
-                            Scene {idx + 1} • {scene.type}
-                          </span>
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {scene.onScreenText}
-                          </span>
+                    {/* CONTROL ACTION BAR */}
+                    <div className="voiceover-control-bar">
+                      <div className="voiceover-status-left">
+                        <div className="voiceover-status-icon">
+                          <Volume2 size={18} />
                         </div>
-                        <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                          "{scene.narration}"
+                        <div>
+                          <div className="voiceover-status-title">
+                            {activeAudio ? 'Voiceover Synthesized & Synced' : 'Ready to Synthesize Spoken Narration'}
+                          </div>
+                          <div className="voiceover-status-sub">
+                            {activeAudio
+                              ? `Master track duration: ~${Math.round(activeAudio.totalDurationSec || 0)}s • ${scenes.length} cuts synchronized`
+                              : `Estimated duration: ~${totalTargetSec}s • ${scenes.length} storyboard scenes`}
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </section>
-              )}
+
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={audioSynthesizing}
+                          onClick={handleSynthesizeAudio}
+                          style={{ padding: '9px 22px', fontSize: 13, gap: 8, fontWeight: 600 }}
+                        >
+                          {audioSynthesizing ? (
+                            <RefreshCw size={13} className="animate-spin" />
+                          ) : (
+                            <Volume2 size={14} />
+                          )}
+                          <span>{audioSynthesizing ? 'Synthesizing Audio...' : activeAudio ? 'Re-Synthesize Audio' : 'Synthesize Voiceover'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setStage(3)}
+                          style={{ padding: '9px 18px', gap: 6, fontWeight: 500 }}
+                        >
+                          <span>Next: Visuals</span>
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* MASTER AUDIO PLAYER CARD */}
+                    {activeAudio?.fullAudioUrl && (
+                      <div className="master-audio-player-card">
+                        <div className="master-player-info">
+                          <div className="master-player-icon-wrap">
+                            <Volume2 size={18} color="#fafafa" />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div className="master-player-title">Master Narration Audio (Combined Storyboard Track)</div>
+                            <div className="master-player-meta">
+                              <span>Duration: ~{Math.round(activeAudio.totalDurationSec || 0)}s</span>
+                              <span>•</span>
+                              <span>Sarvam AI Hinglish (48kHz Stereo)</span>
+                              <span>•</span>
+                              <span style={{ color: '#4ade80' }}>Synced with Remotion Timeline</span>
+                            </div>
+                          </div>
+                          <a
+                            href={toApiUrl(activeAudio.fullAudioUrl)}
+                            download={`${(session?.topic || 'voiceover').replace(/\s+/g, '_')}_master.mp3`}
+                            className="btn btn-secondary btn-sm"
+                            style={{ gap: 6 }}
+                          >
+                            <Download size={12} />
+                            <span>Download MP3</span>
+                          </a>
+                        </div>
+
+                        <div className="master-audio-element-wrap">
+                          <audio
+                            controls
+                            src={toApiUrl(activeAudio.fullAudioUrl)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SCENES STREAM HEADER */}
+                    <div className="scenes-stream-header">
+                      <span className="scenes-stream-title">
+                        Storyboard Cuts & Narration Flow ({scenes.length} Scenes)
+                      </span>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                        Target Total: ~{totalTargetSec}s
+                      </span>
+                    </div>
+
+                    {/* SCENE VOICE STREAM */}
+                    <div className="scenes-voice-stream">
+                      {scenes.map((scene, idx) => {
+                        const meta = getSceneVisualMeta(scene.type);
+                        const clip = activeAudio?.clips?.find(
+                          (c) => c.sceneId === scene.id || c.sceneIndex === idx
+                        );
+                        const wordCount = scene.narration ? scene.narration.trim().split(/\s+/).filter(Boolean).length : 0;
+
+                        return (
+                          <div
+                            key={scene.id}
+                            className="scene-voice-card"
+                            style={{ borderLeftColor: meta.color }}
+                          >
+                            {/* Scene Top Bar */}
+                            <div className="scene-voice-header">
+                              <div className="scene-header-left">
+                                <span className="scene-cut-badge">
+                                  CUT {String(idx + 1).padStart(2, '0')}
+                                </span>
+                                <span
+                                  className="scene-type-badge"
+                                  style={{
+                                    background: meta.badgeBg,
+                                    color: meta.color,
+                                    borderColor: meta.borderColor,
+                                  }}
+                                >
+                                  <span>{meta.icon}</span>
+                                  <span>{meta.label}</span>
+                                </span>
+                                {scene.onScreenText && (
+                                  <span className="scene-hud-pill">
+                                    HUD: {scene.onScreenText}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="scene-header-right">
+                                <span className="scene-stat-pill">
+                                  <Clock size={11} />
+                                  <span>~{scene.durationTargetSec || 8}s target</span>
+                                </span>
+                                <span className="scene-stat-pill">
+                                  <span>{wordCount} words</span>
+                                </span>
+                                {clip && (
+                                  <span className="scene-stat-pill clip-ready">
+                                    <CheckCircle2 size={11} color="#4ade80" />
+                                    <span>{clip.durationSec.toFixed(1)}s actual</span>
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Scene Narration Text */}
+                            <div className="scene-voice-content">
+                              <p className="scene-narration-text">
+                                {scene.narration}
+                              </p>
+                            </div>
+
+                            {/* Scene Footer */}
+                            <div className="scene-voice-footer">
+                              <div className="scene-keypoint-tag">
+                                <Cpu size={12} color="var(--text-muted)" />
+                                <span>
+                                  Key Concept: <strong>{scene.technicalKeyPoint || scene.visualProps?.headline || scene.type}</strong>
+                                </span>
+                              </div>
+
+                              {clip?.url && (
+                                <div className="scene-clip-player">
+                                  <audio
+                                    controls
+                                    src={toApiUrl(clip.url)}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })()}
 
               {/* STAGE 3: VISUAL STILLS REVIEW */}
               {stage === 3 && (
