@@ -35,8 +35,8 @@ export interface ArchitectureFlowPipelineSceneProps {
 }
 
 export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSceneProps> = ({
-  title = '50ms IN-MEMORY ARCHITECTURE',
-  subtitle = 'Why Hot Geospatial Queries Are Offloaded to Redis Under Surge',
+  title = 'DISTRIBUTED ARCHITECTURE PIPELINE',
+  subtitle = 'In-Memory State Coordination & Sub-Millisecond Execution',
   redisLatencyMs = 4,
   steps,
   deepDiveStages,

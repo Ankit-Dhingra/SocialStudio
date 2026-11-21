@@ -24,10 +24,10 @@ export interface RaceConditionSimulatorProps {
 
 export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> = ({
   title = 'CONCURRENCY • RACE CONDITION',
-  itemTitle = 'Hex #88619A0A4 Surge Mutex',
-  user1Name = 'Order Worker A',
-  user2Name = 'Surge Engine B',
-  atomicQuery = 'SET lock:hex:88619A0A4 "worker_uuid_77" NX EX 5;',
+  itemTitle = 'Shared Resource Mutex',
+  user1Name = 'Worker Thread A',
+  user2Name = 'Worker Thread B',
+  atomicQuery = '// Atomic lock acquisition query',
   onScreenText,
   cueFrames,
 }) => {
@@ -213,7 +213,7 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
             overflow: 'hidden',
           }}
         >
-          {/* Holographic ticket badge */}
+          {/* Mutex resource badge */}
           <div
             style={{
               position: 'absolute',
@@ -229,7 +229,7 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
               textTransform: 'uppercase',
             }}
           >
-            LIVE EVENT PASS
+            CRITICAL MUTEX
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -407,9 +407,9 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94A3B8', marginBottom: 8 }}>
-                <span>Seat A-12</span>
+                <span>{itemTitle || 'Critical Resource'}</span>
                 <span style={{ color: stockCount > 0 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                  {isAmanResolved ? 'ALLOCATED' : '1 Available'}
+                  {isAmanResolved ? 'LOCK ACQUIRED' : 'MUTEX AVAILABLE'}
                 </span>
               </div>
 
@@ -437,10 +437,10 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
                 }}
               >
                 {isAmanResolved
-                  ? '✅ CONFIRMED #8941'
+                  ? '✅ 200 OK • ACQUIRED'
                   : isAmanClicked
-                  ? '⏳ PROCESSING...'
-                  : '⚡ BOOK NOW'}
+                  ? '⏳ ACQUIRING...'
+                  : '⚡ DISPATCH REQUEST'}
               </div>
             </div>
 
@@ -514,9 +514,9 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#94A3B8', marginBottom: 8 }}>
-                <span>Seat A-12</span>
+                <span>{itemTitle || 'Critical Resource'}</span>
                 <span style={{ color: stockCount > 0 ? '#10B981' : '#EF4444', fontWeight: 800 }}>
-                  {isRiyaResolved ? 'SOLD OUT' : '1 Available'}
+                  {isRiyaResolved ? 'CONFLICT (409)' : 'MUTEX AVAILABLE'}
                 </span>
               </div>
 
@@ -544,10 +544,10 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
                 }}
               >
                 {isRiyaResolved
-                  ? '❌ SOLD OUT'
+                  ? '❌ 409 CONFLICT'
                   : isRiyaClicked
-                  ? '⏳ PROCESSING...'
-                  : '⚡ BOOK NOW'}
+                  ? '⏳ ACQUIRING...'
+                  : '⚡ DISPATCH REQUEST'}
               </div>
             </div>
 

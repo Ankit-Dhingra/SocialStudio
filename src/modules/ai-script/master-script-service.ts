@@ -268,10 +268,6 @@ export function buildTopicGroundedFallbackScenes(
   angle?: string,
   fullText: string = '',
 ): any[] {
-  const allText = `${topic} ${angle || ''} ${fullText}`;
-  const isEventLoop = /event\s*loop|microtask|macrotask|call\s*stack|libuv|node(?:\.js)?|javascript|v8|async/i.test(allText);
-  const isDatabase = /database|postgres|mysql|sqlite|b-tree|lsm|index|caching|disk|storage|acid|wal/i.test(allText);
-
   // Clean fullText of markdown headers, cues and tags
   const cleanFullText = fullText
     .replace(/\*\*(?:ACT\s*\d+|Act\s*\d+)[^*]*\*\*/gi, '')
@@ -282,271 +278,190 @@ export function buildTopicGroundedFallbackScenes(
 
   // Extract clean spoken sentences
   const rawSentences = cleanFullText
-    .split(/(?<=[.!?।])\s+/u)
-    .map(s => s.trim())
-    .filter(s => s.length > 8 && !/^(?:Scene|Act)\s*\d+/i.test(s));
+    .split(/(?<=[.!?।\n])\s+/u)
+    .map(s => s.replace(/^(?:Scene|Act)\s*\d+[:.\s-]*/i, '').trim())
+    .filter(s => s.length > 8);
 
-  let sceneTemplates: Array<{
-    type: string;
-    keyPoint: string;
-    onScreenText: string;
-    visualProps: Record<string, any>;
-  }>;
+  const sentences = rawSentences.length > 0 ? rawSentences : [
+    `${topic}: Understanding the core engineering mystery.`,
+    'High concurrency causes severe race conditions and inconsistent state.',
+    'Distributed coordination provides exclusive access and data integrity.',
+    'In-memory state and atomic operations execute with sub-millisecond latency.',
+    'Failovers and leases automatically protect against deadlocks.',
+    'System design takeaways: eliminate race conditions and defend consistency.',
+  ];
 
-  if (isEventLoop) {
-    sceneTemplates = [
-      {
-        type: 'hook',
-        keyPoint: 'Node.js Single-Threaded Concurrency vs V8 Call Stack',
-        onScreenText: 'Node.js Event Loop • Microtasks vs Macrotasks',
-        visualProps: { headline: 'How Node.js Handles Concurrency', subtitle: 'Call Stack vs Asynchronous Queues' },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'V8 Execution Engine and Libuv Event Loop Architecture',
-        onScreenText: 'V8 Engine & Libuv Runtime Architecture',
-        visualProps: { title: 'Node.js Runtime Internals', subtitle: 'V8 Call Stack, Libuv Event Loop & Threadpool', redisLatencyMs: 0, steps: [{ label: 'V8 Call Stack', description: 'Synchronous JS execution', status: 'active' }, { label: 'Microtask Queue', description: 'process.nextTick & Promises', status: 'completed' }, { label: 'Libuv Loop', description: 'Phased I/O event polling', status: 'completed' }] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Synchronous Call Stack vs Microtask Queue Priority',
-        onScreenText: 'Call Stack Execution • Microtask Priority',
-        visualProps: { title: 'Call Stack & Queue Priority Execution', items: [{ name: '1. V8 Synchronous Call Stack', priority: 'high', detail: 'Immediate frame execution' }, { name: '2. process.nextTick Queue', priority: 'high', detail: 'Runs before standard microtasks' }, { name: '3. Promise.then Microtask Queue', priority: 'high', detail: 'Drained completely after each sync operation' }, { name: '4. Macrotask Queue', priority: 'medium', detail: 'Timers, I/O, Immediate' }] },
-      },
-      {
-        type: 'code',
-        keyPoint: 'Microtask Scheduling via Promise.resolve and process.nextTick',
-        onScreenText: 'Microtask Scheduling • Code Flow',
-        visualProps: { code: 'console.log("1: Sync");\nprocess.nextTick(() => console.log("2: nextTick"));\nPromise.resolve().then(() => console.log("3: Promise"));\nsetTimeout(() => console.log("4: Timer"), 0);', language: 'typescript', lineHighlights: [2, 3] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Microtask Queue Drain Phase',
-        onScreenText: 'Microtask Drain Phase • Full Queue Flush',
-        visualProps: { title: 'Microtask Drain Phase', items: [{ name: 'process.nextTick Queue', priority: 'high', detail: 'Immediate synchronous microtask' }, { name: 'Promise.then Queue', priority: 'high', detail: 'Microtask drained before macrotasks' }, { name: 'Timers Macrotask Queue', priority: 'medium', detail: 'setTimeout and setInterval' }] },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Libuv Phased Loop: Timers, Poll, and Check',
-        onScreenText: 'Libuv Loop Phases • Timers, Poll, Check',
-        visualProps: { title: 'Libuv Event Loop Phased Execution', subtitle: 'Between each phase, Microtask queue drains completely', steps: [{ label: 'Timers Phase', description: 'setTimeout & setInterval callbacks', status: 'completed' }, { label: 'Poll Phase', description: 'Retrieve I/O events & incoming connections', status: 'active' }, { label: 'Check Phase', description: 'setImmediate callbacks execute here', status: 'completed' }, { label: 'Close Phase', description: 'socket.on("close") cleanups', status: 'completed' }] },
-      },
-      {
-        type: 'raceCondition',
-        keyPoint: 'Microtask Starvation: Infinite Microtasks Block I/O',
-        onScreenText: 'Microtask Starvation • Event Loop Freeze',
-        visualProps: { itemTitle: 'Event Loop Starvation Hazard', user1Name: 'Recursive nextTick / Promise', user2Name: 'I/O Polling & Network Callbacks', atomicQuery: 'process.nextTick(recursiveTask); // Starves macrotasks!' },
-      },
-      {
-        type: 'code',
-        keyPoint: 'setImmediate vs setTimeout in Poll Phase',
-        onScreenText: 'setImmediate vs setTimeout Scheduling',
-        visualProps: { code: 'fs.readFile("data.txt", () => {\n  setTimeout(() => console.log("Timer Phase"), 0);\n  setImmediate(() => console.log("Check Phase")); // Guaranteed first!\n});', language: 'typescript', lineHighlights: [3] },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Libuv Threadpool Offloading for Disk & Crypto',
-        onScreenText: 'Threadpool Offloading • Non-Blocking I/O',
-        visualProps: { title: 'Libuv Worker Threadpool (UV_THREADPOOL_SIZE)', subtitle: 'Async FS, DNS, Crypto executed off main thread', steps: [{ label: 'Main Thread', description: 'Dispatches crypto.pbkdf2 / fs.readFile', status: 'completed' }, { label: 'Worker Thread 1', description: 'Executes CPU-intensive disk I/O', status: 'active' }, { label: 'Callback Return', description: 'Result queued back to Poll phase', status: 'completed' }] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Complete Phase Iteration & Event Loop Step',
-        onScreenText: 'Phase Iteration • Loop Progression',
-        visualProps: { title: 'Libuv Event Loop Cycle Completion', items: [{ name: '1. Expired Timers Executed', priority: 'medium', detail: 'Callback queue processed' }, { name: '2. Microtask Queue Flushed', priority: 'high', detail: 'Zero remaining promises' }, { name: '3. I/O Poll Waiting', priority: 'high', detail: 'Epoll/Kqueue kernel event retrieval' }, { name: '4. Check Phase setImmediate', priority: 'medium', detail: 'Immediate execution before next tick' }] },
-      },
-      {
-        type: 'summary',
-        keyPoint: 'Event Loop Architecture Summary',
-        onScreenText: 'Event Loop Summary • Microtasks Drain First',
-        visualProps: { headline: 'Node.js Event Loop Key Takeaways', takeaways: ['Call stack runs synchronously to completion', 'Microtasks (Promises/nextTick) drain before next macrotask', 'setImmediate executes in Check phase right after I/O poll', 'Avoid recursive microtasks to prevent event loop starvation'] },
-      },
-      {
-        type: 'tradeoffHUD',
-        keyPoint: 'Tradeoff: Event Loop Concurrency vs Thread Overhead',
-        onScreenText: 'Architecture Tradeoffs • Async I/O vs CPU Bound',
-        visualProps: { title: 'Node.js Concurrency Tradeoffs', metricA: 'High I/O Throughput', metricB: 'Single-Thread CPU Limit', scoreA: 'O(1) Poll', scoreB: 'Offload CPU' },
-      },
-    ];
-  } else if (isDatabase) {
-    sceneTemplates = [
-      {
-        type: 'hook',
-        keyPoint: 'Database Storage Engines and Index Bottlenecks',
-        onScreenText: `${topic.slice(0, 45)} • Storage Bottlenecks`,
-        visualProps: { headline: 'Database Architecture Internals', subtitle: 'Disk I/O vs In-Memory Performance' },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Disk I/O vs In-Memory Page Cache',
-        onScreenText: 'Buffer Pool & Page Cache Architecture',
-        visualProps: { title: 'Storage Layer Memory Hierarchy', subtitle: 'RAM Buffer Pool, WAL, and Physical Storage Blocks', steps: [{ label: 'Client Query', description: 'SQL parsing & query plan', status: 'completed' }, { label: 'Buffer Pool', description: 'In-memory page cache lookup', status: 'active' }, { label: 'Disk Controller', description: 'Physical NVMe/SSD block read', status: 'completed' }] },
-      },
-      {
-        type: 'code',
-        keyPoint: 'Indexed Lookup vs Full Table Scan',
-        onScreenText: 'Index Scan vs Sequential Scan',
-        visualProps: { code: 'EXPLAIN ANALYZE\nSELECT * FROM orders\nWHERE customer_id = 98124 AND created_at > NOW() - INTERVAL "1 day";', language: 'sql', lineHighlights: [2] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Write-Ahead Log (WAL) and Transaction Commit Flow',
-        onScreenText: 'Write-Ahead Log • Durability Pipeline',
-        visualProps: { title: 'Transaction Durability Pipeline', items: [{ name: '1. Append to WAL Buffer', priority: 'high', detail: 'Sequential write in memory' }, { name: '2. Fsync to WAL File on Disk', priority: 'high', detail: 'Atomic commit durability' }, { name: '3. Update Dirty Page in Buffer Pool', priority: 'medium', detail: 'In-memory page modification' }, { name: '4. Asynchronous Checkpoint Flush', priority: 'low', detail: 'Background table data sync' }] },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Index Structure & Node Traversal',
-        onScreenText: 'Tree Traversal • O(log N) Search',
-        visualProps: { title: 'Index Traversal Architecture', subtitle: 'Balanced node traversal from root to leaf page', steps: [{ label: 'Root Page', description: 'Binary search key boundary', status: 'completed' }, { label: 'Internal Pages', description: 'Branch navigation', status: 'completed' }, { label: 'Leaf Page', description: 'Direct tuple pointer read', status: 'active' }] },
-      },
-      {
-        type: 'raceCondition',
-        keyPoint: 'Concurrency Control: Lock Contention vs MVCC',
-        onScreenText: 'Concurrency Control • MVCC vs Row Locks',
-        visualProps: { itemTitle: 'Row Mutex Contention', user1Name: 'Transaction A (UPDATE)', user2Name: 'Transaction B (UPDATE)', atomicQuery: 'SELECT * FROM accounts WHERE id = 1 FOR UPDATE;' },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Deadlock Detection and Lock Graph Resolution',
-        onScreenText: 'Deadlock Detection • Wait-For Graph',
-        visualProps: { title: 'Deadlock Detection & Abort Resolution', items: [{ name: '1. Tx A holds Lock 1, requests Lock 2', priority: 'medium', detail: 'Waiting on Row 2' }, { name: '2. Tx B holds Lock 2, requests Lock 1', priority: 'medium', detail: 'Waiting on Row 1' }, { name: '3. Wait-For Cycle Detected', priority: 'high', detail: 'Engine detects deadlock loop' }, { name: '4. Youngest Transaction Aborted', priority: 'high', detail: 'Tx B rolled back to free locks' }] },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Cache Invalidation & Query Execution SLA',
-        onScreenText: 'Query Latency SLA • Sub-Millisecond Reads',
-        visualProps: { title: 'Query Execution Budget', subtitle: 'Target sub-5ms indexed response time', redisLatencyMs: 1, steps: [{ label: 'Index Lookup', description: 'O(log N) B-Tree seek', status: 'completed' }, { label: 'Heap Fetch', description: 'Direct page pointer retrieval', status: 'active' }, { label: 'Result Serialize', description: 'Return payload over wire', status: 'completed' }] },
-      },
-      {
-        type: 'code',
-        keyPoint: 'Covering Index Optimization',
-        onScreenText: 'Covering Index • Index-Only Scan',
-        visualProps: { code: 'CREATE INDEX idx_orders_cust_date_status\nON orders (customer_id, created_at)\nINCLUDE (status, total_amount);', language: 'sql', lineHighlights: [1, 3] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Compaction & Background Maintenance',
-        onScreenText: 'Compaction • Vacuum & Space Reclamation',
-        visualProps: { title: 'Background Maintenance Pipeline', items: [{ name: '1. Dead Tuples Identification', priority: 'low', detail: 'Scan pages for unreferenced row versions' }, { name: '2. Page Compaction', priority: 'medium', detail: 'Reclaim free space within leaf pages' }, { name: '3. Index Tuple Pruning', priority: 'medium', detail: 'Remove dead pointers from index' }, { name: '4. Statistics Update (ANALYZE)', priority: 'low', detail: 'Refresh query planner histograms' }] },
-      },
-      {
-        type: 'summary',
-        keyPoint: 'Database Architecture Summary',
-        onScreenText: 'Architecture Summary • Indexes & Memory Hierarchy',
-        visualProps: { headline: 'Database Architecture Key Takeaways', takeaways: ['Buffer pool prevents disk I/O bottleneck', 'WAL ensures ACID durability with sequential writes', 'Covering indexes eliminate heap table lookups', 'MVCC prevents read-write blocking contention'] },
-      },
-      {
-        type: 'tradeoffHUD',
-        keyPoint: 'Tradeoff: Read Speed vs Write Amplification',
-        onScreenText: 'Architecture Tradeoffs • Read Latency vs Write Amplification',
-        visualProps: { title: 'Database Indexing Tradeoffs', metricA: 'O(log N) Read Latency', metricB: 'Write Amplification Cost', scoreA: 'Sub-5ms', scoreB: 'Index Update Overhead' },
-      },
-    ];
-  } else {
-    // General Backend / System Design
-    sceneTemplates = [
-      {
-        type: 'hook',
-        keyPoint: `High Scale Architecture for ${topic}`,
-        onScreenText: `${topic.slice(0, 45)} • Architecture Deep Dive`,
-        visualProps: { headline: topic, subtitle: angle || 'System Design & Distributed Architecture' },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'High-Level End-to-End System Architecture',
-        onScreenText: 'System Architecture & Request Lifecycle',
-        visualProps: { title: `${topic} Request Pipeline`, subtitle: 'End-to-End System Flow', steps: [{ label: 'API Gateway', description: 'Rate limiting & auth validation', status: 'completed' }, { label: 'Core Service', description: 'Domain logic processing', status: 'active' }, { label: 'Storage & Cache', description: 'In-memory state and database commit', status: 'completed' }] },
-      },
-      {
-        type: 'code',
-        keyPoint: 'Core Algorithmic Execution',
-        onScreenText: 'Core Implementation • Logic Flow',
-        visualProps: { code: `// ${topic} core execution handler\nasync function handleRequest(context) {\n  const cached = await cache.get(context.key);\n  if (cached) return cached;\n  return await computeAndPersist(context);\n}`, language: 'typescript', lineHighlights: [3, 4] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Request Processing & State Transition Pipeline',
-        onScreenText: 'Processing Pipeline • State Transitions',
-        visualProps: { title: 'Execution Phase Progression', items: [{ name: '1. Ingestion & Validation', priority: 'high', detail: 'Sanitize incoming payload' }, { name: '2. State Fetch / Cache Lookup', priority: 'high', detail: 'Retrieve working state under 5ms' }, { name: '3. Atomic Mutex & Execution', priority: 'high', detail: 'Execute state transition' }, { name: '4. Persistence & Event Emit', priority: 'medium', detail: 'Commit changes and notify subscribers' }] },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'In-Memory State vs Persistent Storage Layer',
-        onScreenText: 'In-Memory State & Cache Layer',
-        visualProps: { title: 'State Management Architecture', subtitle: 'Optimizing hot-path read/write throughput', redisLatencyMs: 2, steps: [{ label: 'L1 In-Memory', description: 'Process-local state buffer', status: 'completed' }, { label: 'L2 Distributed Cache', description: 'Shared cluster state with TTL', status: 'active' }, { label: 'L3 Persistent Store', description: 'Durable database records', status: 'completed' }] },
-      },
-      {
-        type: 'raceCondition',
-        keyPoint: 'Concurrency & Race Condition Mutex Guard',
-        onScreenText: 'Concurrency Guard • Distributed Mutex',
-        visualProps: { itemTitle: `${topic.slice(0, 30)} Mutex`, user1Name: 'Worker Instance 1', user2Name: 'Worker Instance 2', atomicQuery: 'SET lock:resource "worker_77" NX EX 5' },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Failure Handling & Automatic Lease Expiry',
-        onScreenText: 'Failover Recovery • Auto-Expiry Guard',
-        visualProps: { title: 'Fault Tolerance & Failover Timeline', items: [{ name: '1. Primary Worker Active', priority: 'medium', detail: 'Heartbeat lease periodically refreshed' }, { name: '2. Worker Crash Detected', priority: 'high', detail: 'Heartbeat missed, network partition' }, { name: '3. Lease TTL Expiry', priority: 'high', detail: 'Lock automatically freed by cluster' }, { name: '4. Standby Worker Acquires Lock', priority: 'medium', detail: 'Processing resumes gracefully' }] },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Scalability & SLA Latency Budget',
-        onScreenText: 'Latency SLA Budget • High Throughput',
-        visualProps: { title: 'System SLA & Latency Budget', subtitle: 'Bounded latency guarantees under load', redisLatencyMs: 3, steps: [{ label: 'Network RTT', description: 'Edge termination', status: 'completed' }, { label: 'Computation', description: 'Sub-millisecond processing', status: 'active' }, { label: 'State Commit', description: 'Atomic write acknowledgement', status: 'completed' }] },
-      },
-      {
-        type: 'code',
-        keyPoint: 'Atomic Mutation with Lock Safeguards',
-        onScreenText: 'Atomic State Mutation Pattern',
-        visualProps: { code: 'const acquired = await redis.set(lockKey, workerId, "NX", "EX", 5);\nif (!acquired) throw new Error("Resource locked, retry backoff");\ntry {\n  await processTask();\n} finally {\n  await releaseLockSafely(lockKey, workerId);\n}', language: 'typescript', lineHighlights: [1, 6] },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Retry Backoff and Circuit Breaker State',
-        onScreenText: 'Circuit Breaker • Exponential Backoff',
-        visualProps: { title: 'Resilience & Circuit Breaker', items: [{ name: '1. Transient Upstream Error', priority: 'low', detail: 'Connection timeout or socket error' }, { name: '2. Jittered Exponential Retry', priority: 'medium', detail: 'Backoff 100ms, 200ms, 400ms' }, { name: '3. Circuit Tripped to OPEN', priority: 'high', detail: 'Fail-fast to protect upstream services' }, { name: '4. Half-Open Probe Recovery', priority: 'medium', detail: 'Gradual traffic ramp-up upon health check' }] },
-      },
-      {
-        type: 'summary',
-        keyPoint: 'System Design Architecture Summary',
-        onScreenText: 'Architecture Summary • Key Takeaways',
-        visualProps: { headline: `${topic} Architectural Takeaways`, takeaways: ['In-memory caching offloads hot database reads', 'Distributed mutexes prevent concurrent race conditions', 'Lease TTL guards ensure crash-safe failover', 'Circuit breakers isolate downstream cascading failures'] },
-      },
-      {
-        type: 'tradeoffHUD',
-        keyPoint: 'System Tradeoffs: Latency vs Consistency',
-        onScreenText: 'Architecture Tradeoffs • Latency vs Consistency',
-        visualProps: { title: 'Core Architectural Tradeoffs', metricA: 'Sub-Millisecond Latency', metricB: 'Strong Consistency Guarantee', scoreA: 'High Throughput', scoreB: 'Bounded Eventual Consistency' },
-      },
-    ];
+  // Canonical 12 scenes across the entire voiceover arc
+  const targetCuts = 12;
+
+  // If fewer sentences than targetCuts (12), subdivide sentences by clause boundaries
+  const expandedSentences: string[] = [];
+  for (const s of sentences) {
+    if (expandedSentences.length + (sentences.length - expandedSentences.length) < targetCuts && s.length > 40) {
+      const parts = s.split(/[,;—–]|\s+(?:aur|lekin|par|because|and|so|but|ki)\s+/i)
+        .map(p => p.trim())
+        .filter(p => p.length >= 10);
+      if (parts.length >= 2) {
+        expandedSentences.push(...parts);
+        continue;
+      }
+    }
+    expandedSentences.push(s);
+  }
+  while (expandedSentences.length < targetCuts) {
+    expandedSentences.push(sentences[expandedSentences.length % sentences.length]);
   }
 
-  const targetCount = sceneTemplates.length; // 12
-  const sentencesPerScene = Math.max(1, Math.floor(rawSentences.length / targetCount));
+  const workingSentences = expandedSentences.length >= targetCuts ? expandedSentences : sentences;
+  const sentencesPerCut = Math.max(1, Math.floor(workingSentences.length / targetCuts));
 
-  return sceneTemplates.map((template, idx) => {
-    let narration = '';
-    if (rawSentences.length > 0) {
-      const startIdx = idx * sentencesPerScene;
-      const endIdx = idx === targetCount - 1 ? rawSentences.length : (idx + 1) * sentencesPerScene;
-      const sceneSentences = rawSentences.slice(startIdx, Math.max(startIdx + 1, endIdx));
-      narration = sceneSentences.join(' ');
+  const scenes: any[] = [];
+  const assignedTypes: string[] = [];
+
+  for (let idx = 0; idx < targetCuts; idx++) {
+    const startIdx = idx * sentencesPerCut;
+    const endIdx = idx === targetCuts - 1 ? workingSentences.length : (idx + 1) * sentencesPerCut;
+    let cutSentences = workingSentences.slice(startIdx, Math.max(startIdx + 1, endIdx));
+    if (cutSentences.length === 0 || !cutSentences[0]) {
+      cutSentences = [workingSentences[idx % workingSentences.length] || topic];
     }
-    if (!narration) {
-      narration = `Scene ${idx + 1}: ${template.keyPoint}.`;
+    const narration = cutSentences.join(' ');
+    const textLower = narration.toLowerCase();
+
+    let type = 'architecturePipeline';
+    let onScreenText = `${topic.slice(0, 36).toUpperCase()}`;
+    let keyPoint = cutSentences[0]?.slice(0, 70) || topic.slice(0, 70);
+    let visualProps: Record<string, any> = {};
+
+    if (idx === 0) {
+      type = 'hook';
+      onScreenText = `${topic.slice(0, 36).toUpperCase()}`;
+      keyPoint = 'The Engineering Mystery';
+      visualProps = {
+        headline: topic,
+        subtitle: angle || 'System Design & Distributed Architecture',
+        questionKicker: cutSentences[0] || topic,
+        badgeText: 'SYSTEM DESIGN',
+      };
+    } else if (idx === targetCuts - 1) {
+      type = 'tradeoffHUD';
+      onScreenText = 'INTERVIEW CHEAT-SHEET';
+      keyPoint = 'Senior SDE Mental Model';
+      visualProps = {
+        title: 'SDE INTERVIEW CHEAT-SHEET',
+        subtitle: 'Key architectural insights for your interviews',
+        interviewPoints: workingSentences.slice(1, 4).map(s => s.slice(0, 90)),
+        callToAction: 'Behind The Tech ko abhi follow karo!',
+      };
+    } else if (idx === targetCuts - 2) {
+      type = 'summary';
+      onScreenText = 'ARCHITECTURAL TAKEAWAYS';
+      keyPoint = 'Core System Recap';
+      const rawTakeaways = cutSentences.slice(0, 3).map(s => s.slice(0, 100));
+      visualProps = {
+        headline: `${topic.slice(0, 40)} Takeaways`,
+        takeaways: rawTakeaways.length >= 2 ? rawTakeaways : [
+          rawTakeaways[0] || `${topic} key architectural takeaway`,
+          'Guaranteed state consistency and resilience under high concurrent load',
+        ],
+        callToAction: 'Behind The Tech ko abhi follow karo!',
+      };
+    } else if (/race\s*condition|concurrency|simultaneous|double\s*booking|contention|conflict/i.test(textLower)) {
+      type = 'raceCondition';
+      onScreenText = 'CONCURRENCY COLLISION';
+      keyPoint = 'Parallel Workers Competing for Mutex';
+      visualProps = {
+        title: 'CONCURRENCY COLLISION',
+        itemTitle: `${topic.slice(0, 24)} Mutex`,
+        user1Name: 'Worker Instance A',
+        user2Name: 'Worker Instance B',
+        atomicQuery: '// Acquire exclusive atomic lock',
+      };
+    } else if (/queue|timeline|phase|step|delay|ttl|expire|retry|crash|microtask|macrotask|call\s*stack|event\s*loop/i.test(textLower)) {
+      type = 'queueTimeline';
+      onScreenText = 'EXECUTION TIMELINE';
+      keyPoint = 'Phased State Progression';
+      const isEventLoop = /microtask|macrotask|libuv|call\s*stack|nexttick/i.test(`${topic} ${narration}`);
+      visualProps = {
+        title: isEventLoop ? 'Event Loop & Queue Priority' : 'State Transition Pipeline',
+        items: isEventLoop ? [
+          { name: '1. V8 Synchronous Call Stack', priority: 'high', detail: 'Immediate execution frame' },
+          { name: '2. process.nextTick Queue', priority: 'high', detail: 'Priority microtask queue' },
+          { name: '3. Promise.then Microtask Queue', priority: 'high', detail: 'Drained before macrotask phase' },
+          { name: '4. Timers Macrotask Queue', priority: 'medium', detail: 'setTimeout and setInterval' },
+        ] : cutSentences.slice(0, 4).map((s, i) => ({
+          name: `${i + 1}. Step ${i + 1}`,
+          priority: i === 0 ? 'high' : 'medium',
+          detail: s.slice(0, 80),
+        })),
+      };
+    } else if (/\b(?:code|command|syntax|query|sql|function|handler|await|snippet)\b|\b(?:SELECT|UPDATE|INSERT|SETNX)\b/i.test(textLower)) {
+      type = 'code';
+      onScreenText = 'CORE IMPLEMENTATION';
+      keyPoint = 'Atomic Execution Flow';
+      visualProps = {
+        filename: 'system_handler.ts',
+        code: `// ${topic.slice(0, 30)} execution handler\nasync function handleTransaction(context) {\n  const lock = await acquireLock(context.id);\n  try {\n    return await executeAtomicState(context);\n  } finally {\n    await releaseLock(lock);\n  }\n}`,
+        language: 'typescript',
+      };
+    } else if (/compare|versus|vs|naive|fail|slow|expensive|diff/i.test(textLower)) {
+      type = 'comparison';
+      onScreenText = 'NAIVE vs ENGINEERED';
+      keyPoint = 'Architectural Bottleneck Comparison';
+      visualProps = {
+        leftTitle: 'Naive Approach',
+        leftPoints: ['Uncoordinated execution', 'Bottlenecks under sudden high load'],
+        rightTitle: 'Engineered Architecture',
+        rightPoints: ['In-memory atomic coordination', 'Predictable sub-millisecond execution'],
+        verdict: cutSentences[0]?.slice(0, 90) || 'Architectural coordination eliminates bottlenecks',
+      };
+    } else {
+      type = 'architecturePipeline';
+      onScreenText = 'PIPELINE ARCHITECTURE';
+      keyPoint = 'System Request Flow';
+      visualProps = {
+        title: `${topic.slice(0, 32)} Architecture`,
+        subtitle: 'End-to-End System Pipeline',
+        redisLatencyMs: 1.5,
+        steps: [
+          { label: 'Client Ingestion', description: 'Incoming client request validated', status: 'completed' },
+          { label: 'State Coordination', description: 'In-memory mutex / routing', status: 'active' },
+          { label: 'Durable Persistence', description: 'Atomic state commit acknowledged', status: 'pending' },
+        ],
+      };
     }
 
-    return {
+    // Prevent immediate consecutive duplicate types
+    if (assignedTypes.length > 0 && assignedTypes[assignedTypes.length - 1] === type) {
+      if (type === 'architecturePipeline') {
+        type = 'requestFlow';
+        visualProps = {
+          title: 'Request Pipeline Flow',
+          steps: [
+            { label: 'Client Gateway', description: 'Request routed', status: 'active' },
+            { label: 'In-Memory State', description: 'Lock acquired', status: 'completed' },
+            { label: 'Storage Commit', description: 'Durable write acknowledged', status: 'cached' },
+          ],
+        };
+      } else {
+        type = 'architecturePipeline';
+      }
+    }
+    assignedTypes.push(type);
+
+    scenes.push({
       id: `scene-${idx + 1}`,
       sceneIndex: idx,
-      type: template.type,
+      type,
       narration,
-      onScreenText: template.onScreenText,
-      technicalKeyPoint: template.keyPoint,
-      durationTargetSec: Math.min(60, Math.max(1, Math.round(narration.split(/\s+/).length / 2.5))),
-      visualProps: template.visualProps,
-    };
-  });
+      onScreenText,
+      technicalKeyPoint: keyPoint,
+      durationTargetSec: Math.min(60, Math.max(2, Math.round(narration.split(/\s+/).length / 2.35))),
+      visualProps,
+    });
+  }
+
+  return scenes;
 }
 
 export function buildStoryboardFromParsed(
@@ -649,85 +564,60 @@ export function buildStoryboardFromParsed(
       if (cleanVisualProps.riderCount !== undefined) cleanVisualProps.riderCount = Number(cleanVisualProps.riderCount) || 5;
 
       if (type === 'smartphoneMockup') {
-        const isShop = /shop|store|cart|retail|product|sneaker|headphone|order/i.test(`${topic} ${onScreenText} ${narration}`);
-        const isFood = /food|restaurant|burger|pizza|meal/i.test(`${topic} ${onScreenText} ${narration}`);
-        const isRide = /ride|cab|taxi|uber|ola/i.test(`${topic} ${onScreenText} ${narration}`);
-        const isFintech = /pay|wallet|bank|stock|crypto|transfer|settle/i.test(`${topic} ${onScreenText} ${narration}`);
-
-        if (!cleanVisualProps.appName) cleanVisualProps.appName = isShop ? 'STORE' : isFood ? 'FOOD' : isRide ? 'RIDE' : isFintech ? 'PAY' : 'APP';
-        if (!cleanVisualProps.itemName) cleanVisualProps.itemName = isShop ? 'Online Product' : isRide ? 'City Ride' : isFood ? 'Food Order' : isFintech ? 'Direct Transfer' : 'Resource Allocation';
-        if (!cleanVisualProps.itemPrice) cleanVisualProps.itemPrice = '₹100';
-        if (!cleanVisualProps.baseDeliveryFee) cleanVisualProps.baseDeliveryFee = '₹0';
-        if (!cleanVisualProps.surgeDeliveryFee) cleanVisualProps.surgeDeliveryFee = '₹0';
-        if (!cleanVisualProps.surgeMultiplier) cleanVisualProps.surgeMultiplier = '1.0X';
-        if (!cleanVisualProps.surgeReason) cleanVisualProps.surgeReason = 'CONCURRENT RESOURCE ALLOCATION';
+        if (!cleanVisualProps.appName) cleanVisualProps.appName = topic.split(/\s+/)[0]?.toUpperCase() || 'APP';
+        if (!cleanVisualProps.itemName) cleanVisualProps.itemName = onScreenText || `${topic.slice(0, 30)} Request`;
       }
 
       if (type === 'h3SpatialMap') {
         if (!cleanVisualProps.hotHexId) cleanVisualProps.hotHexId = '#ZONE_A4';
-        if (!cleanVisualProps.orderCount) cleanVisualProps.orderCount = 84;
+        if (!cleanVisualProps.orderCount) cleanVisualProps.orderCount = 64;
         if (!cleanVisualProps.riderCount) cleanVisualProps.riderCount = 12;
         if (!cleanVisualProps.subtitle) cleanVisualProps.subtitle = 'O(1) Spatial Partitioning Grid';
       }
 
-      // Sanitize topic-incorrect generic labels:
-      // Preserve authored queue content; only adapt if NOT an event-loop topic and items are missing or generic placeholders
       if (type === 'queueTimeline') {
-        const isEventLoopTopic = /event\s*loop|microtask|macrotask|promise|call\s*stack|node/i.test(`${topic} ${onScreenText} ${narration}`);
-        const isSurge = /surge|zomato|uber|h3|hex/i.test(`${topic} ${onScreenText} ${narration}`);
-        const hasMicrotasks = Array.isArray(cleanVisualProps.items) && cleanVisualProps.items.some((it: any) => /microtask|macrotask|promise/i.test(it.name || it.detail || ''));
-        if (!isEventLoopTopic && (!cleanVisualProps.items || cleanVisualProps.items.length === 0 || hasMicrotasks)) {
-          if (isSurge) {
-            cleanVisualProps.items = [
-              { name: '1. Lock Held by Worker A', priority: 'medium', detail: 'SET hex_mutex:88619A worker_A NX EX 5' },
-              { name: '2. Worker A Crashes / Disconnects', priority: 'high', detail: 'Worker ungracefully dies before releasing lock' },
-              { name: '3. Redis TTL Expiry (5s)', priority: 'high', detail: 'Key automatically evicted by Redis engine' },
-              { name: '4. Worker B Acquires Lock', priority: 'medium', detail: 'SET hex_mutex:88619A worker_B NX EX 5 succeeds' },
-            ];
-          } else {
-            cleanVisualProps.items = [
-              { name: '1. Request Ingestion', priority: 'medium', detail: 'Payload validation and queue push' },
-              { name: '2. Concurrency Lock', priority: 'high', detail: 'SET lock:resource worker_A NX EX 5' },
-              { name: '3. Processing Pipeline', priority: 'high', detail: 'Atomic execution under lock guard' },
-              { name: '4. State Commit', priority: 'medium', detail: 'Persist output and release lock' },
-            ];
-          }
+        if (!cleanVisualProps.items || cleanVisualProps.items.length === 0) {
+          cleanVisualProps.items = [
+            { name: '1. Ingestion & Validation', priority: 'medium', detail: 'Validate incoming request payload' },
+            { name: '2. Concurrency Lock', priority: 'high', detail: 'Acquire exclusive lock on resource' },
+            { name: '3. State Execution', priority: 'high', detail: 'Execute atomic state transition' },
+            { name: '4. Persistence Commit', priority: 'medium', detail: 'Commit state update and release lock' },
+          ];
         }
       }
 
       if (type === 'code') {
         const VALID_LANGS = new Set(['javascript', 'typescript', 'python', 'sql', 'bash', 'json', 'lua', 'sh']);
         if (!cleanVisualProps.language || !VALID_LANGS.has(cleanVisualProps.language)) {
-          cleanVisualProps.language = 'bash';
+          cleanVisualProps.language = 'typescript';
         }
-        if (!cleanVisualProps.filename) cleanVisualProps.filename = 'distributed_lock.sh';
+        if (!cleanVisualProps.filename) cleanVisualProps.filename = 'handler.ts';
         if (!cleanVisualProps.code) {
-          cleanVisualProps.code = 'REDIS> SET lock:resource "worker_77" NX EX 5\nOK';
+          cleanVisualProps.code = `// Execute ${topic.slice(0, 30)}\nconst result = await handleTransaction(request);\nconsole.log("Success:", result);`;
         }
       }
 
       if (type === 'raceCondition') {
-        if (!cleanVisualProps.itemTitle || /seat|concert/i.test(cleanVisualProps.itemTitle)) {
-          const isSurge = /surge|zomato|uber|h3|hex/i.test(`${topic} ${onScreenText} ${narration}`);
-          if (isSurge) {
-            cleanVisualProps.itemTitle = 'Hex #88619A0A4 Surge Mutex';
-            cleanVisualProps.user1Name = 'Order Worker A';
-            cleanVisualProps.user2Name = 'Surge Worker B';
-            cleanVisualProps.atomicQuery = 'SET lock:hex:88619A0A4 "worker_uuid_77" NX EX 5';
-          } else {
-            cleanVisualProps.itemTitle = `${onScreenText || topic} Mutex`;
-            cleanVisualProps.user1Name = 'Worker Thread A';
-            cleanVisualProps.user2Name = 'Worker Thread B';
-            cleanVisualProps.atomicQuery = 'SET mutex:resource "worker_77" NX EX 5';
+        const isSurgeTopic = /surge\s*pricing|zomato.*surge|uber.*surge/i.test(topic);
+        if (isSurgeTopic && (!cleanVisualProps.itemTitle || /seat|concert/i.test(cleanVisualProps.itemTitle))) {
+          cleanVisualProps.itemTitle = 'Hex #88619A0A4 Surge Mutex';
+          cleanVisualProps.user1Name = 'Order Worker A';
+          cleanVisualProps.user2Name = 'Surge Worker B';
+          cleanVisualProps.atomicQuery = 'SET lock:hex:88619A0A4 "worker_uuid_77" NX EX 5';
+        } else {
+          if (!cleanVisualProps.itemTitle) {
+            cleanVisualProps.itemTitle = `${onScreenText || topic.slice(0, 24)} Mutex`;
           }
+          if (!cleanVisualProps.user1Name) cleanVisualProps.user1Name = 'Worker Instance 1';
+          if (!cleanVisualProps.user2Name) cleanVisualProps.user2Name = 'Worker Instance 2';
+          if (!cleanVisualProps.atomicQuery) cleanVisualProps.atomicQuery = '// Atomic lock acquisition';
         }
       }
 
       if (type === 'architecturePipeline') {
-        if (!cleanVisualProps.redisLatencyMs) cleanVisualProps.redisLatencyMs = 2;
+        if (!cleanVisualProps.redisLatencyMs) cleanVisualProps.redisLatencyMs = 1.5;
         if (!cleanVisualProps.atomicCommand) {
-          const isSurge = /surge|zomato|uber|h3|hex/i.test(`${topic} ${onScreenText} ${narration}`);
-          cleanVisualProps.atomicCommand = isSurge ? 'SET lock:hex:88619A "worker_77" NX EX 5' : 'SET lock:resource "worker_77" NX EX 5';
+          cleanVisualProps.atomicCommand = `// Pipeline step for ${topic.slice(0, 24)}`;
         }
         if (Array.isArray(cleanVisualProps.steps)) {
           const VALID_STATUSES = new Set(['completed', 'active', 'pending']);
@@ -741,10 +631,20 @@ export function buildStoryboardFromParsed(
 
       if (type === 'queueTimeline') {
         const VALID_PRIORITIES = new Set(['high', 'medium', 'low', 'microtask', 'macrotask']);
-        if (!Array.isArray(cleanVisualProps.items) || cleanVisualProps.items.length < 2) {
+        const isSurgeTopic = /surge\s*pricing|zomato.*surge|uber.*surge/i.test(topic);
+        const hasMicrotasks = Array.isArray(cleanVisualProps.items) && cleanVisualProps.items.some((it: any) => /microtask|macrotask/i.test(it.name || it.detail || ''));
+
+        if (isSurgeTopic && hasMicrotasks) {
           cleanVisualProps.items = [
-            { name: 'Microtask Execution', priority: 'high', detail: 'Priority processing' },
-            { name: 'Macrotask Execution', priority: 'medium', detail: 'Scheduled queue processing' },
+            { name: '1. Lock Held by Worker A', priority: 'medium', detail: 'SET hex_mutex:88619A worker_A NX EX 5' },
+            { name: '2. Worker A Crashes / Disconnects', priority: 'high', detail: 'Worker ungracefully dies before releasing lock' },
+            { name: '3. Redis TTL Expiry (5s)', priority: 'high', detail: 'Key automatically evicted by Redis engine' },
+            { name: '4. Worker B Acquires Lock', priority: 'medium', detail: 'SET hex_mutex:88619A worker_B NX EX 5 succeeds' },
+          ];
+        } else if (!Array.isArray(cleanVisualProps.items) || cleanVisualProps.items.length < 2) {
+          cleanVisualProps.items = [
+            { name: 'Step 1: Ingestion & Lock', priority: 'high', detail: 'Acquire atomic state lock' },
+            { name: 'Step 2: Processing & Commit', priority: 'medium', detail: 'Execute state transition' },
           ];
         } else {
           cleanVisualProps.items = cleanVisualProps.items.slice(0, 5).map((it: any) => {

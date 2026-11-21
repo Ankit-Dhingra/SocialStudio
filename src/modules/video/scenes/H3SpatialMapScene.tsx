@@ -91,7 +91,7 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
   const badgeText = mode === 'naive-radius'
     ? 'BRUTE FORCE RADIUS SCAN: FAILED'
     : mode === 'stale-heartbeat'
-    ? 'EDGE CASE: GHOST RIDER PROBLEM'
+    ? 'EDGE CASE: STALE NODE HEARTBEAT'
     : 'H3 SPATIAL INDEXING ENGINE';
   const badgeColor = mode === 'naive-radius' ? '#EF4444' : mode === 'stale-heartbeat' ? '#F59E0B' : '#00F2FE';
 
@@ -472,7 +472,7 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
             ) : (
               <>
                 <LottieAsset
-                  name="scooter-3d"
+                  name="server"
                   style={{
                     width: 250,
                     height: 150,

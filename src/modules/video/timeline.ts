@@ -192,23 +192,19 @@ export function buildVideoTimeline(
     if (scene.type === 'requestFlow') cues = scene.visualProps?.steps?.map((step: any) => step.cue ?? step.label);
     if (scene.type === 'queueTimeline') cues = scene.visualProps?.items?.map((item: any) => item.cue ?? item.name);
     if (scene.type === 'smartphoneMockup') {
-      // Wire spoken price reveal to the actual phone scene: prioritize specific surge price words (80, assi, surge, jump)
-      const primaryTokens = ['80', 'assi', 'अस्सी', 'surge', 'jump'];
-      const secondaryTokens = ['seedha', 'badh', 'fees', 'fee'];
+      const explicitFee = String(scene.visualProps?.surgeDeliveryFee || '').replace(/\D/g, '');
+      const primaryTokens = [
+        ...(explicitFee ? [explicitFee] : []),
+        '80', 'assi', 'अस्सी', 'surge', 'jump', 'spike', 'increase', 'charge', 'rate', 'price'
+      ];
       let foundIdx = cleanWords.findIndex(w => {
         const norm = normalize(w);
         return primaryTokens.some(token => norm.includes(token));
       });
-      if (foundIdx === -1) {
-        foundIdx = cleanWords.findIndex(w => {
-          const norm = normalize(w);
-          return secondaryTokens.some(token => norm.includes(token));
-        });
-      }
       if (foundIdx !== -1) {
         cues = [cleanWords[foundIdx]];
-      } else {
-        cues = [scene.visualProps?.surgeDeliveryFee || '80'];
+      } else if (scene.visualProps?.surgeDeliveryFee) {
+        cues = [scene.visualProps.surgeDeliveryFee];
       }
     }
     if (scene.type === 'raceCondition') {

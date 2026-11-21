@@ -303,7 +303,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
                 <div>
                   <span style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF' }}>Worker A (PID 10842)</span>
                   <div style={{ fontSize: 13, color: isCrashed ? '#FCA5A5' : '#94A3B8', fontWeight: 600 }}>
-                    {isCrashed ? 'Ungraceful exit • Crashed before releasing lock' : 'Holds active lock for surge calculation'}
+                    {isCrashed ? 'Ungraceful exit • Crashed before releasing lock' : 'Holds active lock during critical execution'}
                   </div>
                 </div>
               </div>
