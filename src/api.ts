@@ -332,6 +332,7 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
       fullAudioUrl,
       clips: audioResult.clips.map((c) => ({
         ...c,
+        durationSec: Number((c.durationMs / 1000).toFixed(2)),
         url: `/audio/runs/${audioRun}/${path.basename(c.filePath)}`,
       })),
     };

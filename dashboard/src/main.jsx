@@ -1696,7 +1696,7 @@ function App() {
                                 {clip && (
                                   <span className="scene-stat-pill clip-ready">
                                     <CheckCircle2 size={11} color="#4ade80" />
-                                    <span>{clip.durationSec.toFixed(1)}s actual</span>
+                                    <span>{((clip.durationSec ?? (clip.durationMs ? clip.durationMs / 1000 : 0)) || 0).toFixed(1)}s actual</span>
                                   </span>
                                 )}
                               </div>
@@ -2059,5 +2059,71 @@ function App() {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('[Dashboard Error Boundary]:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          background: '#09090b',
+          color: '#fafafa',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          fontFamily: 'Inter, -apple-system, sans-serif'
+        }}>
+          <div style={{
+            maxWidth: 500,
+            background: '#121216',
+            border: '1px solid #272730',
+            borderRadius: 12,
+            padding: 32,
+            textAlign: 'center'
+          }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: '#ef4444' }}>
+              Dashboard UI Caught an Error
+            </h3>
+            <p style={{ fontSize: 13, color: '#a1a1aa', marginBottom: 20 }}>
+              {this.state.error?.message || 'An unexpected rendering error occurred.'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: '#fafafa',
+                color: '#09090b',
+                border: 'none',
+                borderRadius: 8,
+                padding: '10px 24px',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Reload Dashboard
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const root = createRoot(document.getElementById('root'));
-root.render(<App />);
+root.render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
