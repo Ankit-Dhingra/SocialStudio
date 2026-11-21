@@ -1131,7 +1131,7 @@ Rules:
         const parsedDirect = parseTolerantJson(repairResponse);
         if (parsedDirect?.scenes && Array.isArray(parsedDirect.scenes) && parsedDirect.scenes.length >= 10) {
           sections.remotionSceneJson = parsedDirect;
-          console.log(`[MasterScript] Successfully recovered Section 4 JSON! Recovered ${sections.remotionSceneJson.scenes.length} scenes.`);
+          console.log(`[MasterScript] Successfully recovered Section 4 JSON! Recovered ${parsedDirect.scenes.length} scenes.`);
           if (responseText.match(/###?\s*4\.?\s*(?:REMOTION\s*SCENE\s*JSON|Remotion\s*Scene\s*JSON)/i)) {
             responseText = responseText.replace(
               /(###?\s*4\.?\s*(?:REMOTION\s*SCENE\s*JSON|Remotion\s*Scene\s*JSON))[\s\S]*?(?=###?\s*5|$)/i,

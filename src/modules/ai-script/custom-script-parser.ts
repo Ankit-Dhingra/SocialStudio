@@ -42,7 +42,7 @@ export interface DynamicReelContext {
   solutionTitle: string;
   solutionSubtitle: string;
   hotHexId: string;
-  pipelineSteps: Array<{ label: string; description: string }>;
+  pipelineSteps: Array<{ label: string; description: string; status: 'completed' | 'active' | 'pending' }>;
   deepDiveStages: Array<{
     stagePill: string;
     stageTitle: string;
@@ -161,10 +161,10 @@ export function extractDynamicReelContext(obj: any): DynamicReelContext {
     ? 'Partitioning city into H3 hexagonal micro-zones'
     : 'Partitioning high-throughput state into in-memory clusters';
   const hotHexId = '#88619A0A4';
-  const pipelineSteps = [
-    { label: 'Micro-Zones (H3)', description: 'Partition city into O(1) cells' },
-    { label: 'Live Telemetry', description: `Track ${metricACount} ${metricAName} vs ${metricBCount} ${metricBName}` },
-    { label: 'Pricing Engine', description: `Calculates dynamic fee = ₹${surgeNum}` },
+  const pipelineSteps: { label: string; description: string; status: 'completed' | 'active' | 'pending' }[] = [
+    { label: 'Micro-Zones (H3)', description: 'Partition city into O(1) cells', status: 'completed' },
+    { label: 'Live Telemetry', description: `Track ${metricACount} ${metricAName} vs ${metricBCount} ${metricBName}`, status: 'active' },
+    { label: 'Pricing Engine', description: `Calculates dynamic fee = ₹${surgeNum}`, status: 'pending' },
   ];
 
   // 7. Tech Explained Stages (Scene 3)

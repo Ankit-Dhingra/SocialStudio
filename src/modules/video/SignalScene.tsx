@@ -14,11 +14,16 @@ function stages(s: StoryboardScene): Array<[string, string]> {
     case 'code': return s.visualProps.code.split('\n').filter(Boolean).map(() => [s.visualProps.filename, s.visualProps.explanationCallout]);
     case 'summary': return s.visualProps.takeaways.map(v => [s.visualProps.headline, v]);
     case 'comparison': return [[s.visualProps.leftTitle, s.visualProps.leftPoints.join(' · ')], [s.visualProps.rightTitle, s.visualProps.rightPoints.join(' · ')], [s.visualProps.verdict, s.technicalKeyPoint]];
-    case 'tradeoffHUD': return [[s.visualProps.optionA_Title, s.visualProps.optionA_Pros], [s.visualProps.optionA_Title, s.visualProps.optionA_Cons], [s.visualProps.optionB_Title, s.visualProps.optionB_Pros], [s.visualProps.optionB_Title, s.visualProps.optionB_Cons]];
+    case 'tradeoffHUD': return [
+      [s.visualProps.optionA_Title || 'OPTION A', s.visualProps.optionA_Pros || 'Pros'],
+      [s.visualProps.optionA_Title || 'OPTION A', s.visualProps.optionA_Cons || 'Cons'],
+      [s.visualProps.optionB_Title || 'OPTION B', s.visualProps.optionB_Pros || 'Pros'],
+      [s.visualProps.optionB_Title || 'OPTION B', s.visualProps.optionB_Cons || 'Cons']
+    ];
     case 'smartphoneMockup': return [[s.visualProps.baseDeliveryFee, s.visualProps.itemName], [s.visualProps.surgeDeliveryFee, s.visualProps.surgeReason]];
     case 'raceCondition': return [[s.visualProps.user1Name, s.visualProps.itemTitle], [s.visualProps.user2Name, s.visualProps.itemTitle], ['Atomic write', s.visualProps.atomicQuery]];
     case 'h3SpatialMap': return [[s.visualProps.hotHexId, s.visualProps.subtitle], [s.visualProps.orderCount + ' orders', s.visualProps.riderCount + ' riders'], [s.visualProps.surgeMultiplier, s.technicalKeyPoint]];
-    case 'architecturePipeline': return [['Redis', s.visualProps.subtitle], [s.visualProps.redisLatencyMs + ' ms', s.visualProps.atomicCommand]];
+    case 'architecturePipeline': return [['Redis', s.visualProps.subtitle], [s.visualProps.redisLatencyMs + ' ms', s.visualProps.atomicCommand || 'O(1) Pipeline']];
     case 'hook': return [[s.visualProps.headline, s.technicalKeyPoint]];
   }
 }
@@ -162,7 +167,7 @@ export function SignalScene({ scene, cueFrames, wordFrames, audioFrames }: {
       case 'comparison':
         return <Decision left={scene.visualProps.leftTitle} right={scene.visualProps.rightTitle} selected={Math.min(1, active)} frame={frame} />;
       case 'tradeoffHUD':
-        return <Decision left={scene.visualProps.optionA_Title} right={scene.visualProps.optionB_Title} selected={Math.floor(active / 2)} frame={frame} />;
+        return <Decision left={scene.visualProps.optionA_Title || 'OPTION A'} right={scene.visualProps.optionB_Title || 'OPTION B'} selected={Math.floor(active / 2)} frame={frame} />;
       case 'collection':
         return <Collection scene={scene} frame={frame} revealed={frame >= (cueFrames?.[0] ?? length / 2)} />;
       case 'code':

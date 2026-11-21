@@ -114,6 +114,13 @@ export const ComparisonPropsSchema = z.object({
   rightCode: z.string().default('SET lock:seat_101 user_id NX EX 10'),
   rightPoints: z.array(z.string()).min(1).max(4).default(['Atomic single-turn guarantee', 'Guaranteed lock release on crash']),
   verdict: z.string().default('Winner: Atomic Distributed Lock'),
+  metricAName: z.string().optional(),
+  metricACount: z.number().optional(),
+  metricBName: z.string().optional(),
+  metricBCount: z.number().optional(),
+  deficitRatio: z.string().optional(),
+  stampTitle: z.string().optional(),
+  stampSubtitle: z.string().optional(),
 });
 
 export const SummaryPropsSchema = z.object({
@@ -145,7 +152,7 @@ export const SmartphoneMockupPropsSchema = z.object({
   itemEmoji: z.coerce.string().optional(),
   itemPrice: z.coerce.string().default('₹350'),
   feeLabel: z.coerce.string().optional(),
-  surgeAmount: z.coerce.string().default('+₹50'),
+  surgeAmount: z.coerce.string().optional(),
   surgeMultiplier: z.coerce.string().default('1.8X'),
   baseDeliveryFee: z.coerce.string().default('₹30'),
   surgeDeliveryFee: z.coerce.string().default('₹80'),
@@ -153,16 +160,23 @@ export const SmartphoneMockupPropsSchema = z.object({
   algorithmName: z.coerce.string().optional(),
   ctaText: z.coerce.string().optional(),
   lottieAsset: z.coerce.string().optional(),
+  auditRow1Label: z.string().optional(),
+  auditRow1Value: z.string().optional(),
+  auditRow2Label: z.string().optional(),
+  auditRow2Value: z.string().optional(),
+  auditRow3Label: z.string().optional(),
+  auditRow3Value: z.string().optional(),
+  auditQuestion: z.string().optional(),
 });
 
 export const H3SpatialMapPropsSchema = z.object({
   mode: z.enum(['hex-grid', 'naive-radius', 'stale-heartbeat']).optional(),
   title: z.coerce.string().default('SPATIAL INDEXING & PARTITION MESH'),
   subtitle: z.coerce.string().default('O(1) Spatial lookup narrows search radius'),
-  hexResolution: z.coerce.number().default(8),
-  activeHexCount: z.coerce.number().default(14),
-  demandCount: z.coerce.number().default(40),
-  supplyCount: z.coerce.number().default(10),
+  hexResolution: z.coerce.number().optional(),
+  activeHexCount: z.coerce.number().optional(),
+  demandCount: z.coerce.number().optional(),
+  supplyCount: z.coerce.number().optional(),
   hotHexId: z.coerce.string().default('#ZONE_A4'),
   orderCount: z.coerce.number().default(52),
   riderCount: z.coerce.number().default(5),
@@ -177,7 +191,7 @@ export const ArchitecturePipelinePropsSchema = z.object({
   title: z.string().default('DISTRIBUTED ARCHITECTURE PIPELINE'),
   subtitle: z.string().default('In-memory coordination prevents database race conditions'),
   redisLatencyMs: z.number().default(4),
-  atomicCommand: z.string().default('SET lock:seat_101 user_A NX EX 10'),
+  atomicCommand: z.string().optional(),
   steps: z
     .array(
       z.object({
@@ -187,23 +201,27 @@ export const ArchitecturePipelinePropsSchema = z.object({
       })
     )
     .optional(),
+  deepDiveStages: z.array(z.any()).optional(),
 });
 
 export const TradeoffHUDPropsSchema = z.object({
   title: z.string().default('SENIOR SDE TRADEOFF MATRIX'),
   subtitle: z.string().default('Which architecture strategy would you defend in an interview?'),
-  optionA_Title: z.string().default('OPTION A: SHORT TTL (5-10s)'),
-  optionA_Pros: z.string().default('Quick crash recovery, minimal deadlock time'),
-  optionA_Cons: z.string().default('Premature expiry risk if latency spikes'),
-  optionB_Title: z.string().default('OPTION B: LONG TTL (60s+)'),
-  optionB_Pros: z.string().default('Guaranteed protection for complex transactions'),
-  optionB_Cons: z.string().default('Prolonged deadlocks if server dies'),
+  optionA_Title: z.string().optional(),
+  optionA_Pros: z.string().optional(),
+  optionA_Cons: z.string().optional(),
+  optionB_Title: z.string().optional(),
+  optionB_Pros: z.string().optional(),
+  optionB_Cons: z.string().optional(),
   interviewPoints: z.array(z.string()).min(1).max(5).default([
     'Acquire lock atomically using SET NX EX with unique client token',
     'Release lock safely via Lua script verifying token ownership',
     'Use TTL to guard against process crashes and network partitions',
   ]),
   callToAction: z.string().default('Save this reel for your System Design Interview & follow for more!'),
+  channelName: z.string().optional(),
+  channelHandle: z.string().optional(),
+  takeawayTitle: z.string().optional(),
 });
 
 // Discriminated Union of Strict Scene Schemas
