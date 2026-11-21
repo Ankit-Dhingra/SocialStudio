@@ -285,6 +285,35 @@ export function extractDynamicReelContext(obj: any): DynamicReelContext {
   };
 }
 
+function splitSentences(text: string): string[] {
+  if (!text) return [];
+  return text
+    .split(/(?<=[.!?।])\s+/u)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 5);
+}
+
+function chunkIntoCuts(sentences: string[], maxWords = 24): string[] {
+  if (sentences.length === 0) return [];
+  const cuts: string[] = [];
+  let current: string[] = [];
+  let currentWords = 0;
+
+  for (const s of sentences) {
+    const words = s.split(/\s+/).filter(Boolean).length;
+    if (current.length > 0 && currentWords + words > maxWords) {
+      cuts.push(current.join(' '));
+      current = [s];
+      currentWords = words;
+    } else {
+      current.push(s);
+      currentWords += words;
+    }
+  }
+  if (current.length > 0) cuts.push(current.join(' '));
+  return cuts;
+}
+
 export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Custom Tech Reel'): Storyboard {
   const title = (obj.title || obj.topic || topicFallback).trim();
   const hook = (obj.hook || obj.hooks || '').trim();
@@ -292,134 +321,276 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
   const solution = (obj.solution || '').trim();
   const techExplained = (obj.tech_explained || obj.tech || '').trim();
   const conclusion = (obj.conclusion || obj.summary || '').trim();
-  const cta = (obj.cta || 'Follow for more system design breakdowns!').trim();
+  const cta = (obj.cta || 'Behind The Tech ko abhi follow karo!').trim();
 
   const shortTitle = title.length > 36
     ? title.split(/\s+/).slice(0, 5).join(' ').toUpperCase()
     : title.toUpperCase();
 
-  // Dynamically extract context from the script so ZERO details are hardcoded!
+  const fullText = `${title} ${hook} ${problem} ${solution} ${techExplained}`.toLowerCase();
+  const isSurge = /surge|zomato|swiggy|uber|delivery|food|ride|cab|fare|pricing/i.test(fullText);
+  const isRedis = /redis|lock|redlock|mutex|distributed lock|concurrency|race condition|double booking/i.test(fullText);
+  const isKafka = /kafka|consumer|partition|broker|rebalance|topic|offset/i.test(fullText);
+  const isDatabase = /database|postgres|mysql|sqlite|mvcc|vacuum|dead tuple|table bloat|index|btree/i.test(fullText);
+
   const ctx = extractDynamicReelContext(obj);
 
-  const scenes: Storyboard['scenes'] = [
-    {
-      id: 'scene-1',
-      sceneIndex: 0,
-      type: 'smartphoneMockup',
-      narration: hook,
-      onScreenText: shortTitle,
-      technicalKeyPoint: 'Core Question & Hook',
-      durationTargetSec: 13,
-      visualProps: {
-        headline: shortTitle,
-        subtext: ctx.surgeReason,
-        appName: ctx.appName,
-        appCategory: ctx.appCategory,
-        locationText: '12:00 AM • Indiranagar (3.2 km)',
-        itemName: ctx.itemName,
-        itemPrice: ctx.itemPrice,
-        baseDeliveryFee: ctx.baseDeliveryFee,
-        surgeDeliveryFee: ctx.surgeDeliveryFee,
-        surgeMultiplier: ctx.surgeMultiplier,
-        surgeReason: ctx.surgeReason,
-        ctaText: `SURGE ACTIVE • ${ctx.surgeDeliveryFee}`,
-        auditRow1Label: ctx.auditRow1Label,
-        auditRow1Value: ctx.auditRow1Value,
-        auditRow2Label: ctx.auditRow2Label,
-        auditRow2Value: ctx.auditRow2Value,
-        auditRow3Label: ctx.auditRow3Label,
-        auditRow3Value: ctx.auditRow3Value,
-        auditQuestion: ctx.auditQuestion,
-      },
-    },
-    {
-      id: 'scene-2',
-      sceneIndex: 1,
-      type: 'comparison',
-      narration: problem,
-      onScreenText: `${ctx.metricACount} ${ctx.metricAName.toUpperCase()} vs ${ctx.metricBCount} ${ctx.metricBName.toUpperCase()}`,
-      technicalKeyPoint: 'Why Naive Static Model Fails',
-      durationTargetSec: 15,
-      visualProps: {
-        leftTitle: ctx.naiveTitle,
-        leftCode: ctx.naiveCode,
-        leftPoints: ctx.naivePoints,
-        rightTitle: ctx.telemetryTitle,
-        rightCode: ctx.telemetryCode,
-        rightPoints: ctx.telemetryPoints,
-        verdict: ctx.verdict,
-        metricAName: ctx.metricAName,
-        metricACount: ctx.metricACount,
-        metricBName: ctx.metricBName,
-        metricBCount: ctx.metricBCount,
-        deficitRatio: ctx.deficitRatio,
-      },
-    },
-    {
-      id: 'scene-3',
-      sceneIndex: 2,
-      type: 'h3SpatialMap',
-      narration: solution,
-      onScreenText: ctx.solutionTitle,
-      technicalKeyPoint: 'Partitioning by Micro-Zones',
-      durationTargetSec: 17,
-      visualProps: {
-        title: ctx.solutionTitle,
-        subtitle: ctx.solutionSubtitle,
-        hotHexId: ctx.hotHexId,
-        orderCount: ctx.metricACount,
-        riderCount: ctx.metricBCount,
-        surgeMultiplier: ctx.surgeMultiplier,
-        mode: 'hex-grid',
-        entityLabel: ctx.metricAName,
-        providerLabel: ctx.metricBName,
-        entityEmoji: '📦',
-        providerEmoji: '🛵',
-      },
-    },
-    {
-      id: 'scene-4',
-      sceneIndex: 3,
-      type: 'architecturePipeline',
-      narration: techExplained,
-      onScreenText: 'BACKEND ARCHITECTURE',
-      technicalKeyPoint: 'In-Memory Telemetry & Spatial Indexes',
-      durationTargetSec: 64,
-      visualProps: {
-        title: 'BACKEND ARCHITECTURE DEEP DIVE',
-        subtitle: 'Sub-millisecond dynamic calculation engine',
-        redisLatencyMs: 1.8,
-        steps: ctx.pipelineSteps,
-        deepDiveStages: ctx.deepDiveStages,
-      },
-    },
-    {
-      id: 'scene-5',
-      sceneIndex: 4,
-      type: 'tradeoffHUD',
-      narration: `${conclusion} ${cta}`.trim(),
-      onScreenText: 'TAKE SCREENSHOT 📌',
-      technicalKeyPoint: 'Dynamic Pricing Core Takeaways',
-      durationTargetSec: 24,
-      visualProps: {
+  // 1. Dynamic sentence chunks per section based on script content
+  const hookCuts = chunkIntoCuts(splitSentences(hook), 22);
+  const problemCuts = chunkIntoCuts(splitSentences(problem), 24);
+  const solutionCuts = chunkIntoCuts(splitSentences(solution), 24);
+  const techCuts = chunkIntoCuts(splitSentences(techExplained), 22);
+  const conclusionCuts = chunkIntoCuts(splitSentences(conclusion), 25);
+  const ctaCuts = chunkIntoCuts(splitSentences(cta), 25);
+
+  const rawScenes: Array<{
+    section: 'hook' | 'problem' | 'solution' | 'tech' | 'conclusion' | 'cta';
+    narration: string;
+    subIndex: number;
+    totalSub: number;
+  }> = [];
+
+  hookCuts.forEach((n, i) => rawScenes.push({ section: 'hook', narration: n, subIndex: i, totalSub: hookCuts.length }));
+  problemCuts.forEach((n, i) => rawScenes.push({ section: 'problem', narration: n, subIndex: i, totalSub: problemCuts.length }));
+  solutionCuts.forEach((n, i) => rawScenes.push({ section: 'solution', narration: n, subIndex: i, totalSub: solutionCuts.length }));
+  techCuts.forEach((n, i) => rawScenes.push({ section: 'tech', narration: n, subIndex: i, totalSub: techCuts.length }));
+  conclusionCuts.forEach((n, i) => rawScenes.push({ section: 'conclusion', narration: n, subIndex: i, totalSub: conclusionCuts.length }));
+  ctaCuts.forEach((n, i) => rawScenes.push({ section: 'cta', narration: n, subIndex: i, totalSub: ctaCuts.length }));
+
+  if (rawScenes.length === 0) {
+    rawScenes.push({ section: 'hook', narration: hook || title, subIndex: 0, totalSub: 1 });
+  }
+
+  // 2. Map every chunk dynamically to an engaging visual component
+  const scenes: Storyboard['scenes'] = rawScenes.map((item, idx) => {
+    const textLower = item.narration.toLowerCase();
+    let type: Storyboard['scenes'][number]['type'] = 'architecturePipeline';
+    let onScreenText = shortTitle;
+    let technicalKeyPoint = 'Architecture Breakdown';
+    let visualProps: Record<string, any> = {};
+
+    if (item.section === 'hook') {
+      if (item.subIndex === 0 && (isSurge || /app|order|book|charge|₹|\$/i.test(textLower))) {
+        type = 'smartphoneMockup';
+        onScreenText = isSurge ? `₹30 VS ₹90? • SURGE PRICING` : `${shortTitle} • TRIGGER`;
+        technicalKeyPoint = 'Client Request Anomaly';
+        visualProps = {
+          headline: onScreenText,
+          subtext: ctx.surgeReason,
+          appName: ctx.appName,
+          appCategory: ctx.appCategory,
+          itemName: ctx.itemName,
+          itemPrice: ctx.itemPrice,
+          baseDeliveryFee: ctx.baseDeliveryFee,
+          surgeDeliveryFee: ctx.surgeDeliveryFee,
+          surgeMultiplier: ctx.surgeMultiplier,
+          surgeReason: ctx.surgeReason,
+          ctaText: `LIVE ANOMALY • ${ctx.appName}`,
+        };
+      } else {
+        type = 'hook';
+        onScreenText = shortTitle;
+        technicalKeyPoint = 'The Engineering Mystery';
+        visualProps = {
+          headline: shortTitle,
+          questionKicker: item.narration.slice(0, 100),
+          badgeText: isRedis ? 'CONCURRENCY BUG' : isSurge ? 'DYNAMIC PRICING' : isKafka ? 'STREAMING PUZZLE' : 'SYSTEM DESIGN',
+          accentColor: '#00F2FE',
+        };
+      }
+    } else if (item.section === 'problem') {
+      if (/race\s*condition|concurrency|simultaneous|double\s*booking|last\s*seat|conflict/i.test(textLower) || isRedis) {
+        type = 'raceCondition';
+        onScreenText = 'RACE CONDITION DETECTED';
+        technicalKeyPoint = 'Two Workers Competing for Same Mutex';
+        visualProps = {
+          title: 'CONCURRENCY COLLISION',
+          itemTitle: 'Concert Seat #123 (Stock = 1)',
+          user1Name: 'User A (Worker 1)',
+          user2Name: 'User B (Worker 2)',
+          atomicQuery: 'SET lock:seat_123 uuid NX PX 10000;',
+          onScreenText: 'Simultaneous Requests Collision',
+        };
+      } else {
+        type = 'comparison';
+        onScreenText = `${ctx.metricACount} ${ctx.metricAName.toUpperCase()} vs ${ctx.metricBCount} ${ctx.metricBName.toUpperCase()}`;
+        technicalKeyPoint = 'Static Model Breakdown Under Peak Traffic';
+        visualProps = {
+          leftTitle: ctx.naiveTitle,
+          leftCode: ctx.naiveCode,
+          leftPoints: ctx.naivePoints,
+          rightTitle: ctx.telemetryTitle,
+          rightCode: ctx.telemetryCode,
+          rightPoints: ctx.telemetryPoints,
+          verdict: ctx.verdict,
+          metricAName: ctx.metricAName,
+          metricACount: ctx.metricACount,
+          metricBName: ctx.metricBName,
+          metricBCount: ctx.metricBCount,
+          deficitRatio: ctx.deficitRatio,
+        };
+      }
+    } else if (item.section === 'solution') {
+      if (/h3|spatial|hexagon|cell|location|zone|area|city|map|gps/i.test(textLower) || isSurge) {
+        type = 'h3SpatialMap';
+        onScreenText = ctx.solutionTitle;
+        technicalKeyPoint = 'O(1) Spatial Hexagon Partitioning';
+        visualProps = {
+          title: ctx.solutionTitle,
+          subtitle: ctx.solutionSubtitle,
+          hotHexId: ctx.hotHexId,
+          orderCount: ctx.metricACount,
+          riderCount: ctx.metricBCount,
+          surgeMultiplier: ctx.surgeMultiplier,
+          mode: 'hex-grid',
+          entityLabel: ctx.metricAName,
+          providerLabel: ctx.metricBName,
+        };
+      } else {
+        type = 'architecturePipeline';
+        onScreenText = 'DISTRIBUTED LOCK ARCHITECTURE';
+        technicalKeyPoint = 'In-Memory Distributed Coordination';
+        visualProps = {
+          title: 'DISTRIBUTED LOCK PATTERN',
+          subtitle: 'Single Mutex In-Memory Coordination',
+          redisLatencyMs: 1.5,
+          steps: [
+            { label: 'Client Booking', description: 'User sends reservation request', status: 'completed' },
+            { label: 'Acquire Lock', description: 'SET NX conditional atomic write', status: 'active' },
+            { label: 'DB Decrement', description: 'Safe decrement stock count', status: 'pending' },
+          ],
+        };
+      }
+    } else if (item.section === 'tech') {
+      if (/set\s*(?:seat|lock|nx|px)|px\s*\d+|command|nx|code|syntax|query|lua/i.test(textLower)) {
+        type = 'code';
+        onScreenText = 'ATOMIC REDIS COMMAND';
+        technicalKeyPoint = 'SET lock_id unique_token NX PX 10000';
+        visualProps = {
+          filename: 'redis_mutex.ts',
+          code: 'const acquired = await redis.set(\n  `lock:seat_123`,\n  workerToken,\n  "NX",\n  "PX", 10000\n);',
+          highlightLines: [2, 3, 4],
+          terminalOutputs: [
+            { text: '> SET lock:seat_123 9a2b NX PX 10000', badge: 'REDIS', highlight: true },
+            { text: 'OK (Lock acquired in 1.2ms)', badge: 'SUCCESS' },
+          ],
+          explanationCallout: 'NX = only if not exists • PX = 10s auto-expiry',
+        };
+      } else if (/h3|spatial|hexagon|cell|honeycomb/i.test(textLower)) {
+        type = 'h3SpatialMap';
+        onScreenText = 'H3 SPATIAL INDEXING';
+        technicalKeyPoint = 'Coordinates to 64-bit Hex ID';
+        visualProps = {
+          title: 'H3 SPATIAL INDEXING',
+          subtitle: 'h3.geoToH3(lat, lng, res=8) ➔ #88619A0A4',
+          hotHexId: '#88619A0A4',
+          orderCount: 100,
+          riderCount: 20,
+          surgeMultiplier: '3.0X',
+        };
+      } else if (/offline|stale|ghost|crash|deadlock|timeout|ttl|expire|catch/i.test(textLower)) {
+        type = 'queueTimeline';
+        onScreenText = 'CRITICAL EDGE CASE SAFEGUARD';
+        technicalKeyPoint = 'Auto-Expiry TTL Prevents Deadlocks';
+        visualProps = {
+          title: 'EDGE CASE & LEASE AUTO-EXPIRY',
+          items: [
+            { name: '1. Lock Acquired', detail: 'Worker holds mutex with 10s TTL' },
+            { name: '2. Node Crashes', detail: 'Network partition / unhandled exception' },
+            { name: '3. TTL Auto-Expires', detail: 'Key evicted automatically from memory' },
+            { name: '4. Deadlock Averted', detail: 'Next worker acquires without block' },
+          ],
+          activeItemIndex: 2,
+        };
+      } else if (/gps|heartbeat|stream|ingestion|app sends|telemetry/i.test(textLower)) {
+        type = 'requestFlow';
+        onScreenText = 'LIVE TELEMETRY INGESTION';
+        technicalKeyPoint = 'Streaming Client Heartbeats';
+        visualProps = {
+          title: 'CLIENT TELEMETRY STREAM',
+          steps: [
+            { label: 'Mobile GPS Ping', status: 'completed' },
+            { label: 'API Gateway Ingestion', status: 'active' },
+            { label: 'In-Memory Cache Write', status: 'pending' },
+          ],
+        };
+      } else if (/formula|multiplier|pricing engine|imbalance|average|calculate/i.test(textLower)) {
+        type = 'comparison';
+        onScreenText = 'DYNAMIC EVALUATION ENGINE';
+        technicalKeyPoint = 'Elastic Multiplier Calculation';
+        visualProps = {
+          leftTitle: 'Current Demand',
+          leftCode: 'Orders: 100 | Available Riders: 20',
+          leftPoints: ['Ratio: 5.0 Orders/Rider', 'Deficit: 80 Riders Short'],
+          rightTitle: 'Pricing Engine Output',
+          rightCode: 'Base ₹30 + Rain ₹30 + Surge ₹30 = ₹90',
+          rightPoints: ['Dynamic Surge: 3.0X', 'Sub-50ms Calculation'],
+          verdict: 'Result: App displays updated ₹90 fee instantly.',
+        };
+      } else {
+        type = 'architecturePipeline';
+        onScreenText = 'IN-MEMORY CACHE & ENGINE';
+        technicalKeyPoint = 'Sub-Millisecond Pipeline State';
+        visualProps = {
+          title: 'BACKEND ARCHITECTURE DEEP DIVE',
+          subtitle: 'In-memory state & sub-millisecond calculation',
+          redisLatencyMs: 1.8,
+          steps: ctx.pipelineSteps,
+          deepDiveStages: ctx.deepDiveStages,
+        };
+      }
+    } else if (item.section === 'conclusion') {
+      type = 'summary';
+      onScreenText = 'CORE ARCHITECTURAL TAKEAWAY';
+      technicalKeyPoint = 'Elastic Supply-Demand Synchronization';
+      visualProps = {
+        headline: 'SENIOR SDE MENTAL MODEL',
+        takeaways: [
+          'State should be partitioned in-memory for sub-millisecond latency',
+          'Atomic locks must have auto-expiring leases (TTL) to guard crashes',
+          'Demand signals dynamically balance traffic without database contention',
+        ],
+        callToAction: cta,
+      };
+    } else {
+      type = 'tradeoffHUD';
+      onScreenText = 'TAKE SCREENSHOT';
+      technicalKeyPoint = 'System Design SDE Cheat-Sheet';
+      visualProps = {
         title: 'SDE INTERVIEW CHEAT-SHEET',
-        subtitle: 'Core Architecture Takeaways',
+        subtitle: 'Defend this architecture in your interviews',
         interviewPoints: ctx.interviewPoints,
         callToAction: cta,
         channelName: ctx.channelName,
         channelHandle: ctx.channelHandle,
-      },
-    },
-  ];
+      };
+    }
+
+    const words = item.narration.trim().split(/\s+/).filter(Boolean).length;
+    const durationTargetSec = Math.max(3, Math.min(20, Math.round(words / 2.35)));
+
+    return {
+      id: `scene-${idx + 1}`,
+      sceneIndex: idx,
+      type,
+      narration: item.narration,
+      onScreenText,
+      technicalKeyPoint,
+      durationTargetSec,
+      visualProps,
+    };
+  });
+
+  const totalDurationSec = scenes.reduce((acc, s) => acc + s.durationTargetSec, 0);
 
   return {
     topic: title,
     title,
     hook,
-    learningObjective: 'How dynamic pricing and spatial indexing handle surge traffic',
+    learningObjective: `${shortTitle} • Dynamic System Design Breakdown`,
     targetAudience: 'Developers & CS students',
     format: 'short',
-    estimatedDurationSec: 85,
+    estimatedDurationSec: totalDurationSec,
     hashtags: ['#systemdesign', '#backend', '#shorts'],
     scenes,
   };

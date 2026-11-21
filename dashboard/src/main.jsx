@@ -756,9 +756,9 @@ function App() {
                   </div>
                 </div>
                 <div className="stat-value">
-                  13 Cuts
+                  Dynamic
                 </div>
-                <div className="stat-subtext">Dynamic transitions & pacing</div>
+                <div className="stat-subtext">Script-driven adaptive cuts</div>
               </div>
 
               <div className="stat-card">
@@ -961,7 +961,7 @@ function App() {
                     {session && (
                       <span className="studio-meta-tag active">
                         <CheckCircle2 size={12} color="#4ade80" />
-                        <span>{session.storyboard?.scenes?.length || 5} Storyboard Cuts</span>
+                        <span>{session.storyboard?.scenes?.length ? `${session.storyboard.scenes.length} Storyboard Cuts` : 'Dynamic Storyboard'}</span>
                       </span>
                     )}
                   </div>
@@ -1010,7 +1010,7 @@ function App() {
                   <div className="timeline-step-circle">{stage > 3 ? <Check size={13} strokeWidth={2.5} /> : '3'}</div>
                   <div className="timeline-step-text">
                     <span className="timeline-step-title">3. Visual Stills Review</span>
-                    <span className="timeline-step-sub">13 Visual Cuts QA</span>
+                    <span className="timeline-step-sub">{session?.storyboard?.scenes?.length ? `${session.storyboard.scenes.length} Visual Cuts QA` : 'Visual Cuts QA'}</span>
                   </div>
                 </button>
 
@@ -1734,7 +1734,7 @@ function App() {
                   <div className="stills-header">
                     <div>
                       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                        Stage 3: Visual Stills Review (13 Cuts)
+                        Stage 3: Visual Stills Review ({session?.storyboard?.scenes?.length || 'Dynamic'} Cuts)
                       </h3>
                       <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                         Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
@@ -1754,7 +1754,7 @@ function App() {
                         ) : (
                           <Camera size={13} />
                         )}
-                        <span>{generatingStills ? 'Capturing Stills...' : 'Generate 13 Previews'}</span>
+                        <span>{generatingStills ? 'Capturing Previews...' : `Generate ${session?.storyboard?.scenes?.length || ''} Previews`}</span>
                       </button>
 
                       <button
@@ -1771,27 +1771,33 @@ function App() {
 
                   {/* STILLS GRID */}
                   {stills && stills.length > 0 ? (
-                    <div className="stills-grid">
-                      {stills.map((still, idx) => (
-                        <div
-                          key={idx}
-                          className="still-item-card"
-                          onClick={() => setSelectedStill(still)}
-                        >
-                          <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
-                          <div className="still-meta">
-                            <span className="badge-mono" style={{ fontSize: 10 }}>
-                              {still.label || `Cut ${idx + 1}`}
-                            </span>
+                    <div className="stills-gallery-grid">
+                      {stills.map((still, idx) => {
+                        const scene = session?.storyboard?.scenes?.[idx];
+                        return (
+                          <div
+                            key={idx}
+                            className="still-card-wrapper"
+                            onClick={() => setSelectedStill(still)}
+                          >
+                            <div className="still-thumbnail-box">
+                              <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
+                              <span className="still-thumbnail-badge">CUT {String(idx + 1).padStart(2, '0')}</span>
+                              <span className="still-thumbnail-frame">{still.type || scene?.type || 'SCENE'}</span>
+                            </div>
+                            <div className="still-card-meta">
+                              <span className="still-card-title">{scene?.onScreenText || still.label || `Cut ${idx + 1}`}</span>
+                              <span className="still-card-sub">{scene?.technicalKeyPoint || 'Visual Keyframe'}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="panel-card empty-placeholder" style={{ padding: '40px 20px' }}>
                       <Camera size={24} style={{ margin: '0 auto 10px', color: 'var(--text-muted)' }} />
                       <p style={{ color: 'var(--text-muted)' }}>
-                        Click "Generate 13 Previews" to instantly capture high-res frame previews of every scene cut.
+                        Click "Generate Previews" to instantly capture high-res frame previews of every scene cut.
                       </p>
                     </div>
                   )}
@@ -1910,7 +1916,7 @@ function App() {
                           </div>
                           <div className="qa-check-item passed">
                             <CheckCircle2 size={14} />
-                            <span>Visual Retention: 13-Cut Dynamic Pacing</span>
+                            <span>Visual Retention: {session?.storyboard?.scenes?.length || 'Dynamic'}-Cut Adaptive Pacing</span>
                           </div>
                           <div className="qa-check-item passed">
                             <CheckCircle2 size={14} />
