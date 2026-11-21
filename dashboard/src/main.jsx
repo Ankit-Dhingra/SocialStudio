@@ -51,7 +51,7 @@ const SAMPLE_6KEY_JSON = JSON.stringify(
     solution: "इस problem को solve करने के लिए एक possible design है Location-Based Dynamic Pricing। इसमें पूरे शहर की जगह छोटे geographical areas की demand और available riders को track करते हैं। फिर एक Pricing Engine इन्हीं local conditions के हिसाब से delivery charge calculate करता है।",
     tech_explained: "अब समझो backend में ये कैसे काम कर सकता है। हर rider की app GPS location और availability status भेजती है। System इन locations को छोटे geographical cells में map करता है। इसके लिए H3 Spatial Indexing जैसी technique इस्तेमाल हो सकती है। अब हर cell में कितने orders pending हैं और कितने riders actually available हैं, उसका count maintain किया जाता है। ये counts Redis जैसे fast cache में रख सकते हैं। मान लो तुम्हारे area में 100 orders और सिर्फ 20 available riders हैं। यानी हर rider पर average 5 orders की demand है। Pricing Engine इस imbalance के साथ बारिश, estimated delivery time और configured pricing rules को evaluate करता है। Example के लिए base delivery fee ₹30 है, और इन conditions में ₹60 additional charge calculate हुआ। तो app तुम्हें ₹90 दिखाएगी। लेकिन एक catch है। अगर rider offline हो गया और उसकी पुरानी GPS location cache में बची है, तो system उसे available समझ सकता है। इसलिए recent heartbeat, timestamp और active delivery status verify करना ज़रूरी है।",
     conclusion: "तो ₹30 से ₹90 होने की वजह distance बढ़ना ज़रूरी नहीं है। असली factor हो सकता है local demand, rider availability और delivery conditions का बदलना। यही Dynamic Pricing का core idea है। Price सिर्फ distance से नहीं, current supply-demand conditions से भी प्रभावित हो सकता है।",
-    cta: "ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Stack को अभी follow करो।"
+    cta: "ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Tech को अभी follow करो।"
   },
   null,
   2
@@ -137,7 +137,7 @@ function extractSevenKeyScript(session, customText) {
     solution: '',
     tech_explained: session?.sections?.voiceoverScript || '',
     conclusion: '',
-    cta: 'ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Stack को अभी follow करो।',
+    cta: 'ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Tech को अभी follow करो।',
   };
 }
 
@@ -1331,7 +1331,7 @@ function App() {
                               <div className="script-section-block sec-cta">
                                 <div className="script-section-top">
                                   <span className="script-act-tag" style={{ borderColor: 'rgba(34, 197, 94, 0.4)', color: '#4ade80' }}>Last 4–6s • Branded CTA</span>
-                                  <span className="script-act-label">Behind The Stack</span>
+                                  <span className="script-act-label">Behind The Tech</span>
                                 </div>
                                 <p className="script-section-text">{activeScript.cta || '—'}</p>
                               </div>
@@ -1731,17 +1731,17 @@ function App() {
               {/* STAGE 3: VISUAL STILLS REVIEW */}
               {stage === 3 && (
                 <section className="stills-review-card">
-                  <div className="stills-header">
+                  <div className="stills-header" style={{ marginBottom: 24 }}>
                     <div>
                       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
                         Stage 3: Visual Stills Review ({session?.storyboard?.scenes?.length || 'Dynamic'} Cuts)
                       </h3>
-                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
                         Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
                       </p>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24 }}>
                       <button
                         type="button"
                         className="btn btn-primary"
@@ -1771,7 +1771,7 @@ function App() {
 
                   {/* STILLS GRID */}
                   {stills && stills.length > 0 ? (
-                    <div className="stills-gallery-grid">
+                    <div className="stills-gallery-grid" style={{ marginTop: 24 }}>
                       {stills.map((still, idx) => {
                         const scene = session?.storyboard?.scenes?.[idx];
                         return (

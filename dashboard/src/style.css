@@ -1632,11 +1632,20 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
 /* ==============================================================================
    STAGE 3: VISUAL STILLS GALLERY & LIGHTBOX
    ============================================================================== */
+.stills-review-card {
+  width: 100%;
+}
+
+.stills-header {
+  margin-bottom: 24px;
+}
+
 .stills-gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   width: 100%;
+  margin-top: 24px;
 }
 
 @media (min-width: 1200px) {
