@@ -69,11 +69,12 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
   const isFintech = appCategory === 'fintech' || /pay|wallet|bank|stock|crypto|crypto|upi|stripe|transfer/i.test(combinedContext);
 
   const resolvedAppName = appName || (isShop ? 'STORE' : isFood ? 'FOOD' : isRide ? 'RIDE' : isFintech ? 'PAY' : 'APP');
-  const resolvedItemName = itemName || (isShop ? 'Wireless ANC Headphones' : isFood ? 'Royal Chicken Dum Biryani' : isRide ? 'City Sedan Ride' : isFintech ? 'Priority Transfer' : 'Selected Item');
-  const resolvedLocation = locationText || (isShop ? 'Express Shipping Hub' : isRide ? 'Airport Terminal 2' : isFintech ? 'Direct Settlement' : 'HSR Layout, Sector 4');
-  const resolvedEmoji = itemEmoji || (isShop ? '🛍️' : isFood ? '🍛' : isRide ? '🚗' : isFintech ? '💳' : '📦');
-  const resolvedReason = surgeReason || (isShop ? 'FLASH SALE • LIMITED WAREHOUSE STOCK' : 'HIGH DEMAND • 120+ ACTIVE REQUESTS');
-  const resolvedFeeLabel = feeLabel || (isShop ? 'EXPRESS HANDLING / SURGE' : isRide ? 'PEAK TRAFFIC TARIFF' : isFintech ? 'PRIORITY PROCESSING FEE' : 'DELIVERY PARTNER FEE');
+  const resolvedItemName = itemName || (isShop ? 'Online Product' : isFood ? 'Food Order' : isRide ? 'City Ride' : isFintech ? 'Payment Transfer' : 'Resource Allocation');
+  const resolvedLocation = locationText || (isShop ? 'Express Shipping Hub' : isRide ? 'Airport Terminal 2' : isFintech ? 'Direct Settlement' : 'Region Central API');
+  const resolvedEmoji = itemEmoji || (isShop ? '🛍️' : isFood ? '🍛' : isRide ? '🚗' : isFintech ? '💳' : '⚡');
+  const resolvedReason = surgeReason || (isShop ? 'FLASH SALE • LIMITED WAREHOUSE STOCK' : 'HIGH TRAFFIC • 120+ ACTIVE REQUESTS');
+  const resolvedFeeLabel = feeLabel || (isShop ? 'EXPRESS HANDLING / SURGE' : isRide ? 'PEAK TRAFFIC TARIFF' : isFintech ? 'PRIORITY PROCESSING FEE' : 'REQUEST METRIC STATUS');
+  const isSurgeContext = isFood || isRide || /surge|fare|pricing|multiplier|delivery\s*fee/i.test(combinedContext);
 
   const appBadgeColor = isShop
     ? 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)'
@@ -204,7 +205,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
             textTransform: 'uppercase',
           }}
         >
-          {isSurgeActive ? 'LIVE DEMAND SURGE DETECTED' : 'SYSTEM ARCHITECTURE BREAKDOWN'}
+          {isSurgeContext && isSurgeActive ? 'LIVE DEMAND SURGE DETECTED' : 'LIVE CLIENT REQUEST / ACTION'}
         </span>
       </div>
 
@@ -293,13 +294,17 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           >
             {/* Camera dot */}
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#1c1c1e' }} />
-            {isSurgeActive && (
+            {isSurgeContext && isSurgeActive ? (
               <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 0.5 }}>
                 ⚡ 1.8X SURGE
               </span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#10B981', letterSpacing: 0.5 }}>
+                ⚡ 200 OK
+              </span>
             )}
             {/* Sensor / Mic indicator */}
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isSurgeActive ? '#EF4444' : '#10B981' }} />
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isSurgeContext && isSurgeActive ? '#EF4444' : '#10B981' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>5G</span>
@@ -336,7 +341,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
             </div>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: '#F8FAFC' }}>
-                {isShop ? 'Online Checkout' : isRide ? 'Instant Trip' : isFintech ? 'Direct Settlement' : 'Delivery to Work'}
+                {isShop ? 'Online Checkout' : isRide ? 'Instant Trip' : isFintech ? 'Direct Settlement' : isFood ? 'Food Order' : 'Service Client'}
               </div>
               <div style={{ fontSize: 13, color: '#94A3B8' }}>{resolvedLocation}</div>
             </div>
@@ -351,7 +356,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
               color: '#38BDF8',
             }}
           >
-            {isShop ? '⚡ IN STOCK' : isRide ? '⏱️ 3 MINS AWAY' : isFintech ? '🔒 256-BIT' : '⏱️ 18-24 MINS'}
+            {isShop ? '⚡ IN STOCK' : isRide ? '⏱️ 3 MINS AWAY' : isFintech ? '🔒 256-BIT' : isFood ? '⏱️ 18-24 MINS' : '⚡ CONNECTED'}
           </div>
         </div>
 
@@ -390,12 +395,12 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
               (isShop
                 ? 'ecommerce-shop'
                 : isRide
-                ? 'scooter-3d'
+                ? 'truck'
                 : isFood
-                ? 'scooter-3d'
+                ? 'shopping-cart'
                 : isFintech
                 ? 'money-3d'
-                : 'scooter-3d')
+                : 'server')
             }
             style={{
               width: 340,
@@ -480,20 +485,20 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           {/* Card Title Row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 24 }}>{isSurgeActive ? '⚡' : resolvedEmoji}</span>
+              <span style={{ fontSize: 24 }}>{isSurgeContext && isSurgeActive ? '⚡' : resolvedEmoji}</span>
               <span
                 style={{
                   fontSize: 18,
                   fontWeight: 900,
                   letterSpacing: 1.2,
-                  color: isSurgeActive ? '#EF4444' : '#94A3B8',
+                  color: isSurgeContext && isSurgeActive ? '#EF4444' : '#94A3B8',
                   textTransform: 'uppercase',
                 }}
               >
-                {isSurgeActive ? 'SURGE PRICING ACTIVE' : resolvedFeeLabel}
+                {isSurgeContext && isSurgeActive ? 'SURGE PRICING ACTIVE' : resolvedFeeLabel}
               </span>
             </div>
-            {isSurgeActive && (
+            {isSurgeContext && isSurgeActive && (
               <div
                 style={{
                   background: '#EF4444',
@@ -626,9 +631,9 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           }}
         >
           {ctaText ||
-            (isSurgeActive
+            (isSurgeContext && isSurgeActive
               ? `CHECKOUT • ₹${surgeTotalNum} (₹${foodPriceNum} + ₹${surgeDeliveryNum} Surge)`
-              : `PROCEED • ₹${baseTotalNum} (₹${foodPriceNum} + ₹${baseDeliveryNum} Standard)`)}
+              : `PROCEED • ${resolvedItemName}`)}
         </div>
 
         {/* Cut 0.2: Receipt Mystery Audit Card (Triggered at frame 170+ / ~6s) */}

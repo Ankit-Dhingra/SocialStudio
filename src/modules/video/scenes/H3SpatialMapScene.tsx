@@ -562,7 +562,7 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
               </span>
             </div>
             <div style={{ fontSize: 28, fontWeight: 900, color: '#FFFFFF' }}>
-              HOW DYNAMIC PRICING CALCULATES THE FEE
+              {title || 'HOW SPATIAL PARTITIONING OPTIMIZES LATENCY'}
             </div>
           </div>
 
@@ -644,10 +644,10 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 18, fontWeight: 900, color: '#FFFFFF' }}>
-                  Live Supply-Demand Ratio
+                  Partition Telemetry & Node State
                 </div>
                 <div style={{ fontSize: 14, color: '#FCA5A5', marginTop: 2 }}>
-                  100 Orders vs 20 Available Riders = 5.0x Severe Local Deficit.
+                  {orderCount} {entityLabel} tracked across {riderCount} active {providerLabel}.
                 </div>
               </div>
               <span style={{ fontSize: 20 }}>📊</span>
@@ -689,10 +689,10 @@ export const H3SpatialMapScene: React.FC<H3SpatialMapSceneProps> = ({
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 18, fontWeight: 900, color: '#FFFFFF' }}>
-                  Dynamic Pricing Engine Rule
+                  In-Memory State Resolution
                 </div>
                 <div style={{ fontSize: 14, color: '#6EE7B7', marginTop: 2 }}>
-                  Base Fee ₹30 + Rain Surge (+₹60) = ₹90 Dynamic Delivery Fee.
+                  O(1) in-memory key lookup replaces slow geographic bounding box queries.
                 </div>
               </div>
               <span style={{ fontSize: 20 }}>⚡</span>

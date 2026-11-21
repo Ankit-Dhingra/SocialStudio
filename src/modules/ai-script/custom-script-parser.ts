@@ -153,90 +153,169 @@ export function extractDynamicReelContext(obj: any): DynamicReelContext {
     'City-wide search crashes database',
     'Requires local dynamic pricing signal',
   ];
-  const verdict = 'Bottleneck: Static models fail during sudden demand spikes.';
+  const verdict = isFood || isRide
+    ? 'Bottleneck: Static distance models fail during sudden demand spikes.'
+    : 'Bottleneck: Direct uncoordinated database writes cause severe race conditions.';
 
   // 6. Solution Props (Scene 2)
-  const solutionTitle = isFood || isRide ? 'LOCATION-BASED DYNAMIC PRICING' : 'DISTRIBUTED IN-MEMORY SHARDING';
+  const solutionTitle = isFood || isRide
+    ? 'LOCATION-BASED DYNAMIC PRICING'
+    : 'DISTRIBUTED IN-MEMORY MUTEX COORDINATION';
   const solutionSubtitle = isFood || isRide
     ? 'Partitioning city into H3 hexagonal micro-zones'
-    : 'Partitioning high-throughput state into in-memory clusters';
+    : 'Coordinating high-throughput concurrent requests via in-memory locks';
   const hotHexId = '#88619A0A4';
-  const pipelineSteps: { label: string; description: string; status: 'completed' | 'active' | 'pending' }[] = [
-    { label: 'Micro-Zones (H3)', description: 'Partition city into O(1) cells', status: 'completed' },
-    { label: 'Live Telemetry', description: `Track ${metricACount} ${metricAName} vs ${metricBCount} ${metricBName}`, status: 'active' },
-    { label: 'Pricing Engine', description: `Calculates dynamic fee = ₹${surgeNum}`, status: 'pending' },
-  ];
+  const pipelineSteps: { label: string; description: string; status: 'completed' | 'active' | 'pending' }[] = isFood || isRide
+    ? [
+        { label: 'Micro-Zones (H3)', description: 'Partition city into O(1) cells', status: 'completed' },
+        { label: 'Live Telemetry', description: `Track ${metricACount} ${metricAName} vs ${metricBCount} ${metricBName}`, status: 'active' },
+        { label: 'Pricing Engine', description: `Calculates dynamic fee = ₹${surgeNum}`, status: 'pending' },
+      ]
+    : [
+        { label: 'Request Ingestion', description: 'Incoming concurrent client requests', status: 'completed' },
+        { label: 'In-Memory Mutex', description: `SET lock:${appName.toLowerCase()} NX PX coordination`, status: 'active' },
+        { label: 'Durable Persistence', description: 'Atomic database decrement & commit', status: 'pending' },
+      ];
 
   // 7. Tech Explained Stages (Scene 3)
-  const deepDiveStages = [
-    {
-      stagePill: 'STAGE 1/5 • TELEMETRY INGESTION',
-      stageTitle: 'Live Ingestion & Heartbeat Stream',
-      card1Tag: 'CLIENT TELEMETRY STREAM',
-      card1Title: 'GPS: 12.9352° N, 77.6245° E',
-      card1Desc: 'Status: ACTIVE & AVAILABLE 🟢 (Ping interval: 5 seconds)',
-      card1Badge: 'STREAMING',
-      card2Tag: 'INGESTION GATEWAY',
-      card2Title: 'Kafka Event Stream Buffer',
-      card2Desc: '15,000+ driver heartbeats/second with sub-10ms processing latency',
-      card2Badge: 'BUFFERED',
-    },
-    {
-      stagePill: 'STAGE 2/5 • SPATIAL INDEXING & MESH',
-      stageTitle: 'O(1) Spatial Hexagon Hashing',
-      card1Tag: 'UBER H3 SPATIAL INDEXING',
-      card1Title: 'h3.geoToH3(12.9352, 77.6245, res=8) ➔ "#88619A0A4"',
-      card1Desc: 'Coordinates map to in-memory 64-bit integer Hex ID in O(1) time.',
-      card1Badge: 'O(1) SPEED',
-      card2Tag: 'HONEYCOMB PARTITION MESH',
-      card2Title: 'Hex Cell #88619A0A4',
-      card2Desc: '3.0X Surge Hotspot isolated from neighboring 1.0X normal cells.',
-      card2Badge: 'ISOLATED',
-    },
-    {
-      stagePill: 'STAGE 3/5 • IN-MEMORY CACHE STATE',
-      stageTitle: 'Redis In-Memory Demand Telemetry',
-      card1Tag: 'REDIS IN-MEMORY CACHE',
-      card1Title: `Pending Orders: ${metricACount} | Available Riders: ${metricBCount}`,
-      card1Desc: `Demand Ratio: ${metricACount} ÷ ${metricBCount} = ${(metricACount / Math.max(1, metricBCount)).toFixed(1)} Orders / Rider`,
-      card1Badge: '< 1.8ms LATENCY',
-      card2Tag: 'IMBALANCE ALERT',
-      card2Title: 'Severe Local Deficit Detected',
-      card2Desc: 'Surge multiplier triggered to balance fleet distribution.',
-      card2Badge: 'DEFICIT ALERT',
-    },
-    {
-      stagePill: 'STAGE 4/5 • PRICING ENGINE FORMULA',
-      stageTitle: 'Dynamic Delivery Fee Calculation',
-      card1Tag: 'PRICING ENGINE EVALUATION',
-      card1Title: `Base Fee ₹${baseNum} + Rain ₹30 + Deficit ₹${surgeNum - baseNum - 30 > 0 ? surgeNum - baseNum - 30 : 30} = ₹${surgeNum}`,
-      card1Desc: `Calculates dynamic surge fee of ₹${surgeNum} instantly under 50ms.`,
-      card1Badge: `TOTAL: ₹${surgeNum}`,
-      card2Tag: 'CUSTOMER APP CHECKOUT',
-      card2Title: `Delivery Fee: ₹${surgeNum}`,
-      card2Desc: 'App displays updated fee with real-time rain surge notification.',
-      card2Badge: 'UPDATED',
-    },
-    {
-      stagePill: 'STAGE 5/5 • GHOST RIDER EDGE CASE',
-      stageTitle: 'Heartbeat Guard Against Ghost Riders',
-      card1Tag: 'CRITICAL ARCHITECTURAL CATCH',
-      card1Title: 'The "Ghost Rider" Stale Cache Bug',
-      card1Desc: 'Rider goes offline in rain ➔ Old GPS remains cached in Redis!',
-      card1Badge: 'BUG RISK',
-      card2Tag: 'ENGINEERING SAFEGUARD',
-      card2Title: 'Heartbeat TTL & Timestamp Verification',
-      card2Desc: 'If (now - last_ping) > 30s ➔ Evict rider from Redis pool instantly.',
-      card2Badge: 'VERIFIED ✅',
-    },
-  ];
+  const deepDiveStages = isFood || isRide
+    ? [
+        {
+          stagePill: 'STAGE 1/5 • TELEMETRY INGESTION',
+          stageTitle: 'Live Ingestion & Telemetry Stream',
+          card1Tag: 'CLIENT TELEMETRY STREAM',
+          card1Title: 'Streaming GPS & Status',
+          card1Desc: 'Status: ACTIVE & AVAILABLE 🟢 (Ping interval: 5 seconds)',
+          card1Badge: 'STREAMING',
+          card2Tag: 'INGESTION GATEWAY',
+          card2Title: 'Kafka Event Stream Buffer',
+          card2Desc: 'Ingests high-throughput heartbeats with sub-10ms processing latency',
+          card2Badge: 'BUFFERED',
+        },
+        {
+          stagePill: 'STAGE 2/5 • SPATIAL INDEXING & MESH',
+          stageTitle: 'O(1) Spatial Hexagon Hashing',
+          card1Tag: 'SPATIAL INDEXING',
+          card1Title: 'O(1) Spatial Hexagon Resolution',
+          card1Desc: 'Coordinates map to in-memory integer Hex ID in O(1) time.',
+          card1Badge: 'O(1) SPEED',
+          card2Tag: 'HONEYCOMB PARTITION MESH',
+          card2Title: 'Isolated Micro-Zone Cell',
+          card2Desc: 'Surge hotspot isolated from neighboring normal cells.',
+          card2Badge: 'ISOLATED',
+        },
+        {
+          stagePill: 'STAGE 3/5 • IN-MEMORY CACHE STATE',
+          stageTitle: 'In-Memory Demand Telemetry',
+          card1Tag: 'IN-MEMORY CACHE',
+          card1Title: `Pending ${metricAName}: ${metricACount} | Available ${metricBName}: ${metricBCount}`,
+          card1Desc: `Demand Ratio: ${metricACount} ÷ ${metricBCount} = ${(metricACount / Math.max(1, metricBCount)).toFixed(1)} ${metricAName} / ${metricBName}`,
+          card1Badge: '< 1.8ms LATENCY',
+          card2Tag: 'IMBALANCE ALERT',
+          card2Title: 'Local Deficit Detected',
+          card2Desc: 'Multiplier triggered to balance fleet distribution.',
+          card2Badge: 'DEFICIT ALERT',
+        },
+        {
+          stagePill: 'STAGE 4/5 • PRICING ENGINE FORMULA',
+          stageTitle: 'Dynamic Fee Calculation',
+          card1Tag: 'PRICING ENGINE EVALUATION',
+          card1Title: `Base Fee ₹${baseNum} + Surge (+₹${surgeNum - baseNum}) = ₹${surgeNum}`,
+          card1Desc: `Calculates dynamic fee of ₹${surgeNum} instantly under 50ms.`,
+          card1Badge: `TOTAL: ₹${surgeNum}`,
+          card2Tag: 'CUSTOMER APP CHECKOUT',
+          card2Title: `Updated Fee: ₹${surgeNum}`,
+          card2Desc: 'App displays updated fee with real-time surge notification.',
+          card2Badge: 'UPDATED',
+        },
+        {
+          stagePill: 'STAGE 5/5 • EDGE-CASE SAFEGUARD',
+          stageTitle: 'Heartbeat TTL & Freshness Guard',
+          card1Tag: 'CRITICAL ARCHITECTURAL CATCH',
+          card1Title: 'The Stale Cache Bug',
+          card1Desc: 'Offline node remains cached in memory if unhandled!',
+          card1Badge: 'BUG RISK',
+          card2Tag: 'ENGINEERING SAFEGUARD',
+          card2Title: 'Heartbeat TTL & Timestamp Verification',
+          card2Desc: 'If (now - last_ping) > 30s ➔ Evict from pool instantly.',
+          card2Badge: 'VERIFIED ✅',
+        },
+      ]
+    : [
+        {
+          stagePill: 'STAGE 1/5 • INGESTION & GATEWAY',
+          stageTitle: 'High-Throughput Ingestion Stream',
+          card1Tag: 'CLIENT REQUEST STREAM',
+          card1Title: `${appName} Ingestion Pipeline`,
+          card1Desc: 'Concurrent requests validated and routed with sub-10ms latency',
+          card1Badge: 'STREAMING',
+          card2Tag: 'INGESTION GATEWAY',
+          card2Title: 'API Gateway & Event Stream Buffer',
+          card2Desc: 'Buffers high traffic bursts with non-blocking backpressure management',
+          card2Badge: 'BUFFERED',
+        },
+        {
+          stagePill: 'STAGE 2/5 • PARTITIONING & ROUTING',
+          stageTitle: 'O(1) Resource Key Hashing',
+          card1Tag: 'PARTITION ROUTING',
+          card1Title: 'Resource Key Partitioning',
+          card1Desc: 'Direct in-memory hash mapping prevents full table lock contention',
+          card1Badge: 'O(1) SPEED',
+          card2Tag: 'MUTEX BOUNDARY',
+          card2Title: `Lock Key: lock:${appName.toLowerCase()}_123`,
+          card2Desc: 'Exclusive critical section guard isolated from other requests',
+          card2Badge: 'ISOLATED',
+        },
+        {
+          stagePill: 'STAGE 3/5 • IN-MEMORY MUTEX COORDINATION',
+          stageTitle: 'Distributed In-Memory Mutex Engine',
+          card1Tag: 'IN-MEMORY CACHE',
+          card1Title: `Atomic Key Guard: lock:${appName.toLowerCase()}`,
+          card1Desc: 'SET NX PX ensures only a single server acquires the lock',
+          card1Badge: '< 2ms LATENCY',
+          card2Tag: 'CONCURRENCY CONTROL',
+          card2Title: 'Zero Double-Allocation / Race Condition',
+          card2Desc: 'Parallel worker requests rejected or queued safely',
+          card2Badge: 'COORDINATED',
+        },
+        {
+          stagePill: 'STAGE 4/5 • CRITICAL SECTION EXECUTION',
+          stageTitle: 'Atomic State Mutation & Commit',
+          card1Tag: 'BUSINESS LOGIC',
+          card1Title: 'Safe State Mutation',
+          card1Desc: 'Critical database transaction runs exclusively under mutex lease',
+          card1Badge: 'COMMITTED',
+          card2Tag: 'PERSISTENCE',
+          card2Title: 'Durable State Acknowledged',
+          card2Desc: 'Prevents negative stock, double charge, or corrupted records',
+          card2Badge: 'VERIFIED ✅',
+        },
+        {
+          stagePill: 'STAGE 5/5 • LEASE AUTO-EXPIRY & FAILOVER',
+          stageTitle: 'TTL Guard Against Server Crashes',
+          card1Tag: 'CRITICAL ARCHITECTURAL CATCH',
+          card1Title: 'The Server Crash / Deadlock Risk',
+          card1Desc: 'Worker node crashes after lock acquisition before releasing key',
+          card1Badge: 'CRASH RISK',
+          card2Tag: 'ENGINEERING SAFEGUARD',
+          card2Title: 'Lease TTL Auto-Expiry in Memory',
+          card2Desc: 'Redis key automatically expires after TTL, freeing mutex for next worker',
+          card2Badge: 'SAFEGUARDED ✅',
+        },
+      ];
 
   // 8. Cheat Sheet & CTA (Scene 4)
-  const interviewPoints = [
-    'Dynamic pricing is driven by supply-demand elasticity, not distance alone',
-    'H3 spatial indexing converts coordinate lookups to O(1) hex IDs',
-    'Heartbeat TTL guards against stale ghost rider caches in Redis',
-  ];
+  const interviewPoints = isFood || isRide
+    ? [
+        'Dynamic pricing is driven by supply-demand elasticity, not static distance alone',
+        'Spatial indexing converts coordinate lookups to O(1) hex IDs',
+        'Heartbeat TTL guards against stale cache anomalies in memory',
+      ]
+    : [
+        'Decouple hot read/write paths using in-memory state coordination',
+        'Atomic distributed locks with lease TTL prevent crashes and deadlocks',
+        'Partition state by resource key to eliminate database-wide lock contention',
+      ];
 
   let channelName = 'Behind The Tech';
   let channelHandle = '@behindthestack';
@@ -378,34 +457,15 @@ export function convertCreatorScriptToStoryboard(obj: any, topicFallback = 'Cust
     let visualProps: Record<string, any> = {};
 
     if (item.section === 'hook') {
-      if (item.subIndex === 0 && isSurge) {
-        type = 'smartphoneMockup';
-        onScreenText = `${ctx.baseDeliveryFee} VS ${ctx.surgeDeliveryFee}? • SURGE PRICING`;
-        technicalKeyPoint = 'Client Dynamic Pricing Anomaly';
-        visualProps = {
-          headline: onScreenText,
-          subtext: ctx.surgeReason,
-          appName: ctx.appName,
-          appCategory: ctx.appCategory,
-          itemName: ctx.itemName,
-          itemPrice: ctx.itemPrice,
-          baseDeliveryFee: ctx.baseDeliveryFee,
-          surgeDeliveryFee: ctx.surgeDeliveryFee,
-          surgeMultiplier: ctx.surgeMultiplier,
-          surgeReason: ctx.surgeReason,
-          ctaText: `LIVE ANOMALY • ${ctx.appName}`,
-        };
-      } else {
-        type = 'hook';
-        onScreenText = shortTitle;
-        technicalKeyPoint = 'The Engineering Mystery';
-        visualProps = {
-          headline: shortTitle,
-          questionKicker: item.narration.slice(0, 110),
-          badgeText: isRedis ? 'CONCURRENCY BUG' : isSurge ? 'DYNAMIC PRICING' : isKafka ? 'STREAMING PUZZLE' : isDatabase ? 'DATABASE INTERNALS' : 'SYSTEM DESIGN',
-          accentColor: '#00F2FE',
-        };
-      }
+      type = 'hook';
+      onScreenText = shortTitle;
+      technicalKeyPoint = 'The Engineering Mystery';
+      visualProps = {
+        headline: shortTitle,
+        questionKicker: item.narration.slice(0, 110),
+        badgeText: isRedis ? 'CONCURRENCY BUG' : isSurge ? 'DYNAMIC PRICING' : isKafka ? 'STREAMING PUZZLE' : isDatabase ? 'DATABASE INTERNALS' : 'SYSTEM DESIGN',
+        accentColor: '#00F2FE',
+      };
     } else if (item.section === 'problem') {
       if (item.subIndex === 0) {
         if (/race\s*condition|concurrency|simultaneous|double\s*booking|last\s*seat|conflict/i.test(textLower) || isRedis) {

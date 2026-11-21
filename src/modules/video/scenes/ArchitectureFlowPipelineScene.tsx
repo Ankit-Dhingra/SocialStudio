@@ -213,564 +213,258 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
             zIndex: 30,
           }}
         >
-          {/* ========================================================================= */}
-          {/* CUT 3.1: RIDER GPS INGESTION (Frames 0 to 360)                            */}
-          {/* ========================================================================= */}
-          {stageIndex === 0 && (
+          {/* Universal Stage Cards (100% Dynamic & Data-Driven) */}
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 20,
+              transform: `scale(${stageSpring})`,
+            }}
+          >
+            {/* Stage Primary Card (Card 1) */}
             <div
               style={{
-                width: '100%',
+                background:
+                  stageIndex === 0
+                    ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%)'
+                    : stageIndex === 1
+                    ? 'linear-gradient(135deg, rgba(0, 242, 254, 0.16) 0%, rgba(15, 23, 42, 0.95) 100%)'
+                    : stageIndex === 2
+                    ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%)'
+                    : stageIndex === 3
+                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%)'
+                    : 'linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                border: `2px solid ${
+                  stageIndex === 0
+                    ? 'rgba(56, 189, 248, 0.6)'
+                    : stageIndex === 1
+                    ? 'rgba(0, 242, 254, 0.6)'
+                    : stageIndex === 2
+                    ? 'rgba(245, 158, 11, 0.6)'
+                    : stageIndex === 3
+                    ? 'rgba(16, 185, 129, 0.6)'
+                    : 'rgba(239, 68, 68, 0.6)'
+                }`,
+                borderRadius: 28,
+                padding: '24px 28px',
+                boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)',
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 20,
-                transform: `scale(${stageSpring})`,
+                alignItems: 'center',
+                justifyContent: 'space-between',
               }}
             >
-              {/* Rider Mobile App Telemetry Card */}
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                  border: '2px solid rgba(56, 189, 248, 0.6)',
-                  borderRadius: 28,
-                  padding: '24px 28px',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(56, 189, 248, 0.25)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                  <div
-                    style={{
-                      width: 68,
-                      height: 68,
-                      borderRadius: 20,
-                      background: 'rgba(56, 189, 248, 0.2)',
-                      border: '1.5px solid #38BDF8',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 34,
-                      boxShadow: '0 0 25px rgba(56, 189, 248, 0.5)',
-                    }}
-                  >
-                    🛵
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: '#38BDF8', letterSpacing: 2 }}>
-                      RIDER MOBILE APP (CLIENT)
-                    </div>
-                    <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
-                      GPS: 12.9352° N, 77.6245° E
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#94A3B8', marginTop: 4 }}>
-                      Availability Status: <span style={{ color: '#34D399' }}>ACTIVE & AVAILABLE 🟢</span>
-                    </div>
-                  </div>
-                </div>
-
+              <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
                 <div
                   style={{
-                    background: 'rgba(56, 189, 248, 0.15)',
-                    border: '1px solid #38BDF8',
-                    borderRadius: 16,
-                    padding: '10px 16px',
-                    textAlign: 'center',
+                    width: 68,
+                    height: 68,
+                    borderRadius: 20,
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1.5px solid rgba(255, 255, 255, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 34,
                   }}
                 >
-                  <div style={{ fontSize: 12, fontWeight: 800, color: '#94A3B8' }}>PING INTERVAL</div>
-                  <div style={{ fontSize: 20, fontWeight: 900, color: '#38BDF8', marginTop: 2 }}>⚡ 5 SECONDS</div>
+                  {stageIndex === 0 ? '📱' : stageIndex === 1 ? '⚡' : stageIndex === 2 ? '💾' : stageIndex === 3 ? '⚙️' : '🛡️'}
+                </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 900,
+                      color:
+                        stageIndex === 0
+                          ? '#38BDF8'
+                          : stageIndex === 1
+                          ? '#00F2FE'
+                          : stageIndex === 2
+                          ? '#FCD34D'
+                          : stageIndex === 3
+                          ? '#34D399'
+                          : '#FCA5A5',
+                      letterSpacing: 2,
+                    }}
+                  >
+                    {activeStage?.card1Tag ||
+                      (stageIndex === 0
+                        ? 'CLIENT TELEMETRY STREAM'
+                        : stageIndex === 1
+                        ? 'SHARDING & PARTITION MESH'
+                        : stageIndex === 2
+                        ? 'IN-MEMORY CACHE STATE'
+                        : stageIndex === 3
+                        ? 'CALCULATION ENGINE'
+                        : 'EDGE-CASE SAFEGUARD')}
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
+                    {activeStage?.card1Title ||
+                      (stageIndex === 0
+                        ? 'Concurrent Request Stream'
+                        : stageIndex === 1
+                        ? 'O(1) Spatial Resolution'
+                        : stageIndex === 2
+                        ? 'Sub-Millisecond Mutex'
+                        : stageIndex === 3
+                        ? 'Atomic State Transition'
+                        : 'Lease TTL Expiry Guard')}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#94A3B8', marginTop: 4 }}>
+                    {activeStage?.card1Desc ||
+                      (stageIndex === 0
+                        ? 'Status: ACTIVE & AVAILABLE 🟢 (Ping interval: 5 seconds)'
+                        : stageIndex === 1
+                        ? 'Requests map to partitioned nodes/keys without full-table scans.'
+                        : stageIndex === 2
+                        ? 'Atomic in-memory lock coordinates worker threads safely.'
+                        : stageIndex === 3
+                        ? 'State validated and mutated in-memory under lock guard.'
+                        : 'If node crashes ungracefully, Redis evicts lock to prevent deadlocks.')}
+                  </div>
                 </div>
               </div>
 
-              {/* Animated Stream Beam into Gateway */}
               <div
                 style={{
-                  height: 60,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: 16,
+                  padding: '10px 16px',
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#94A3B8' }}>STATUS</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
+                  {activeStage?.card1Badge ||
+                    (stageIndex === 0
+                      ? 'STREAMING'
+                      : stageIndex === 1
+                      ? 'O(1) SPEED'
+                      : stageIndex === 2
+                      ? '< 2ms LATENCY'
+                      : stageIndex === 3
+                      ? 'COMMITTED'
+                      : 'SAFEGUARDED ✅')}
+                </div>
+              </div>
+            </div>
+
+            {/* Animated Stream Beam */}
+            <div
+              style={{
+                height: 50,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  width: '70%',
+                  height: 4,
+                  background: 'linear-gradient(90deg, #38BDF8 0%, #10B981 100%)',
+                  boxShadow: '0 0 15px #38BDF8',
                   position: 'relative',
                 }}
               >
                 <div
                   style={{
-                    width: '70%',
-                    height: 4,
-                    background: 'linear-gradient(90deg, #38BDF8 0%, #10B981 100%)',
-                    boxShadow: '0 0 15px #38BDF8',
-                    position: 'relative',
+                    position: 'absolute',
+                    top: '50%',
+                    left: `${((stageFrame * 4) % 100)}%`,
+                    transform: 'translate(-50%, -50%)',
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: '#FFFFFF',
+                    boxShadow: '0 0 20px #00F2FE, 0 0 40px #00F2FE',
                   }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: `${((stageFrame * 4) % 100)}%`,
-                      transform: 'translate(-50%, -50%)',
-                      width: 24,
-                      height: 24,
-                      borderRadius: '50%',
-                      background: '#FFFFFF',
-                      boxShadow: '0 0 20px #00F2FE, 0 0 40px #00F2FE',
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Ingestion Gateway Card */}
-              <div
-                style={{
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  border: '1.5px solid rgba(16, 185, 129, 0.5)',
-                  borderRadius: 24,
-                  padding: '20px 28px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  boxShadow: '0 15px 40px rgba(0, 0, 0, 0.7)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontSize: 32 }}>📡</span>
-                  <div>
-                    <div style={{ fontSize: 18, fontWeight: 900, color: '#34D399' }}>
-                      INGESTION GATEWAY / KAFKA STREAM
-                    </div>
-                    <div style={{ fontSize: 14, color: '#94A3B8', marginTop: 2 }}>
-                      Ingests 15,000+ driver heartbeats/second with sub-10ms processing latency
-                    </div>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    background: '#10B981',
-                    color: '#FFFFFF',
-                    padding: '6px 16px',
-                    borderRadius: 999,
-                    fontSize: 13,
-                    fontWeight: 900,
-                  }}
-                >
-                  BUFFERED
-                </div>
+                />
               </div>
             </div>
-          )}
 
-          {/* ========================================================================= */}
-          {/* CUT 3.2: UBER H3 SPATIAL INDEXING (Frames 360 to 750)                     */}
-          {/* ========================================================================= */}
-          {stageIndex === 1 && (
+            {/* Stage Secondary Card (Card 2) */}
             <div
               style={{
-                width: '100%',
+                background: 'rgba(15, 23, 42, 0.95)',
+                border: '1.5px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: 24,
+                padding: '20px 28px',
                 display: 'flex',
-                flexDirection: 'column',
-                gap: 20,
-                transform: `scale(${stageSpring})`,
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                boxShadow: '0 15px 40px rgba(0, 0, 0, 0.7)',
               }}
             >
-              {/* Formula & Coordinate Mapping Card */}
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.16) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                  border: '2px solid rgba(0, 242, 254, 0.6)',
-                  borderRadius: 28,
-                  padding: '24px 28px',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 242, 254, 0.3)',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <div style={{ fontSize: 15, fontWeight: 900, color: '#00F2FE', letterSpacing: 2 }}>
-                    UBER H3 SPATIAL INDEXING
-                  </div>
-                  <div
-                    style={{
-                      background: '#00F2FE',
-                      color: '#0F172A',
-                      fontWeight: 900,
-                      fontSize: 14,
-                      padding: '4px 14px',
-                      borderRadius: 999,
-                    }}
-                  >
-                    O(1) RESOLUTION
-                  </div>
-                </div>
-
-                {/* Spatial Hash Equation */}
-                <div
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.7)',
-                    borderLeft: '5px solid #00F2FE',
-                    borderRadius: 16,
-                    padding: '16px 20px',
-                    fontFamily: 'monospace',
-                    fontSize: 22,
-                    color: '#E0F2FE',
-                    fontWeight: 800,
-                  }}
-                >
-                  h3.geoToH3(12.9352, 77.6245, res=8) ➔ <span style={{ color: '#00F2FE' }}>"#88619A0A4"</span>
-                </div>
-
-                <div style={{ fontSize: 15, color: '#94A3B8', marginTop: 14, lineHeight: 1.4 }}>
-                  Instead of querying polygons or radius distances, coordinates instantly map to an in-memory 64-bit integer Hex ID.
-                </div>
-              </div>
-
-              {/* Hexagon Lattice Visual Display */}
-              <div
-                style={{
-                  background: 'rgba(10, 15, 30, 0.9)',
-                  border: '1.5px solid rgba(56, 189, 248, 0.3)',
-                  borderRadius: 24,
-                  padding: '20px 24px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-around',
-                }}
-              >
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 36 }}>⬡</div>
-                  <div style={{ fontSize: 13, color: '#64748B', fontFamily: 'monospace' }}>#88619A0A1</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#38BDF8', marginTop: 2 }}>1.0x Normal</div>
-                </div>
-
-                <div
-                  style={{
-                    textAlign: 'center',
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    border: '2px solid #EF4444',
-                    borderRadius: 18,
-                    padding: '12px 20px',
-                    boxShadow: '0 0 30px rgba(239, 68, 68, 0.5)',
-                  }}
-                >
-                  <div style={{ fontSize: 44, color: '#EF4444' }}>⬢</div>
-                  <div style={{ fontSize: 15, color: '#FFFFFF', fontWeight: 900, fontFamily: 'monospace' }}>#88619A0A4</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: '#EF4444', marginTop: 4 }}>3.0X SURGE HOTSPOT</div>
-                </div>
-
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 36 }}>⬡</div>
-                  <div style={{ fontSize: 13, color: '#64748B', fontFamily: 'monospace' }}>#88619A0A2</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#38BDF8', marginTop: 2 }}>1.1x Normal</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* CUT 3.3: REDIS IN-MEMORY TELEMETRY (Frames 750 to 1140)                   */}
-          {/* ========================================================================= */}
-          {stageIndex === 2 && (
-            <div
-              style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 20,
-                transform: `scale(${stageSpring})`,
-              }}
-            >
-              {/* Redis Cluster Header Card */}
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                  border: '2px solid rgba(239, 68, 68, 0.6)',
-                  borderRadius: 28,
-                  padding: '22px 28px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(239, 68, 68, 0.3)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ fontSize: 36 }}>⚡</span>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: '#EF4444', letterSpacing: 2 }}>
-                      REDIS IN-MEMORY CACHE
-                    </div>
-                    <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
-                      Hex Cell Key: `zone:88619A0A4`
-                    </div>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    background: '#10B981',
-                    color: '#FFFFFF',
-                    padding: '8px 18px',
-                    borderRadius: 999,
-                    fontWeight: 900,
-                    fontSize: 16,
-                    boxShadow: '0 0 15px rgba(16, 185, 129, 0.5)',
-                  }}
-                >
-                  ⚡ &lt; 1.8ms LATENCY
-                </div>
-              </div>
-
-              {/* Dual Counter Gauges: 100 Orders vs 20 Riders */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-                {/* Orders Card */}
-                <div
-                  style={{
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '2px solid #EF4444',
-                    borderRadius: 24,
-                    padding: '24px 20px',
-                    textAlign: 'center',
-                    boxShadow: '0 0 25px rgba(239, 68, 68, 0.3)',
-                  }}
-                >
-                  <span style={{ fontSize: 32 }}>📦</span>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: '#FCA5A5', letterSpacing: 1.5, marginTop: 4 }}>
-                    PENDING ORDERS
-                  </div>
-                  <div style={{ fontSize: 52, fontWeight: 900, color: '#FFFFFF', marginTop: 4 }}>
-                    100
-                  </div>
-                  <div style={{ fontSize: 13, color: '#EF4444', fontWeight: 800, marginTop: 4 }}>
-                    🔥 HIGH DEMAND SPIKE
-                  </div>
-                </div>
-
-                {/* Riders Card */}
-                <div
-                  style={{
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '2px solid #10B981',
-                    borderRadius: 24,
-                    padding: '24px 20px',
-                    textAlign: 'center',
-                    boxShadow: '0 0 25px rgba(16, 185, 129, 0.3)',
-                  }}
-                >
-                  <span style={{ fontSize: 32 }}>🛵</span>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: '#A7F3D0', letterSpacing: 1.5, marginTop: 4 }}>
-                    AVAILABLE RIDERS
-                  </div>
-                  <div style={{ fontSize: 52, fontWeight: 900, color: '#FFFFFF', marginTop: 4 }}>
-                    20
-                  </div>
-                  <div style={{ fontSize: 13, color: '#10B981', fontWeight: 800, marginTop: 4 }}>
-                    🌧️ SEVERE DEFICIT
-                  </div>
-                </div>
-              </div>
-
-              {/* Deficit Banner */}
-              <div
-                style={{
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  border: '1.5px solid #F59E0B',
-                  borderRadius: 18,
-                  padding: '14px 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <span style={{ fontSize: 16, fontWeight: 800, color: '#FCD34D' }}>
-                  IMBALANCE RATIO: 100 ÷ 20 = 5.0 Orders / Rider
-                </span>
-                <span
-                  style={{
-                    background: '#F59E0B',
-                    color: '#0F172A',
-                    fontWeight: 900,
-                    fontSize: 13,
-                    padding: '4px 12px',
-                    borderRadius: 8,
-                  }}
-                >
-                  SURGE TRIGGERED
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* CUT 3.4: PRICING ENGINE MATH FORMULA (Frames 1140 to 1500)                 */}
-          {/* ========================================================================= */}
-          {stageIndex === 3 && (
-            <div
-              style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 20,
-                transform: `scale(${stageSpring})`,
-              }}
-            >
-              {/* Math Formula Card */}
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                  border: '2px solid rgba(16, 185, 129, 0.6)',
-                  borderRadius: 28,
-                  padding: '26px 30px',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 35px rgba(16, 185, 129, 0.3)',
-                }}
-              >
-                <div style={{ fontSize: 15, fontWeight: 900, color: '#34D399', letterSpacing: 2, marginBottom: 14 }}>
-                  PRICING ENGINE FORMULA EVALUATION
-                </div>
-
-                {/* Calculation Rows */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, color: '#E2E8F0', fontWeight: 700 }}>
-                    <span>📍 Base Delivery Fee (Standard)</span>
-                    <span style={{ fontWeight: 900, color: '#FFFFFF' }}>₹30</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, color: '#60A5FA', fontWeight: 700 }}>
-                    <span>🌧️ Rain & Weather Condition Surcharge</span>
-                    <span style={{ fontWeight: 900 }}>+₹30</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, color: '#F87171', fontWeight: 700 }}>
-                    <span>⚡ 5.0x Rider Supply Deficit Multiplier</span>
-                    <span style={{ fontWeight: 900 }}>+₹30</span>
-                  </div>
-
-                  <div style={{ height: 2, background: 'rgba(255, 255, 255, 0.2)', margin: '6px 0' }} />
-
-                  {/* Final Output */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 24, fontWeight: 900, color: '#34D399' }}>
-                      TOTAL CUSTOMER FEE SHOWN:
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 48,
-                        fontWeight: 900,
-                        color: '#FFFFFF',
-                        background: '#10B981',
-                        padding: '4px 24px',
-                        borderRadius: 16,
-                        boxShadow: '0 0 25px rgba(16, 185, 129, 0.6)',
-                      }}
-                    >
-                      ₹90
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* App UI Feedback Notice */}
-              <div
-                style={{
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  border: '1.5px solid #38BDF8',
-                  borderRadius: 18,
-                  padding: '16px 22px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                }}
-              >
-                <span style={{ fontSize: 28 }}>📱</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <span style={{ fontSize: 32 }}>📡</span>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF' }}>
-                    Customer App Displays: ₹90 Delivery Fee
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#34D399' }}>
+                    {activeStage?.card2Tag ||
+                      (stageIndex === 0
+                        ? 'INGESTION GATEWAY'
+                        : stageIndex === 1
+                        ? 'ISOLATED RESOURCE SCOPE'
+                        : stageIndex === 2
+                        ? 'MUTEX COORDINATION'
+                        : stageIndex === 3
+                        ? 'DURABLE PERSISTENCE'
+                        : 'FAULT TOLERANCE')}
                   </div>
-                  <div style={{ fontSize: 13, color: '#94A3B8', marginTop: 2 }}>
-                    Base ₹30 + Extra ₹60 calculated instantly under 50ms based on local conditions
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* CUT 3.5: GHOST RIDER CACHE BUG (Frames 1500 to end)                      */}
-          {/* ========================================================================= */}
-          {stageIndex === 4 && (
-            <div
-              style={{
-                width: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 20,
-                transform: `scale(${stageSpring})`,
-              }}
-            >
-              {/* Warning Alert Card */}
-              <div
-                style={{
-                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(15, 23, 42, 0.98) 100%)',
-                  border: '2px solid #EF4444',
-                  borderRadius: 28,
-                  padding: '24px 28px',
-                  boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 45px rgba(239, 68, 68, 0.5)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-                  <span style={{ fontSize: 36 }}>⚠️</span>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: '#EF4444', letterSpacing: 2 }}>
-                      THE CRITICAL ARCHITECTURAL CATCH
-                    </div>
-                    <div style={{ fontSize: 26, fontWeight: 900, color: '#FFFFFF', marginTop: 2 }}>
-                      The "Ghost Rider" Stale Cache Bug
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.7)',
-                    borderRadius: 16,
-                    padding: '16px 20px',
-                    borderLeft: '5px solid #EF4444',
-                  }}
-                >
-                  <div style={{ fontSize: 16, color: '#FCA5A5', fontWeight: 700 }}>
-                    Rider goes offline in rain ➔ Old GPS remains cached in Redis!
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#FFFFFF', marginTop: 2 }}>
+                    {activeStage?.card2Title ||
+                      (stageIndex === 0
+                        ? 'API Gateway & Event Stream'
+                        : stageIndex === 1
+                        ? 'Partition Key Isolation'
+                        : stageIndex === 2
+                        ? 'Zero Race Condition Contention'
+                        : stageIndex === 3
+                        ? 'Guaranteed Exactly-Once State'
+                        : 'Auto-Recovery on Worker Crash')}
                   </div>
                   <div style={{ fontSize: 14, color: '#94A3B8', marginTop: 4 }}>
-                    System mistakenly counts offline riders as available, suppressing needed surge!
+                    {activeStage?.card2Desc ||
+                      (stageIndex === 0
+                        ? 'Buffers high-throughput requests with sub-10ms processing latency'
+                        : stageIndex === 1
+                        ? 'Critical section bounded to specific key, isolating other traffic'
+                        : stageIndex === 2
+                        ? 'Competing workers queue or fail fast without db race conditions'
+                        : stageIndex === 3
+                        ? 'Durable store updated only after atomic in-memory validation'
+                        : 'Automatic lease expiry guarantees system never permanently blocks')}
                   </div>
                 </div>
               </div>
-
-              {/* Safeguard Solution Card */}
               <div
                 style={{
-                  background: 'rgba(15, 23, 42, 0.95)',
-                  border: '2px solid #10B981',
-                  borderRadius: 24,
-                  padding: '22px 28px',
-                  boxShadow: '0 0 35px rgba(16, 185, 129, 0.3)',
+                  background: '#10B981',
+                  color: '#FFFFFF',
+                  padding: '6px 16px',
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 900,
+                  whiteSpace: 'nowrap',
                 }}
               >
-                <div style={{ fontSize: 14, fontWeight: 900, color: '#34D399', letterSpacing: 2, marginBottom: 8 }}>
-                  THE ENGINEERING SOLUTION
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: '#FFFFFF', marginBottom: 12 }}>
-                  Heartbeat TTL & Timestamp Verification
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 15, color: '#E2E8F0', fontWeight: 700 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span>⏱️</span>
-                    <span>Every GPS ping carries high-precision timestamp & active delivery flag</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span>🗑️</span>
-                    <span>If (now - last_heartbeat) &gt; 30s ➔ Evict rider from Redis pool instantly</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span>✅</span>
-                    <span>Guarantees surge pricing always reflects real-world availability!</span>
-                  </div>
-                </div>
+                {activeStage?.card2Badge ||
+                  (stageIndex === 0
+                    ? 'BUFFERED'
+                    : stageIndex === 1
+                    ? 'ISOLATED'
+                    : stageIndex === 2
+                    ? 'COORDINATED'
+                    : stageIndex === 3
+                    ? 'VERIFIED ✅'
+                    : 'RESILIENT')}
               </div>
             </div>
-          )}
+          </div>
         </div>
       </AbsoluteFill>
     );
@@ -1148,7 +842,7 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
         </div>
       </div>
 
-      {/* NODE 5: KAFKA REAL-TIME GPS STREAM (Bottom, Center: 540, 1340) */}
+      {/* NODE 5: ASYNC EVENT STREAM / QUEUE (Bottom, Center: 540, 1340) */}
       <div
         style={{
           position: 'absolute',
@@ -1178,8 +872,12 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
         >
           <span style={{ fontSize: 40 }}>📡</span>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#C084FC' }}>KAFKA EVENT STREAM</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#E9D5FF' }}>🛵 10,000+ Driver GPS Pings / Sec</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#C084FC' }}>
+              {steps?.[4]?.label || 'ASYNC EVENT STREAM'}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#E9D5FF' }}>
+              {steps?.[4]?.description || 'High-Throughput Background Stream'}
+            </div>
           </div>
         </div>
       </div>
@@ -1212,10 +910,10 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
           <span style={{ fontSize: 32 }}>⚡</span>
           <div>
             <div style={{ fontSize: 22, fontWeight: 900, color: '#34D399', letterSpacing: 1.5 }}>
-              READ PATH HITS REDIS IN 4MS • ZERO DISK LOCKS
+              {subtitle || 'IN-MEMORY COORDINATION • ZERO DISK CONTENTION'}
             </div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#94A3B8', marginTop: 2 }}>
-              Writes happen asynchronously in background via Kafka. User never waits on SQL!
+              {steps?.[2]?.description || 'Atomic operations execute in memory. State is synchronized safely.'}
             </div>
           </div>
         </div>

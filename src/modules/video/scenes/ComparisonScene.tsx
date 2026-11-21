@@ -20,21 +20,21 @@ interface ComparisonSceneProps {
 }
 
 export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
-  leftTitle = 'THE DISTANCE MYTH',
-  leftCode = 'delivery_fee = distance_km * ₹10',
-  leftPoints = ['Assumes static conditions', 'Fails during heavy rain or peak dinner', 'Riders get zero incentive to move'],
-  rightTitle = 'DYNAMIC FLEET INCENTIVE',
-  rightCode = 'delivery_fee = base_fee * surge_mult(hex_id)',
-  rightPoints = ['Real-time 1.8X multiplier', 'Attracts 30+ idle drivers to your street', 'Fleet rebalanced in < 4 minutes'],
-  verdict = 'Surge fee is not distance. It is an algorithmic incentive to move drivers.',
-  onScreenText = 'DISTANCE vs REAL-TIME SUPPLY & DEMAND',
-  metricAName = 'Orders',
+  leftTitle = 'NAIVE IMPLEMENTATION',
+  leftCode = 'SELECT * FROM resource WHERE id = 101 FOR UPDATE;',
+  leftPoints = ['Direct synchronous disk lock', 'Contention spikes exponentially under load', 'Fails under high concurrent traffic'],
+  rightTitle = 'ATOMIC IN-MEMORY MUTEX',
+  rightCode = 'SET lock:resource uuid NX PX 10000',
+  rightPoints = ['Sub-millisecond Redis coordination', 'Prevents race conditions & double-allocation', 'Automatic lease TTL prevents deadlocks'],
+  verdict = 'Atomic in-memory checks eliminate race conditions without database locks.',
+  onScreenText = 'NAIVE SQL SCAN vs DISTRIBUTED MUTEX',
+  metricAName = 'Requests',
   metricACount = 100,
-  metricBName = 'Riders',
+  metricBName = 'Workers',
   metricBCount = 20,
   deficitRatio,
-  stampTitle = '❌ CITY-WIDE SCAN FAILED',
-  stampSubtitle = 'Too Expensive & Latency Chokes Database!',
+  stampTitle = '❌ CONCURRENCY COLLISION',
+  stampSubtitle = 'Database Lock Contention & Bottleneck!',
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -243,7 +243,7 @@ export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
               }}
             />
 
-            {/* 20 Green Rider Dots */}
+            {/* 20 Glowing Distributed Worker Nodes */}
             {Array.from({ length: 20 }).map((_, i) => {
               const angle = (i / 20) * Math.PI * 2;
               const dist = 70 + (i % 3) * 35;
@@ -251,16 +251,25 @@ export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
               const y = Math.sin(angle) * dist;
               return (
                 <div
-                  key={`rider-${i}`}
+                  key={`worker-node-${i}`}
                   style={{
                     position: 'absolute',
                     transform: `translate(${x}px, ${y}px)`,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 4,
+                    justifyContent: 'center',
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>🛵</span>
+                  <div
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: '50%',
+                      background: '#34D399',
+                      boxShadow: '0 0 12px #34D399, 0 0 24px rgba(52, 211, 153, 0.5)',
+                      border: '1.5px solid #FFFFFF',
+                    }}
+                  />
                 </div>
               );
             })}
@@ -268,8 +277,8 @@ export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
             {/* Center Hot Demand Cluster */}
             <div
               style={{
-                width: 110,
-                height: 110,
+                width: 120,
+                height: 120,
                 borderRadius: '50%',
                 background: 'radial-gradient(circle, rgba(239, 68, 68, 0.5) 0%, rgba(239, 68, 68, 0.1) 70%)',
                 border: '2px solid #EF4444',
@@ -281,7 +290,7 @@ export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
                 zIndex: 10,
               }}
             >
-              <span style={{ fontSize: 24 }}>📦</span>
+              <span style={{ fontSize: 24 }}>⚡</span>
               <span style={{ fontSize: 13, fontWeight: 900, color: '#FFFFFF' }}>{metricACount} {String(metricAName).toUpperCase()}</span>
             </div>
 
@@ -337,7 +346,7 @@ export const ComparisonScene: React.FC<ComparisonSceneProps> = ({
           >
             <span style={{ fontSize: 24 }}>💡</span>
             <span style={{ fontSize: 17, fontWeight: 700, color: '#E2E8F0' }}>
-              Distance alone cannot detect that 100 orders are chasing just 20 riders.
+              {verdict || `${metricACount} ${metricAName} competing for ${metricBCount} ${metricBName} causes severe lock contention.`}
             </span>
           </div>
         </div>

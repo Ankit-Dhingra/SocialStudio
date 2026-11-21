@@ -269,7 +269,6 @@ export function buildTopicGroundedFallbackScenes(
   fullText: string = '',
 ): any[] {
   const allText = `${topic} ${angle || ''} ${fullText}`;
-  const isSurge = /surge|zomato|uber|delivery|food|ride|cab|fare|pricing/i.test(allText);
   const isEventLoop = /event\s*loop|microtask|macrotask|call\s*stack|libuv|node(?:\.js)?|javascript|v8|async/i.test(allText);
   const isDatabase = /database|postgres|mysql|sqlite|b-tree|lsm|index|caching|disk|storage|acid|wal/i.test(allText);
 
@@ -294,173 +293,7 @@ export function buildTopicGroundedFallbackScenes(
     visualProps: Record<string, any>;
   }>;
 
-  if (isSurge) {
-    sceneTemplates = [
-      {
-        type: 'smartphoneMockup',
-        keyPoint: 'Surge delivery fee jump from ₹30 to ₹80',
-        onScreenText: '₹30 vs ₹80? • Dynamic Surge Pricing',
-        visualProps: {
-          appName: 'ZOMATO',
-          itemName: 'Royal Chicken Dum Biryani',
-          itemPrice: '₹300',
-          baseDeliveryFee: '₹30',
-          surgeDeliveryFee: '₹80',
-          surgeMultiplier: '2.7X',
-          surgeReason: 'HIGH DEMAND • 120+ ACTIVE ORDERS',
-        },
-      },
-      {
-        type: 'h3SpatialMap',
-        keyPoint: 'Naive Radius Scan • Circle Range Search',
-        onScreenText: 'Naive Circle Range Scan • O(N) Disk Latency',
-        visualProps: {
-          mode: 'naive-radius',
-          title: 'Naive 5km Circle Range Scan',
-          subtitle: 'PostgreSQL Haversine Formula Bottleneck (450ms)',
-          orderCount: 95,
-          riderCount: 14,
-        },
-      },
-      {
-        type: 'comparison',
-        keyPoint: 'Naive Disk Search vs Spatial Indexing',
-        onScreenText: 'Naive Full Scan vs Hexagon Grid',
-        visualProps: {
-          leftTitle: 'Naive SQL Full-Scan',
-          rightTitle: 'Uber H3 Geospatial Grid',
-          leftPoints: [
-            'O(N) Haversine distance math',
-            'Disk I/O latency spikes under load',
-            'Non-equidistant boundary flaws',
-          ],
-          rightPoints: [
-            'O(1) Hexagon index resolution',
-            'In-memory Redis cached lookups',
-            'Equidistant 6-neighbor lookups',
-          ],
-          verdict: 'H3 Spatial Indexing scales to millions of requests',
-        },
-      },
-      {
-        type: 'h3SpatialMap',
-        keyPoint: 'Uber H3 Hexagonal Spatial Indexing',
-        onScreenText: 'H3 Hexagonal Mesh • Equidistant Neighbors',
-        visualProps: {
-          mode: 'hex-grid',
-          hotHexId: '88619A0A4',
-          orderCount: 84,
-          riderCount: 12,
-          subtitle: 'Uber H3 Geospatial Indexing',
-        },
-      },
-      {
-        type: 'architecturePipeline',
-        keyPoint: 'Redis sub-millisecond in-memory cache pipeline',
-        onScreenText: 'Data Pipeline • Sub-Millisecond Redis Reads',
-        visualProps: {
-          title: 'Dynamic Pricing Data Pipeline',
-          subtitle: 'Aggregated demand per Hex ID via in-memory cache',
-          redisLatencyMs: 2,
-          atomicCommand: 'HGETALL surge:hex:88619A0A4',
-          steps: [
-            { label: 'Mobile App', description: 'Order request dispatched', status: 'completed' },
-            { label: 'API Gateway', description: 'H3 Geo-hash resolution', status: 'completed' },
-            { label: 'Redis Cache', description: 'Sub-millisecond supply lookup', status: 'active' },
-            { label: 'Async Worker', description: 'Dynamic pricing engine', status: 'completed' },
-          ],
-        },
-      },
-      {
-        type: 'requestFlow',
-        keyPoint: 'End-to-End Microsecond Request Flow',
-        onScreenText: 'Request Lifecycle • Microsecond Latency',
-        visualProps: {
-          title: 'Surge Price Calculation Lifecycle',
-          steps: [
-            { label: '1. GPS Coordinates', description: 'Lat/Long captured from client', cue: 'coordinates' },
-            { label: '2. H3 Cell ID', description: 'Resolved to 64-bit integer index', cue: 'H3' },
-            { label: '3. Redis Aggregate', description: 'Active orders and supply retrieved', cue: 'Redis' },
-            { label: '4. Dynamic Fee Quote', description: 'Final calculated quote returned to app', cue: 'quote' },
-          ],
-        },
-      },
-      {
-        type: 'h3SpatialMap',
-        keyPoint: 'Stale GPS & Offline Rider Detection',
-        onScreenText: 'Edge Case • Stale GPS & Heartbeat Filter',
-        visualProps: {
-          mode: 'stale-heartbeat',
-          hotHexId: '88619A0A4',
-          orderCount: 60,
-          riderCount: 2,
-          subtitle: 'Disconnected driver heartbeats filtered from live supply pool',
-        },
-      },
-      {
-        type: 'raceCondition',
-        keyPoint: 'Concurrent Worker Mutex Conflict',
-        onScreenText: 'Race Condition • Concurrent Updates',
-        visualProps: {
-          itemTitle: 'Hex #88619A0A4 Surge Mutex',
-          user1Name: 'Order Worker A',
-          user2Name: 'Surge Worker B',
-          atomicQuery: 'SET lock:hex:88619A0A4 "worker_uuid_77" NX EX 5',
-        },
-      },
-      {
-        type: 'queueTimeline',
-        keyPoint: 'Redis TTL Auto-Expiry Prevents Deadlock',
-        onScreenText: 'Distributed Mutex • TTL Auto-Expiry',
-        visualProps: {
-          title: 'Distributed Lock Mutex Lifecycle',
-          mode: 'lock',
-          items: [
-            { name: '1. Lock Held by Worker A', priority: 'medium', detail: 'SET hex_mutex:88619A worker_A NX EX 5' },
-            { name: '2. Worker A Crashes / Disconnects', priority: 'high', detail: 'Worker dies ungracefully before lock release' },
-            { name: '3. Redis TTL Expiry (5s)', priority: 'high', detail: 'Key evicted automatically by Redis engine' },
-            { name: '4. Worker B Acquires Lock', priority: 'medium', detail: 'SET hex_mutex:88619A worker_B NX EX 5 succeeds' },
-          ],
-        },
-      },
-      {
-        type: 'code',
-        keyPoint: 'Atomic Distributed Lock Command',
-        onScreenText: 'Atomic Distributed Lock • Lua / SET NX EX',
-        visualProps: {
-          code: '-- Acquire Distributed Mutex with 5s Safety TTL\nSET lock:hex:88619A0A4 "worker_uuid_77" NX EX 5\n\n-- Release Mutex atomically via Lua Script\nif redis.call("get", KEYS[1]) == ARGV[1] then\n  return redis.call("del", KEYS[1])\nelse\n  return 0\nend',
-          language: 'lua',
-          lineHighlights: [2, 5, 6],
-        },
-      },
-      {
-        type: 'summary',
-        keyPoint: 'Architectural Summary: GPS, H3, Redis, Locks',
-        onScreenText: 'Architecture Summary • H3 + Redis + Mutex',
-        visualProps: {
-          headline: 'System Design Architecture Takeaways',
-          takeaways: [
-            'H3: O(1) GPS to Hex resolution',
-            'Redis: Sub-millisecond in-memory cache',
-            'Distributed Locks: Mutex prevents race conditions',
-            'TTL Guard: Automatic expiry prevents deadlocks',
-          ],
-        },
-      },
-      {
-        type: 'tradeoffHUD',
-        keyPoint: 'Tradeoff: Low Latency vs Data Consistency',
-        onScreenText: 'Architecture Tradeoffs • Latency vs Consistency',
-        visualProps: {
-          title: 'System Design Tradeoffs',
-          metricA: 'Real-Time Dynamic Pricing',
-          metricB: 'Strong Mutex Consistency',
-          scoreA: '99.9%',
-          scoreB: 'O(1) Redis',
-        },
-      },
-    ];
-  } else if (isEventLoop) {
+  if (isEventLoop) {
     sceneTemplates = [
       {
         type: 'hook',
@@ -817,17 +650,17 @@ export function buildStoryboardFromParsed(
 
       if (type === 'smartphoneMockup') {
         const isShop = /shop|store|cart|retail|product|sneaker|headphone|order/i.test(`${topic} ${onScreenText} ${narration}`);
-        const isFood = /food|restaurant|biryani|burger|pizza|meal|zomato|swiggy/i.test(`${topic} ${onScreenText} ${narration}`);
+        const isFood = /food|restaurant|burger|pizza|meal/i.test(`${topic} ${onScreenText} ${narration}`);
         const isRide = /ride|cab|taxi|uber|ola/i.test(`${topic} ${onScreenText} ${narration}`);
         const isFintech = /pay|wallet|bank|stock|crypto|transfer|settle/i.test(`${topic} ${onScreenText} ${narration}`);
 
         if (!cleanVisualProps.appName) cleanVisualProps.appName = isShop ? 'STORE' : isFood ? 'FOOD' : isRide ? 'RIDE' : isFintech ? 'PAY' : 'APP';
-        if (!cleanVisualProps.itemName) cleanVisualProps.itemName = isShop ? 'Wireless ANC Headphones' : isRide ? 'Sedan Ride' : isFood ? 'Order Meal' : 'Selected Item';
-        if (!cleanVisualProps.itemPrice) cleanVisualProps.itemPrice = '₹350';
-        if (!cleanVisualProps.baseDeliveryFee) cleanVisualProps.baseDeliveryFee = '₹30';
-        if (!cleanVisualProps.surgeDeliveryFee) cleanVisualProps.surgeDeliveryFee = '₹80';
-        if (!cleanVisualProps.surgeMultiplier) cleanVisualProps.surgeMultiplier = '2.7X';
-        if (!cleanVisualProps.surgeReason) cleanVisualProps.surgeReason = isShop ? 'FLASH SALE • LIMITED STOCK' : 'HIGH DEMAND • PEAK TRAFFIC';
+        if (!cleanVisualProps.itemName) cleanVisualProps.itemName = isShop ? 'Online Product' : isRide ? 'City Ride' : isFood ? 'Food Order' : isFintech ? 'Direct Transfer' : 'Resource Allocation';
+        if (!cleanVisualProps.itemPrice) cleanVisualProps.itemPrice = '₹100';
+        if (!cleanVisualProps.baseDeliveryFee) cleanVisualProps.baseDeliveryFee = '₹0';
+        if (!cleanVisualProps.surgeDeliveryFee) cleanVisualProps.surgeDeliveryFee = '₹0';
+        if (!cleanVisualProps.surgeMultiplier) cleanVisualProps.surgeMultiplier = '1.0X';
+        if (!cleanVisualProps.surgeReason) cleanVisualProps.surgeReason = 'CONCURRENT RESOURCE ALLOCATION';
       }
 
       if (type === 'h3SpatialMap') {
@@ -1233,7 +1066,7 @@ Rules:
       createdAt: existingSession?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
-
+    this.clearMedia(session);
     sessions.set(id, session);
     saveSessionToDisk(session);
     return session;
@@ -1375,6 +1208,7 @@ Always return the full updated 7 sections so the script remains complete and sel
       createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now(),
     };
+    this.clearMedia(session);
     sessions.set(id, session);
     saveSessionToDisk(session);
     console.log(`[MasterScript] Created custom script session ${id} with ${storyboard.scenes.length} scenes.`);
