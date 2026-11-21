@@ -344,18 +344,19 @@ body {
   gap: 6px;
 }
 
-textarea.console-area, input.text-field {
+textarea.console-area, input.text-field, textarea.text-field, .text-field {
   width: 100%;
   background: var(--bg-canvas);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.6;
   padding: 10px 14px;
   outline: none;
   transition: border-color 0.15s ease;
+  box-sizing: border-box;
 }
 
 textarea.console-area {
@@ -365,7 +366,7 @@ textarea.console-area {
   resize: vertical;
 }
 
-textarea.console-area:focus, input.text-field:focus {
+textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, .text-field:focus {
   border-color: var(--border-focus);
 }
 
@@ -2402,21 +2403,43 @@ textarea.console-area:focus, input.text-field:focus {
 .script-edit-container {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .script-edit-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+}
+
+.script-edit-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
 }
 
 .script-edit-textarea {
-  min-height: 60px;
-  resize: vertical;
-  line-height: 1.5;
-  font-size: 13px;
   width: 100%;
+  min-height: 70px;
+  background: #111115 !important;
+  border: 1px solid #272730 !important;
+  border-radius: 8px !important;
+  color: #fafafa !important;
+  font-family: var(--font-sans) !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  padding: 12px 14px !important;
+  outline: none !important;
+  resize: vertical;
+  transition: all 0.15s ease !important;
+  box-sizing: border-box;
+}
+
+.script-edit-textarea:focus {
+  background: #14141a !important;
+  border-color: #fafafa !important;
+  box-shadow: 0 0 0 1px #fafafa !important;
 }
 
 .script-action-bar {

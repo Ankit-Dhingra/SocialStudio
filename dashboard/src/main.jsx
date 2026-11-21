@@ -1339,7 +1339,9 @@ function App() {
                           ) : (
                             <div className="script-edit-container">
                               <div className="script-edit-field">
-                                <label className="input-label">Title</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>Script Title</span>
+                                </div>
                                 <input
                                   type="text"
                                   className="text-field"
@@ -1349,57 +1351,75 @@ function App() {
                               </div>
 
                               <div className="script-edit-field">
-                                <label className="input-label">Hook (0–7s)</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>Hook</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(245, 158, 11, 0.4)', color: '#f59e0b' }}>0–7s</span>
+                                </div>
                                 <textarea
-                                  className="text-field script-edit-textarea"
-                                  rows={2}
+                                  className="script-edit-textarea"
+                                  rows={3}
                                   value={editForm.hook || ''}
                                   onChange={(e) => setEditForm({ ...editForm, hook: e.target.value })}
                                 />
                               </div>
 
                               <div className="script-edit-field">
-                                <label className="input-label">Problem (7–18s)</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>Problem</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(244, 63, 94, 0.4)', color: '#f43f5e' }}>7–18s</span>
+                                </div>
                                 <textarea
-                                  className="text-field script-edit-textarea"
-                                  rows={2}
+                                  className="script-edit-textarea"
+                                  rows={3}
                                   value={editForm.problem || ''}
                                   onChange={(e) => setEditForm({ ...editForm, problem: e.target.value })}
                                 />
                               </div>
 
                               <div className="script-edit-field">
-                                <label className="input-label">Solution (18–30s)</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>Solution</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(16, 185, 129, 0.4)', color: '#10b981' }}>18–30s</span>
+                                </div>
                                 <textarea
-                                  className="text-field script-edit-textarea"
-                                  rows={2}
+                                  className="script-edit-textarea"
+                                  rows={3}
                                   value={editForm.solution || ''}
                                   onChange={(e) => setEditForm({ ...editForm, solution: e.target.value })}
                                 />
                               </div>
 
                               <div className="script-edit-field">
-                                <label className="input-label">Tech Explained (30–67s)</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>Tech Explained (Deep Dive)</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(6, 182, 212, 0.4)', color: '#38bdf8' }}>30–67s</span>
+                                </div>
                                 <textarea
-                                  className="text-field script-edit-textarea"
-                                  rows={5}
+                                  className="script-edit-textarea"
+                                  rows={6}
                                   value={editForm.tech_explained || ''}
                                   onChange={(e) => setEditForm({ ...editForm, tech_explained: e.target.value })}
                                 />
                               </div>
 
                               <div className="script-edit-field">
-                                <label className="input-label">Conclusion (67–80s)</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>Conclusion</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(139, 92, 246, 0.4)', color: '#a78bfa' }}>67–80s</span>
+                                </div>
                                 <textarea
-                                  className="text-field script-edit-textarea"
-                                  rows={2}
+                                  className="script-edit-textarea"
+                                  rows={3}
                                   value={editForm.conclusion || ''}
                                   onChange={(e) => setEditForm({ ...editForm, conclusion: e.target.value })}
                                 />
                               </div>
 
                               <div className="script-edit-field">
-                                <label className="input-label">CTA</label>
+                                <div className="script-edit-label-row">
+                                  <span className="input-label" style={{ fontWeight: 600, color: '#fafafa' }}>CTA (Brand Close)</span>
+                                  <span className="script-act-tag" style={{ borderColor: 'rgba(34, 197, 94, 0.4)', color: '#4ade80' }}>Last 4–6s</span>
+                                </div>
                                 <input
                                   type="text"
                                   className="text-field"
