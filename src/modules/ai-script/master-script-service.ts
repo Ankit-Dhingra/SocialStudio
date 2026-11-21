@@ -1136,6 +1136,20 @@ Always return the full updated 7 sections so the script remains complete and sel
     return session;
   }
 
+  deleteSession(sessionId: string): boolean {
+    sessions.delete(sessionId);
+    try {
+      const filePath = path.join(SESSIONS_DIR, `${sessionId}.json`);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      return true;
+    } catch (e) {
+      console.warn(`[MasterScript] Failed to delete session file ${sessionId}:`, e);
+      return false;
+    }
+  }
+
   listSessions(): ScriptSession[] {
     try {
       const files = fs.readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.json'));

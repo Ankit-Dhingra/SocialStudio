@@ -154,12 +154,28 @@ app.get('/api/pipeline/sessions', (_req, res) => {
       finalized: s.finalized || false,
       hasAudio: Boolean(s.audioResult),
       hasVideo: Boolean(s.renderState?.mediaUrl),
+      mediaUrl: s.renderState?.mediaUrl || null,
       renderStatus: s.renderState?.status || 'idle',
+      duration: s.storyboard?.estimatedDurationSec ? `${s.storyboard.estimatedDurationSec}s` : undefined,
+      scenesCount: s.storyboard?.scenes?.length || 0,
+      sevenKeyScript: s.sevenKeyScript,
+      hasStoryboard: Boolean(s.storyboard?.scenes?.length),
       job: s.job,
       updatedAt: s.updatedAt,
       createdAt: s.createdAt,
     }));
     res.json(list);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete pipeline session
+app.delete('/api/pipeline/session/:sessionId', (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const ok = masterScriptService.deleteSession(sessionId);
+    res.json({ success: ok, sessionId });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

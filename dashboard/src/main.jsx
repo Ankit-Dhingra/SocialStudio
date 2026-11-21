@@ -40,6 +40,9 @@ import {
   ExternalLink,
   Sliders,
   Headphones,
+  Trash2,
+  Bookmark,
+  Edit3,
 } from 'lucide-react';
 import './style.css';
 
@@ -286,6 +289,10 @@ function App() {
   // Video Preview Modal for Overview Library
   const [previewModalUrl, setPreviewModalUrl] = useState('');
 
+  // Save as Draft Notification Toast
+  const [saveDraftToast, setSaveDraftToast] = useState(false);
+  const [draftToastMsg, setDraftToastMsg] = useState('Draft saved successfully!');
+
   const chatScrollRef = useRef(null);
 
   // Auto-scroll chat to bottom
@@ -294,6 +301,17 @@ function App() {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [session?.messages, chatSending]);
+
+  // Sync active stage and session to localStorage
+  useEffect(() => {
+    localStorage.setItem('socialstudio_active_stage', String(stage));
+  }, [stage]);
+
+  useEffect(() => {
+    if (session?.id) {
+      localStorage.setItem('socialstudio_active_session', session.id);
+    }
+  }, [session?.id]);
 
   // Load existing pipeline sessions on mount & for Overview library
   async function loadSessions() {
@@ -304,7 +322,7 @@ function App() {
         setSessionsList(list || []);
 
         const savedId = localStorage.getItem('socialstudio_active_session');
-        const targetId = savedId && list.some((s) => s.id === savedId) ? savedId : list && list.length > 0 ? list[0].id : null;
+        const targetId = savedId && list.some((s) => s.id === savedId) ? savedId : null;
         if (targetId && !session) {
           const latestRes = await fetch(toApiUrl(`/api/pipeline/status/${targetId}`));
           if (latestRes.ok) {
@@ -313,6 +331,12 @@ function App() {
             setSession(fullSession);
             setTopic(fullSession.topic || '');
             setAngle(fullSession.angle || '');
+            if (fullSession.sevenKeyScript) {
+              setCustomScriptText(JSON.stringify(fullSession.sevenKeyScript, null, 2));
+              setEditForm(fullSession.sevenKeyScript);
+            } else if (fullSession.currentMarkdown) {
+              setCustomScriptText(fullSession.currentMarkdown);
+            }
             if (fullSession.audioResult) setAudioResult(fullSession.audioResult);
             if (fullSession.stillPreviews) setStills(fullSession.stillPreviews);
 
@@ -320,12 +344,143 @@ function App() {
             if (statusData.mediaUrl || rState?.mediaUrl) {
               setRenderedMediaUrl(statusData.mediaUrl || rState?.mediaUrl);
             }
+
+            const savedStage = parseInt(localStorage.getItem('socialstudio_active_stage') || '1', 10);
+            if (savedStage >= 1 && savedStage <= 4) {
+              setStage(savedStage);
+            }
           }
         }
       }
     } catch (e) {
       console.warn('Could not fetch pipeline sessions:', e);
     }
+  }
+
+  // Handle Save as Draft
+  async function handleSaveDraft() {
+    if (!session?.id) {
+      if (scriptMode === 'paste' && customScriptText.trim()) {
+        await handleParseCustomScript();
+      } else if (topic.trim()) {
+        await handleGenerateScript();
+      }
+      setDraftToastMsg('Draft saved! Find it anytime in the Drafts tab.');
+      setSaveDraftToast(true);
+      setTimeout(() => setSaveDraftToast(false), 3500);
+      return;
+    }
+    try {
+      await fetch(toApiUrl('/api/pipeline/script/finalize'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: session.id,
+          customMarkdown: session.currentMarkdown || JSON.stringify(session.sevenKeyScript || {}),
+        }),
+      });
+      localStorage.setItem('socialstudio_active_session', session.id);
+      localStorage.setItem('socialstudio_active_stage', String(stage));
+      await loadSessions();
+      setDraftToastMsg('Draft saved! You can resume it anytime from the Drafts tab.');
+      setSaveDraftToast(true);
+      setTimeout(() => setSaveDraftToast(false), 3500);
+    } catch (e) {
+      console.warn('Failed to save draft:', e);
+    }
+  }
+
+  // Handle Delete Session (Draft or Library Reel)
+  async function handleDeleteSession(sessionId, e) {
+    if (e) e.stopPropagation();
+    if (!window.confirm('Are you sure you want to delete this reel / draft?')) return;
+    try {
+      const res = await fetch(toApiUrl(`/api/pipeline/session/${sessionId}`), {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        if (session?.id === sessionId) {
+          setSession(null);
+          setAudioResult(null);
+          setStills([]);
+          setRenderedMediaUrl('');
+          setStage(1);
+          localStorage.removeItem('socialstudio_active_session');
+          localStorage.removeItem('socialstudio_active_stage');
+        }
+        await loadSessions();
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+    }
+  }
+
+  // Load Session into Studio for Editing / Remixing
+  async function handleLoadSessionIntoStudio(sess, targetStage = null) {
+    try {
+      setStudioLoading(true);
+      const res = await fetch(toApiUrl(`/api/pipeline/status/${sess.id}`));
+      let fullSession = sess;
+      let fullAudio = null;
+      let fullStills = [];
+      let mediaUrl = '';
+      if (res.ok) {
+        const data = await res.json();
+        fullSession = data.session || sess;
+        fullAudio = fullSession.audioResult || null;
+        fullStills = fullSession.stillPreviews || [];
+        mediaUrl = data.mediaUrl || fullSession.renderState?.mediaUrl || '';
+      }
+      setSession(fullSession);
+      setTopic(fullSession.topic || '');
+      setAngle(fullSession.angle || '');
+      if (fullSession.sevenKeyScript) {
+        setCustomScriptText(JSON.stringify(fullSession.sevenKeyScript, null, 2));
+        setEditForm(fullSession.sevenKeyScript);
+      } else if (fullSession.currentMarkdown) {
+        setCustomScriptText(fullSession.currentMarkdown);
+      }
+      setAudioResult(fullAudio);
+      setStills(fullStills);
+      setRenderedMediaUrl(mediaUrl);
+      localStorage.setItem('socialstudio_active_session', fullSession.id);
+
+      let s = 1;
+      if (targetStage) {
+        s = targetStage;
+      } else if (mediaUrl) {
+        s = 4;
+      } else if (fullStills && fullStills.length > 0) {
+        s = 3;
+      } else if (fullAudio) {
+        s = 2;
+      }
+      setStage(s);
+      localStorage.setItem('socialstudio_active_stage', String(s));
+      setActiveNav('create');
+    } catch (err) {
+      console.error('Failed to load session into studio:', err);
+    } finally {
+      setStudioLoading(false);
+    }
+  }
+
+  // Start fresh reel
+  function handleStartNewReel() {
+    if (session && !window.confirm('Start a fresh reel? Your current work is saved in Drafts/Library.')) {
+      return;
+    }
+    setSession(null);
+    setAudioResult(null);
+    setStills([]);
+    setRenderedMediaUrl('');
+    setStage(1);
+    setIsEditingScript(false);
+    setPasteSuccess(false);
+    setEditForm({});
+    setCustomScriptText(SAMPLE_6KEY_JSON);
+    localStorage.removeItem('socialstudio_active_session');
+    localStorage.removeItem('socialstudio_active_stage');
   }
 
   useEffect(() => {
@@ -643,18 +798,8 @@ function App() {
 
   const detectedKeys = detectKeys(customScriptText);
 
-  // Static/Featured library item (the rendered Zomato Reel)
-  const featuredReel = {
-    id: 'zomato_surge_creator_reel',
-    title: 'How Zomato Surge Pricing Works During Rain',
-    topic: 'Location-Based Dynamic Pricing & Uber H3 Spatial Mesh',
-    duration: '133s',
-    resolution: '1080×1920 Full HD',
-    size: '35.2 MB',
-    status: 'Completed',
-    mediaUrl: '/output/creator_reels/creator_reel_v3_fastpaced/zomato_surge_creator_reel.mp4',
-    date: 'Just now',
-  };
+  const libraryReels = sessionsList.filter((s) => Boolean(s.hasVideo || s.mediaUrl));
+  const draftsList = sessionsList.filter((s) => !s.hasVideo && !s.mediaUrl);
 
   return (
     <div className="app-layout">
@@ -683,7 +828,6 @@ function App() {
                 <LayoutDashboard size={15} />
                 <span>Overview</span>
               </div>
-              <span className="sidebar-badge">{sessionsList.length + 1}</span>
             </button>
 
             <button
@@ -696,6 +840,34 @@ function App() {
                 <span>Create Reel</span>
               </div>
             </button>
+
+            <button
+              type="button"
+              className={`sidebar-nav-item ${activeNav === 'drafts' ? 'active' : ''}`}
+              onClick={() => setActiveNav('drafts')}
+            >
+              <div className="sidebar-nav-left">
+                <FileText size={15} />
+                <span>Drafts</span>
+              </div>
+              {draftsList.length > 0 && (
+                <span className="sidebar-badge">{draftsList.length}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className={`sidebar-nav-item ${activeNav === 'library' ? 'active' : ''}`}
+              onClick={() => setActiveNav('library')}
+            >
+              <div className="sidebar-nav-left">
+                <Film size={15} />
+                <span>Library</span>
+              </div>
+              {libraryReels.length > 0 && (
+                <span className="sidebar-badge">{libraryReels.length}</span>
+              )}
+            </button>
           </nav>
         </div>
       </aside>
@@ -705,7 +877,7 @@ function App() {
           ========================================================================= */}
       <main className="main-content">
         {/* =====================================================================
-            VIEW 1: OVERVIEW & ANALYTICS
+            VIEW 1: OVERVIEW & ANALYTICS (Clean workspace overview)
             ===================================================================== */}
         {activeNav === 'overview' && (
           <div className="overview-container">
@@ -716,7 +888,7 @@ function App() {
                   Studio Overview
                 </h1>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                  High-retention developer reel production engine & project library.
+                  High-retention developer reel production engine & media library.
                 </p>
               </div>
 
@@ -739,26 +911,24 @@ function App() {
             <div className="overview-stats-grid">
               <div className="stat-card">
                 <div className="stat-top">
-                  <span className="stat-label">Total Reels Generated</span>
+                  <span className="stat-label">Library Videos</span>
                   <div className="stat-icon-wrap">
                     <Film size={16} />
                   </div>
                 </div>
-                <div className="stat-value">{sessionsList.length + 1}</div>
-                <div className="stat-subtext">1080×1920 Vertical Reels</div>
+                <div className="stat-value">{libraryReels.length}</div>
+                <div className="stat-subtext">Rendered 1080×1920 MP4s</div>
               </div>
 
               <div className="stat-card">
                 <div className="stat-top">
-                  <span className="stat-label">Pacing Architecture</span>
+                  <span className="stat-label">Active Drafts</span>
                   <div className="stat-icon-wrap">
-                    <Layers size={16} />
+                    <FileText size={16} />
                   </div>
                 </div>
-                <div className="stat-value">
-                  Dynamic
-                </div>
-                <div className="stat-subtext">Script-driven adaptive cuts</div>
+                <div className="stat-value">{draftsList.length}</div>
+                <div className="stat-subtext">In-progress reel projects</div>
               </div>
 
               <div className="stat-card">
@@ -768,101 +938,122 @@ function App() {
                     <Volume2 size={16} />
                   </div>
                 </div>
-                <div className="stat-value">
-                  Sarvam Neural
-                </div>
-                <div className="stat-subtext">sunny_hi_reels • Hinglish audio</div>
+                <div className="stat-value">Sarvam Neural</div>
+                <div className="stat-subtext">sunny_hi_reels • Hinglish</div>
               </div>
 
               <div className="stat-card">
                 <div className="stat-top">
-                  <span className="stat-label">Input Contract</span>
+                  <span className="stat-label">Output Aspect</span>
                   <div className="stat-icon-wrap">
-                    <Code2 size={16} />
+                    <Layers size={16} />
                   </div>
                 </div>
-                <div className="stat-value">
-                  6-Key JSON
-                </div>
-                <div className="stat-subtext">Structured storyboard schema</div>
+                <div className="stat-value">9:16 HD</div>
+                <div className="stat-subtext">1080×1920 Viral Shorts</div>
               </div>
             </div>
 
-            {/* RECENT REELS LIBRARY */}
-            <div className="reels-library-card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {/* QUICK ACTIONS HUB */}
+            <div className="overview-hub-grid">
+              <div className="overview-hub-card">
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>
-                    Recent Reels & Video Library
-                  </h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-                    Click any reel to play in HD preview or download directly.
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#27272a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#38bdf8' }}>
+                      <PlusCircle size={18} />
+                    </div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#fafafa' }}>Create New Reel</h3>
+                  </div>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                    Generate dynamic system design scripts or paste your own 7-key prompt with multi-stage audio synthesis.
                   </p>
                 </div>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={loadSessions} title="Refresh">
-                  <RefreshCw size={13} />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setActiveNav('create')}
+                  style={{ width: '100%', gap: 6 }}
+                >
+                  <span>Open Studio</span>
+                  <ArrowRight size={13} />
                 </button>
               </div>
 
-              <div className="reels-grid">
-                {/* 1. Verified Featured Reel */}
-                <div className="reel-card">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span className="badge-mono" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
-                      Ready • {featuredReel.duration}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{featuredReel.date}</span>
+              <div className="overview-hub-card">
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#27272a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7' }}>
+                      <FileText size={18} />
+                    </div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#fafafa' }}>Project Drafts</h3>
                   </div>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                    {draftsList.length > 0
+                      ? `${draftsList.length} in-progress drafts waiting for voiceover or render.`
+                      : 'Save any reel draft in progress and resume from where you left off.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setActiveNav('drafts')}
+                  style={{ width: '100%', gap: 6 }}
+                >
+                  <span>View Drafts ({draftsList.length})</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
 
+              <div className="overview-hub-card">
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#27272a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                      <Film size={18} />
+                    </div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#fafafa' }}>Reel Library</h3>
+                  </div>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                    {libraryReels.length > 0
+                      ? `${libraryReels.length} rendered videos ready to watch, download, or edit.`
+                      : 'Rendered 1080×1920 MP4 reels will automatically be organized here.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setActiveNav('library')}
+                  style={{ width: '100%', gap: 6 }}
+                >
+                  <span>Open Library ({libraryReels.length})</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* RECENT COMPLETED REELS SHOWCASE (ONLY RENDERED REELS) */}
+            {libraryReels.length > 0 ? (
+              <div className="reels-library-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <h4 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', color: '#fafafa' }}>
-                      {featuredReel.title}
-                    </h4>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
-                      {featuredReel.topic}
+                    <h3 style={{ fontSize: 15, fontWeight: 600, margin: '0 0 2px' }}>
+                      Recently Rendered Reels
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                      Quick access to your latest exported videos.
                     </p>
                   </div>
-
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {featuredReel.resolution} • {featuredReel.size}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => setPreviewModalUrl(featuredReel.mediaUrl)}
-                      style={{ flex: 1, gap: 6 }}
-                    >
-                      <Play size={12} fill="#09090b" />
-                      <span>Play Reel</span>
-                    </button>
-                    <a
-                      href={featuredReel.mediaUrl}
-                      download="zomato_surge_creator_reel.mp4"
-                      className="btn btn-secondary btn-sm"
-                      style={{ padding: '0 10px' }}
-                      title="Download MP4"
-                    >
-                      <Download size={13} />
-                    </a>
-                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveNav('library')}>
+                    <span>View All ({libraryReels.length})</span>
+                    <ArrowRight size={12} />
+                  </button>
                 </div>
 
-                {/* 2. Dynamic Sessions */}
-                {sessionsList.map((sess) => {
-                  const hasMedia = Boolean(sess.renderState?.mediaUrl);
-                  return (
+                <div className="reels-grid">
+                  {libraryReels.slice(0, 3).map((sess) => (
                     <div key={sess.id} className="reel-card">
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span
-                          className="badge-mono"
-                          style={{
-                            background: hasMedia ? '#10B98122' : '#F59E0B22',
-                            color: hasMedia ? '#10B981' : '#F59E0B',
-                          }}
-                        >
-                          {hasMedia ? 'Rendered' : 'Draft Script'}
+                        <span className="badge-mono" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                          Ready • {sess.duration || '~80s'}
                         </span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                           {new Date(sess.updatedAt).toLocaleDateString()}
@@ -871,58 +1062,326 @@ function App() {
 
                       <div>
                         <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
-                          {sess.topic}
+                          {sess.title || sess.topic}
                         </h4>
                         <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
                           {sess.angle || 'System Design Reel'}
                         </p>
                       </div>
 
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        1080×1920 Full HD • {sess.scenesCount || 12} Cuts
+                      </div>
+
                       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                        {hasMedia ? (
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => setPreviewModalUrl(sess.renderState.mediaUrl)}
-                            style={{ flex: 1, gap: 6 }}
-                          >
-                            <Play size={12} fill="#000" />
-                            <span>Play Reel</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => {
-                              setSession(sess);
-                              setTopic(sess.topic);
-                              setAngle(sess.angle || '');
-                              setActiveNav('create');
-                              setStage(1);
-                            }}
-                            style={{ flex: 1, gap: 6 }}
-                          >
-                            <Wand2 size={12} />
-                            <span>Open in Studio</span>
-                          </button>
-                        )}
-                        {hasMedia && (
-                          <a
-                            href={sess.renderState.mediaUrl}
-                            download={`${sess.topic.replace(/\s+/g, '_')}.mp4`}
-                            className="btn btn-secondary btn-sm"
-                            style={{ padding: '0 10px' }}
-                            title="Download MP4"
-                          >
-                            <Download size={13} />
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setPreviewModalUrl(sess.mediaUrl)}
+                          style={{ flex: 1, gap: 6 }}
+                        >
+                          <Play size={12} fill="#09090b" />
+                          <span>Play</span>
+                        </button>
+                        <a
+                          href={sess.mediaUrl}
+                          download={`${(sess.title || sess.topic).replace(/\s+/g, '_')}.mp4`}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '0 10px' }}
+                          title="Download MP4"
+                        >
+                          <Download size={13} />
+                        </a>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleLoadSessionIntoStudio(sess, 4)}
+                          style={{ padding: '0 10px' }}
+                          title="Edit in Studio"
+                        >
+                          <Edit3 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state-card">
+                <div className="empty-state-icon">
+                  <Film size={24} />
+                </div>
+                <h4 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#fafafa' }}>
+                  No Rendered Reels Yet
+                </h4>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, maxWidth: 440 }}>
+                  Start by generating or pasting a technical script in Create Reel. Your finished videos will appear here and in your Library.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setActiveNav('create')}
+                  style={{ marginTop: 6, gap: 6 }}
+                >
+                  <PlusCircle size={13} />
+                  <span>Create Your First Reel</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* =====================================================================
+            VIEW 2: DRAFTS (IN-PROGRESS SCRIPTS & SESSIONS)
+            ===================================================================== */}
+        {activeNav === 'drafts' && (
+          <div className="overview-container">
+            <div className="overview-header">
+              <div>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fafafa', letterSpacing: -0.4, margin: '0 0 4px' }}>
+                  Saved Drafts ({draftsList.length})
+                </h1>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                  Resume your unfinished scripts, voiceovers, or storyboard cuts anytime.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={loadSessions} title="Refresh Drafts">
+                  <RefreshCw size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    handleStartNewReel();
+                    setActiveNav('create');
+                  }}
+                  style={{ height: 38, padding: '0 18px', gap: 8 }}
+                >
+                  <PlusCircle size={15} />
+                  <span>New Reel</span>
+                </button>
+              </div>
+            </div>
+
+            {draftsList.length === 0 ? (
+              <div className="empty-state-card">
+                <div className="empty-state-icon">
+                  <FileText size={24} />
+                </div>
+                <h4 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#fafafa' }}>
+                  No Saved Drafts
+                </h4>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, maxWidth: 420 }}>
+                  When creating a reel, click "Save as Draft" to preserve your script and audio progress here.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setActiveNav('create')}
+                  style={{ marginTop: 6, gap: 6 }}
+                >
+                  <PlusCircle size={13} />
+                  <span>Start a Reel</span>
+                </button>
+              </div>
+            ) : (
+              <div className="reels-grid">
+                {draftsList.map((sess) => {
+                  const stageLabel = sess.hasAudio
+                    ? 'Stage 2: Voiceover Ready'
+                    : sess.hasStoryboard
+                    ? 'Stage 3: Storyboard Ready'
+                    : 'Stage 1: Script Draft';
+                  const stageBg = sess.hasAudio
+                    ? 'rgba(56, 189, 248, 0.12)'
+                    : sess.hasStoryboard
+                    ? 'rgba(168, 85, 247, 0.12)'
+                    : 'rgba(245, 158, 11, 0.12)';
+                  const stageColor = sess.hasAudio
+                    ? '#38bdf8'
+                    : sess.hasStoryboard
+                    ? '#c084fc'
+                    : '#fbbf24';
+
+                  return (
+                    <div key={sess.id} className="reel-card">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span
+                          className="badge-mono"
+                          style={{
+                            background: stageBg,
+                            color: stageColor,
+                            border: `1px solid ${stageColor}33`,
+                          }}
+                        >
+                          {stageLabel}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {new Date(sess.updatedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                          {sess.title || sess.topic}
+                        </h4>
+                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                          {sess.angle || 'System Design Reel'}
+                        </p>
+                      </div>
+
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {sess.scenesCount ? `${sess.scenesCount} Cuts` : 'Script In Progress'} • {sess.hasAudio ? 'Voiceover Synthesized' : 'Awaiting Audio'}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleLoadSessionIntoStudio(sess)}
+                          style={{ flex: 1, gap: 6 }}
+                        >
+                          <Wand2 size={12} />
+                          <span>Resume & Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-danger-ghost"
+                          onClick={(e) => handleDeleteSession(sess.id, e)}
+                          title="Delete Draft"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* =====================================================================
+            VIEW 3: LIBRARY (RENDERED MP4 VIDEOS)
+            ===================================================================== */}
+        {activeNav === 'library' && (
+          <div className="overview-container">
+            <div className="overview-header">
+              <div>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fafafa', letterSpacing: -0.4, margin: '0 0 4px' }}>
+                  Reel Library ({libraryReels.length})
+                </h1>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                  All exported 1080×1920 developer reels ready to preview, download, or remix in Studio.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={loadSessions} title="Refresh Library">
+                  <RefreshCw size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setActiveNav('create')}
+                  style={{ height: 38, padding: '0 18px', gap: 8 }}
+                >
+                  <PlusCircle size={15} />
+                  <span>Create Reel</span>
+                </button>
+              </div>
             </div>
+
+            {libraryReels.length === 0 ? (
+              <div className="empty-state-card">
+                <div className="empty-state-icon">
+                  <Film size={24} />
+                </div>
+                <h4 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#fafafa' }}>
+                  No Rendered Reels in Library
+                </h4>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0, maxWidth: 440 }}>
+                  Your finished video renders will be saved here automatically with instant MP4 downloads.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setActiveNav('create')}
+                  style={{ marginTop: 6, gap: 6 }}
+                >
+                  <PlusCircle size={13} />
+                  <span>Render Your First Reel</span>
+                </button>
+              </div>
+            ) : (
+              <div className="reels-grid">
+                {libraryReels.map((sess) => (
+                  <div key={sess.id} className="reel-card">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span className="badge-mono" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                        Ready • {sess.duration || '~80s'}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {new Date(sess.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                        {sess.title || sess.topic}
+                      </h4>
+                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                        {sess.angle || 'System Design Reel'}
+                      </p>
+                    </div>
+
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      1080×1920 Full HD • MP4 Video • {sess.scenesCount || 12} Cuts
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setPreviewModalUrl(sess.mediaUrl)}
+                        style={{ flex: 1, gap: 6 }}
+                      >
+                        <Play size={12} fill="#09090b" />
+                        <span>Play Reel</span>
+                      </button>
+                      <a
+                        href={sess.mediaUrl}
+                        download={`${(sess.title || sess.topic).replace(/\s+/g, '_')}.mp4`}
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '0 10px' }}
+                        title="Download MP4"
+                      >
+                        <Download size={13} />
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleLoadSessionIntoStudio(sess, 4)}
+                        style={{ padding: '0 10px' }}
+                        title="Edit in Studio (Prefill all values)"
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-danger-ghost"
+                        onClick={(e) => handleDeleteSession(sess.id, e)}
+                        title="Delete Reel"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -948,7 +1407,7 @@ function App() {
                   )}
                 </div>
 
-                <div className="studio-header-right">
+                <div className="studio-header-right" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div className="studio-tag-group">
                     <span className="studio-meta-tag">
                       <Film size={12} />
@@ -964,6 +1423,29 @@ function App() {
                         <span>{session.storyboard?.scenes?.length ? `${session.storyboard.scenes.length} Storyboard Cuts` : 'Dynamic Storyboard'}</span>
                       </span>
                     )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={handleSaveDraft}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                      title="Save Current State as Draft"
+                    >
+                      <Bookmark size={13} />
+                      <span>Save Draft</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStartNewReel}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+                      title="Start a fresh Reel"
+                    >
+                      <RotateCcw size={13} />
+                      <span>New Reel</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1494,21 +1976,37 @@ function App() {
                               )}
                             </div>
 
-                            {/* PROCEED TO VOICEOVER */}
-                            <button
-                              type="button"
-                              className="btn btn-primary"
-                              onClick={() => setStage(2)}
-                              style={{
-                                padding: '0 22px',
-                                height: 38,
-                                gap: 8,
-                                fontWeight: 600,
-                              }}
-                            >
-                              <span>Proceed to Voiceover</span>
-                              <ArrowRight size={14} />
-                            </button>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={handleSaveDraft}
+                                style={{
+                                  padding: '0 16px',
+                                  height: 38,
+                                  gap: 6,
+                                }}
+                              >
+                                <Bookmark size={13} />
+                                <span>Save as Draft</span>
+                              </button>
+
+                              {/* PROCEED TO VOICEOVER */}
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => setStage(2)}
+                                style={{
+                                  padding: '0 22px',
+                                  height: 38,
+                                  gap: 8,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                <span>Proceed to Voiceover</span>
+                                <ArrowRight size={14} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1564,7 +2062,17 @@ function App() {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: 10 }}>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleSaveDraft}
+                          style={{ padding: '9px 16px', fontSize: 13, gap: 6 }}
+                        >
+                          <Bookmark size={13} />
+                          <span>Save as Draft</span>
+                        </button>
+
                         <button
                           type="button"
                           className="btn btn-primary"
@@ -1767,7 +2275,7 @@ function App() {
                           </p>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24 }}>
+                        <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24, alignItems: 'center' }}>
                           <button
                             type="button"
                             className="btn btn-primary"
@@ -1781,6 +2289,16 @@ function App() {
                               <Camera size={13} />
                             )}
                             <span>{generatingStills ? 'Capturing Previews...' : `Generate ${session?.storyboard?.scenes?.length || ''} Previews`}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={handleSaveDraft}
+                            style={{ padding: '8px 16px', fontSize: 13, gap: 6 }}
+                          >
+                            <Bookmark size={13} />
+                            <span>Save as Draft</span>
                           </button>
 
                           <button
@@ -2053,6 +2571,13 @@ function App() {
               <img src={toApiUrl(selectedStill.url)} alt="Still Fullscreen" />
             </div>
           </div>
+        </div>
+      )}
+      {/* FLOATING TOAST NOTIFICATION */}
+      {saveDraftToast && (
+        <div className="toast-notification">
+          <Bookmark size={15} color="#4ade80" />
+          <span>{draftToastMsg || 'Draft saved successfully!'}</span>
         </div>
       )}
     </div>
