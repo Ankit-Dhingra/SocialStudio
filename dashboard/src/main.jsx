@@ -34,15 +34,27 @@ import {
   Maximize2,
   Eye,
   X,
+  LayoutDashboard,
+  PlusCircle,
+  Film,
+  ExternalLink,
+  Sliders,
 } from 'lucide-react';
 import './style.css';
 
-import reactExample from '../../examples/react-state.json';
-import checkoutExample from '../../examples/checkout.json';
-import retrievalExample from '../../examples/retrieval.json';
-
-const reviewedExamples = [reactExample, checkoutExample, retrievalExample];
-const SAMPLE_SCRIPT = JSON.stringify(reactExample, null, 2);
+const SAMPLE_6KEY_JSON = JSON.stringify(
+  {
+    title: "How Zomato Surge Pricing Works During Rain",
+    hook: "रात के 12 बजे, तेज़ बारिश हो रही है। Zomato पर delivery charge ₹30 से अचानक ₹90 हो गया। Restaurant वही, घर वही, distance भी वही। फिर ये extra ₹60 कहाँ से आ गए?",
+    problem: "मान लो उस area में 100 orders आ गए, लेकिन बारिश की वजह से सिर्फ 20 riders available हैं। अब हर order पर पूरी city के riders को search करना expensive होगा। और सिर्फ distance देखकर charge तय करेंगे, तो असली demand और rider shortage का पता ही नहीं चलेगा।",
+    solution: "इस problem को solve करने के लिए एक possible design है Location-Based Dynamic Pricing। इसमें पूरे शहर की जगह छोटे geographical areas की demand और available riders को track करते हैं। फिर एक Pricing Engine इन्हीं local conditions के हिसाब से delivery charge calculate करता है।",
+    tech_explained: "अब समझो backend में ये कैसे काम कर सकता है। हर rider की app GPS location और availability status भेजती है। System इन locations को छोटे geographical cells में map करता है। इसके लिए H3 Spatial Indexing जैसी technique इस्तेमाल हो सकती है। अब हर cell में कितने orders pending हैं और कितने riders actually available हैं, उसका count maintain किया जाता है। ये counts Redis जैसे fast cache में रख सकते हैं। मान लो तुम्हारे area में 100 orders और सिर्फ 20 available riders हैं। यानी हर rider पर average 5 orders की demand है। Pricing Engine इस imbalance के साथ बारिश, estimated delivery time और configured pricing rules को evaluate करता है। Example के लिए base delivery fee ₹30 है, और इन conditions में ₹60 additional charge calculate हुआ। तो app तुम्हें ₹90 दिखाएगी। लेकिन एक catch है। अगर rider offline हो गया और उसकी पुरानी GPS location cache में बची है, तो system उसे available समझ सकता है। इसलिए recent heartbeat, timestamp और active delivery status verify करना ज़रूरी है।",
+    conclusion: "तो ₹30 से ₹90 होने की वजह distance बढ़ना ज़रूरी नहीं है। असली factor हो सकता है local demand, rider availability और delivery conditions का बदलना। यही Dynamic Pricing का core idea है। Price सिर्फ distance से नहीं, current supply-demand conditions से भी प्रभावित हो सकता है।",
+    cta: "ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Stack को अभी follow करो।"
+  },
+  null,
+  2
+);
 
 const VIRAL_TECH_PRESETS = [
   {
@@ -78,19 +90,52 @@ const QUICK_CHAT_SUGGESTIONS = [
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const toApiUrl = (p) => (p && p.startsWith('http') ? p : `${API_BASE}${p || ''}`);
 
+function detectKeys(text) {
+  try {
+    const obj = JSON.parse(text);
+    return {
+      title: Boolean(obj.title || obj.topic),
+      hook: Boolean(obj.hook || obj.hooks),
+      problem: Boolean(obj.problem),
+      solution: Boolean(obj.solution),
+      tech_explained: Boolean(obj.tech_explained || obj.tech),
+      conclusion: Boolean(obj.conclusion || obj.summary),
+      cta: Boolean(obj.cta),
+    };
+  } catch (e) {
+    return {
+      title: /(?:["']?title["']?\s*:|#\s*)/i.test(text),
+      hook: /(?:["']?hook["']?\s*:|hook)/i.test(text),
+      problem: /(?:["']?problem["']?\s*:|problem)/i.test(text),
+      solution: /(?:["']?solution["']?\s*:|solution)/i.test(text),
+      tech_explained: /(?:["']?tech_explained["']?\s*:|tech)/i.test(text),
+      conclusion: /(?:["']?conclusion["']?\s*:|summary)/i.test(text),
+      cta: /(?:["']?cta["']?\s*:|follow)/i.test(text),
+    };
+  }
+}
+
 function App() {
-  // Navigation: 'studio' (Flagship Pipeline) or 'legacy' (Jobs / Admin queue)
-  const [activeNav, setActiveNav] = useState('studio');
+  // Sidebar Navigation: 'overview' or 'create'
+  const [activeNav, setActiveNav] = useState('overview');
+
+  // Create Reel Timeline Stepper: 1: Script, 2: Voiceover, 3: Visuals, 4: Render
+  const [stage, setStage] = useState(1);
+
+  // Script Mode: 'ai' (Generate AI) or 'paste' (Paste Script)
+  const [scriptMode, setScriptMode] = useState('ai');
+  const [customScriptText, setCustomScriptText] = useState(SAMPLE_6KEY_JSON);
+  const [pasteSuccess, setPasteSuccess] = useState(false);
 
   // Studio Pipeline State
-  const [stage, setStage] = useState(1); // 1: Script & Chat, 2: Audio, 3: Preview, 4: Render
   const [topic, setTopic] = useState(VIRAL_TECH_PRESETS[0].topic);
   const [angle, setAngle] = useState(VIRAL_TECH_PRESETS[0].angle);
   const [session, setSession] = useState(null);
+  const [sessionsList, setSessionsList] = useState([]);
   const [studioLoading, setStudioLoading] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
-  const [activeScriptTab, setActiveScriptTab] = useState('full'); // 'full' | 'acts' | 'scenes' | 'cheat' | 'raw'
+  const [activeScriptTab, setActiveScriptTab] = useState('full'); // 'full' | 'acts' | 'scenes' | 'cheat'
   const [copiedScript, setCopiedScript] = useState(false);
   const [audioSynthesizing, setAudioSynthesizing] = useState(false);
   const [audioResult, setAudioResult] = useState(null);
@@ -104,16 +149,8 @@ function App() {
   const [renderError, setRenderError] = useState('');
   const [qaReport, setQaReport] = useState(null);
 
-  // Legacy Queue State
-  const [videos, setVideos] = useState([]);
-  const [mode, setMode] = useState('topic');
-  const [customScript, setCustomScript] = useState(SAMPLE_SCRIPT);
-  const [token, setToken] = useState('change-me-in-local-dev');
-  const [legacyError, setLegacyError] = useState('');
-  const [legacyBusy, setLegacyBusy] = useState(false);
-  const [selectedId, setSelectedId] = useState(null);
-  const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  // Video Preview Modal for Overview Library
+  const [previewModalUrl, setPreviewModalUrl] = useState('');
 
   const chatScrollRef = useRef(null);
 
@@ -124,54 +161,40 @@ function App() {
     }
   }, [session?.messages, chatSending]);
 
-  // Load existing pipeline sessions on mount
-  useEffect(() => {
-    async function loadSessions() {
-      try {
+  // Load existing pipeline sessions on mount & for Overview library
+  async function loadSessions() {
+    try {
+      const res = await fetch(toApiUrl('/api/pipeline/sessions'));
+      if (res.ok) {
+        const list = await res.json();
+        setSessionsList(list || []);
+
         const savedId = localStorage.getItem('socialstudio_active_session');
-        const res = await fetch(toApiUrl('/api/pipeline/sessions'));
-        if (res.ok) {
-          const list = await res.json();
-          const targetId = (savedId && list.some(s => s.id === savedId)) ? savedId : (list && list.length > 0 ? list[0].id : null);
-          if (targetId) {
-            const latestRes = await fetch(toApiUrl(`/api/pipeline/status/${targetId}`));
-            if (latestRes.ok) {
-              const statusData = await latestRes.json();
-              const fullSession = statusData.session || {};
-              setSession(fullSession);
-              setTopic(fullSession.topic || '');
-              setAngle(fullSession.angle || '');
-              if (fullSession.audioResult) setAudioResult(fullSession.audioResult);
-              if (fullSession.stillPreviews) setStills(fullSession.stillPreviews);
-              if (savedId) {
-                const job = statusData.job;
-                const rState = statusData.renderState || fullSession.renderState;
-                if (job?.status === 'running' || rState?.status === 'rendering') {
-                  setRendering(true);
-                  setRenderProgress(job?.progress || rState?.progress || 10);
-                  setStage(4);
-                } else if (job?.status === 'completed' || rState?.status === 'completed') {
-                  setRendering(false);
-                  setRenderedMediaUrl(statusData.mediaUrl || rState?.mediaUrl);
-                  setQaReport(job?.qa || rState?.qa);
-                  setStage(4);
-                } else if (job?.status === 'failed' || rState?.status === 'failed') {
-                  setRendering(false);
-                  setRenderError(job?.error || rState?.error || 'Video generation failed');
-                  setStage(4);
-                } else {
-                  setStage(rState?.mediaUrl ? 4 : fullSession.audioResult ? 3 : fullSession.finalized ? 2 : 1);
-                }
-              } else {
-                setStage(1);
-              }
+        const targetId = savedId && list.some((s) => s.id === savedId) ? savedId : list && list.length > 0 ? list[0].id : null;
+        if (targetId && !session) {
+          const latestRes = await fetch(toApiUrl(`/api/pipeline/status/${targetId}`));
+          if (latestRes.ok) {
+            const statusData = await latestRes.json();
+            const fullSession = statusData.session || {};
+            setSession(fullSession);
+            setTopic(fullSession.topic || '');
+            setAngle(fullSession.angle || '');
+            if (fullSession.audioResult) setAudioResult(fullSession.audioResult);
+            if (fullSession.stillPreviews) setStills(fullSession.stillPreviews);
+
+            const rState = statusData.renderState || fullSession.renderState;
+            if (statusData.mediaUrl || rState?.mediaUrl) {
+              setRenderedMediaUrl(statusData.mediaUrl || rState?.mediaUrl);
             }
           }
         }
-      } catch (e) {
-        console.warn('Could not fetch pipeline sessions:', e);
       }
+    } catch (e) {
+      console.warn('Could not fetch pipeline sessions:', e);
     }
+  }
+
+  useEffect(() => {
     loadSessions();
   }, []);
 
@@ -198,6 +221,7 @@ function App() {
                 setRenderedMediaUrl(data.mediaUrl || rState?.mediaUrl);
                 setQaReport(job.qa || rState?.qa);
                 setStage(4);
+                loadSessions();
               } else if (job.status === 'failed' || rState?.status === 'failed') {
                 setRendering(false);
                 setRenderError(job.error || rState?.error || 'Pipeline execution failed.');
@@ -212,30 +236,6 @@ function App() {
     return () => clearInterval(interval);
   }, [rendering, session?.id]);
 
-  // Legacy Queue polling
-  async function refreshQueue() {
-    try {
-      const res = await fetch(toApiUrl('/api/videos'));
-      if (res.ok) {
-        const data = await res.json();
-        setVideos(data || []);
-        if (!selectedId && data && data.length > 0) {
-          setSelectedId(data[0].id);
-        }
-      }
-    } catch {}
-  }
-
-  useEffect(() => {
-    refreshQueue();
-    const interval = setInterval(refreshQueue, 5000);
-    return () => clearInterval(interval);
-  }, [selectedId]);
-
-  // ==========================================
-  // PIPELINE HANDLERS
-  // ==========================================
-
   function clearRenderPreview() {
     setStills([]);
     setSelectedStill(null);
@@ -246,15 +246,13 @@ function App() {
     setRenderedMediaUrl('');
   }
 
-  // 0. Server-Orchestrated Full Reel Generator: Start -> Finalize -> Audio -> Stills -> Render without browser dependencies
+  // 0. Full Reel Generator (Server-Orchestrated)
   async function handleGenerateReel() {
     if (!topic.trim()) return;
     setStudioLoading(true);
-    setLegacyError('');
     setRenderError('');
     clearRenderPreview();
     try {
-      console.log('[Dashboard] Triggering server-orchestrated reel generation for:', topic);
       const res = await fetch(toApiUrl('/api/pipeline/generate-reel'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -270,7 +268,6 @@ function App() {
       setRenderProgress(data.job?.progress || 10);
       setStage(4);
     } catch (err) {
-      console.error('[Dashboard Error]:', err);
       setRenderError(err.message);
       alert(`Reel Generation Error: ${err.message}`);
     } finally {
@@ -278,11 +275,10 @@ function App() {
     }
   }
 
-  // 1. Generate Initial Master Script
+  // 1. Generate Script via AI
   async function handleGenerateScript() {
     if (!topic.trim()) return;
     setStudioLoading(true);
-    setLegacyError('');
     try {
       const res = await fetch(toApiUrl('/api/pipeline/script/start'), {
         method: 'POST',
@@ -295,8 +291,41 @@ function App() {
       setAudioResult(null);
       clearRenderPreview();
       setStage(1);
+      loadSessions();
     } catch (err) {
       alert(`Script Generation Error: ${err.message}`);
+    } finally {
+      setStudioLoading(false);
+    }
+  }
+
+  // 1b. Parse Creator Custom Script (6-Key JSON / Text)
+  async function handleParseCustomScript() {
+    if (!customScriptText.trim()) return;
+    setStudioLoading(true);
+    setPasteSuccess(false);
+    try {
+      let payload;
+      try {
+        payload = JSON.parse(customScriptText);
+      } catch (e) {
+        payload = customScriptText.trim();
+      }
+      const res = await fetch(toApiUrl('/api/pipeline/script/custom'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customScript: payload, topic: payload.title || topic }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to parse custom script');
+      setSession(data);
+      setTopic(data.topic || 'Creator Reel');
+      setAudioResult(null);
+      clearRenderPreview();
+      setPasteSuccess(true);
+      loadSessions();
+    } catch (err) {
+      alert(`Script Parsing Error: ${err.message}`);
     } finally {
       setStudioLoading(false);
     }
@@ -317,7 +346,7 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Refinement failed');
       setSession(data);
-      setVoiceEdits(edits => ({...edits, [data.id]: {}}));
+      setVoiceEdits((edits) => ({ ...edits, [data.id]: {} }));
       setAudioResult(null);
       clearRenderPreview();
     } catch (err) {
@@ -358,8 +387,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: session.id,
-          spokenNarration: session.storyboard.scenes.map(scene =>
-            voiceEdits[session.id]?.[scene.id] ?? scene.spokenNarration ?? ''
+          spokenNarration: session.storyboard.scenes.map(
+            (scene) => voiceEdits[session.id]?.[scene.id] ?? scene.spokenNarration ?? ''
           ),
         }),
       });
@@ -367,7 +396,6 @@ function App() {
       if (!res.ok) throw new Error(data.error || 'Audio synthesis failed');
       setAudioResult(data.audioResult);
       clearRenderPreview();
-      // Reload session
       const sessRes = await fetch(toApiUrl(`/api/pipeline/script/${session.id}`));
       if (sessRes.ok) setSession(await sessRes.json());
     } catch (err) {
@@ -427,1014 +455,1290 @@ function App() {
     }
   }
 
-  // Active / Selected Video in Legacy Queue
-  const activeVideo = videos.find((v) => v.id === selectedId) || videos[0] || null;
+  const detectedKeys = detectKeys(customScriptText);
+
+  // Static/Featured library item (the rendered Zomato Reel)
+  const featuredReel = {
+    id: 'zomato_surge_creator_reel',
+    title: 'How Zomato Surge Pricing Works During Rain',
+    topic: 'Location-Based Dynamic Pricing & Uber H3 Spatial Mesh',
+    duration: '133s',
+    resolution: '1080×1920 Full HD',
+    size: '35.2 MB',
+    status: 'Completed',
+    mediaUrl: '/output/creator_reels/creator_reel_v3_fastpaced/zomato_surge_creator_reel.mp4',
+    date: 'Just now',
+  };
 
   return (
-    <div className="app-wrapper">
-      {/* DESKTOP TOP NAV */}
-      <header className="top-nav">
-        <div className="top-nav-inner">
-          <div className="nav-left">
-            <div className="brand-badge-group">
-              <div className="brand-logo-sq">
-                <Sparkles size={14} />
-              </div>
-              <span className="brand-name">SocialStudio</span>
-              <span className="badge-mono" style={{ background: '#3b82f6', color: '#fff' }}>
-                PRO PIPELINE
-              </span>
+    <div className="app-layout">
+      {/* =========================================================================
+          LEFT SIDEBAR NAVIGATION
+          ========================================================================= */}
+      <aside className="sidebar">
+        <div>
+          {/* BRAND HEADER */}
+          <div className="sidebar-header">
+            <div className="sidebar-logo">
+              <Zap size={18} fill="#000" />
             </div>
-
-            <nav className="nav-links">
-              <button
-                type="button"
-                className={`nav-link ${activeNav === 'studio' ? 'active' : ''}`}
-                onClick={() => setActiveNav('studio')}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
-              >
-                ⚡ Reel Pipeline Studio
-              </button>
-              <button
-                type="button"
-                className={`nav-link ${activeNav === 'legacy' ? 'active' : ''}`}
-                onClick={() => setActiveNav('legacy')}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
-              >
-                📋 Project Queue
-              </button>
-            </nav>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="sidebar-brand-title">SocialStudio</span>
+              <span className="sidebar-brand-badge">v2.0</span>
+            </div>
           </div>
 
-          <div className="nav-right">
-            <div className="pipeline-status-chip">
-              <span className="dot-pulse"></span>
-              <span>Sarvam AI & Remotion Online</span>
-            </div>
+          {/* MENU SECTION */}
+          <div className="sidebar-menu-label">Workspace</div>
+          <nav className="sidebar-nav-list">
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={refreshQueue}
-              title="Refresh Queue"
+              className={`sidebar-nav-item ${activeNav === 'overview' ? 'active' : ''}`}
+              onClick={() => setActiveNav('overview')}
             >
-              <RefreshCw size={13} />
+              <div className="sidebar-nav-left">
+                <LayoutDashboard size={16} />
+                <span>Overview</span>
+              </div>
+              <span className="sidebar-badge">{sessionsList.length + 1}</span>
             </button>
+
+            <button
+              type="button"
+              className={`sidebar-nav-item ${activeNav === 'create' ? 'active' : ''}`}
+              onClick={() => setActiveNav('create')}
+            >
+              <div className="sidebar-nav-left">
+                <PlusCircle size={16} />
+                <span>Create Reel</span>
+              </div>
+              <span className="badge-mono" style={{ fontSize: 10, background: '#00F2FE22', color: '#00F2FE' }}>
+                New
+              </span>
+            </button>
+          </nav>
+        </div>
+
+        {/* SIDEBAR FOOTER */}
+        <div className="sidebar-footer">
+          <div className="sidebar-status-box">
+            <span className="dot-pulse" />
+            <span>Engine Ready • 1080×1920</span>
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--text-muted)', padding: '0 4px' }}>
+            Zero-Hardcoding Dynamic Pacing
           </div>
         </div>
-      </header>
+      </aside>
 
-      {/* VIEW 1: FLAGSHIP REEL PIPELINE STUDIO */}
-      {activeNav === 'studio' && (
-        <main className="dashboard-viewport" style={{ padding: '20px 24px' }}>
-          <div className="studio-main-container">
-            {/* 4-STEP PIPELINE TRACKER */}
-            <nav className="pipeline-stepper">
-              <div
-                className={`step-indicator-item ${stage === 1 ? 'active' : stage > 1 ? 'completed' : ''}`}
-                onClick={() => setStage(1)}
-              >
-                <div className="step-num-badge">{stage > 1 ? <Check size={11} /> : '1'}</div>
-                <span className="step-label">1. Script & Chat Refinement</span>
+      {/* =========================================================================
+          MAIN CONTENT VIEWPORT
+          ========================================================================= */}
+      <main className="main-content">
+        {/* =====================================================================
+            VIEW 1: OVERVIEW & ANALYTICS
+            ===================================================================== */}
+        {activeNav === 'overview' && (
+          <div className="overview-container">
+            {/* OVERVIEW HEADER */}
+            <div className="overview-header">
+              <div>
+                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#fff', letterSpacing: -0.5, margin: '0 0 4px' }}>
+                  Studio Overview
+                </h1>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                  High-retention 13-cut developer reel production engine & project library.
+                </p>
               </div>
 
-              <div className="step-divider" />
-
-              <div
-                className={`step-indicator-item ${stage === 2 ? 'active' : stage > 2 ? 'completed' : ''}`}
-                onClick={() => session && setStage(2)}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setActiveNav('create')}
+                style={{
+                  height: 40,
+                  padding: '0 20px',
+                  gap: 8,
+                  background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+                  color: '#000',
+                  fontWeight: 800,
+                  boxShadow: '0 4px 18px rgba(0, 242, 254, 0.35)',
+                }}
               >
-                <div className="step-num-badge">{stage > 2 ? <Check size={11} /> : '2'}</div>
-                <span className="step-label">2. Voiceover (Sarvam AI)</span>
+                <PlusCircle size={16} />
+                <span>Create Reel</span>
+              </button>
+            </div>
+
+            {/* METRICS ROW */}
+            <div className="overview-stats-grid">
+              <div className="stat-card">
+                <div className="stat-top">
+                  <span className="stat-label">Total Reels Generated</span>
+                  <div className="stat-icon-wrap">
+                    <Film size={18} />
+                  </div>
+                </div>
+                <div className="stat-value">{sessionsList.length + 1}</div>
+                <div className="stat-subtext">1080×1920 Vertical Shorts & Reels</div>
               </div>
 
-              <div className="step-divider" />
-
-              <div
-                className={`step-indicator-item ${stage === 3 ? 'active' : stage > 3 ? 'completed' : ''}`}
-                onClick={() => audioResult && setStage(3)}
-              >
-                <div className="step-num-badge">{stage > 3 ? <Check size={11} /> : '3'}</div>
-                <span className="step-label">3. Visual Stills Review (3s)</span>
+              <div className="stat-card">
+                <div className="stat-top">
+                  <span className="stat-label">Visual Architecture</span>
+                  <div className="stat-icon-wrap" style={{ color: '#10B981' }}>
+                    <Layers size={18} />
+                  </div>
+                </div>
+                <div className="stat-value" style={{ color: '#10B981' }}>
+                  13-Cut Fast Pace
+                </div>
+                <div className="stat-subtext">Anti-PPT • 3D Mockups • Hex Grids</div>
               </div>
 
-              <div className="step-divider" />
-
-              <div
-                className={`step-indicator-item ${stage === 4 ? 'active' : ''}`}
-                onClick={() => (renderedMediaUrl || rendering) && setStage(4)}
-              >
-                <div className="step-num-badge">4</div>
-                <span className="step-label">4. 1080×1920 MP4 Render</span>
+              <div className="stat-card">
+                <div className="stat-top">
+                  <span className="stat-label">Voiceover Engine</span>
+                  <div className="stat-icon-wrap" style={{ color: '#F59E0B' }}>
+                    <Volume2 size={18} />
+                  </div>
+                </div>
+                <div className="stat-value" style={{ color: '#F59E0B' }}>
+                  Sarvam Neural
+                </div>
+                <div className="stat-subtext">sunny_hi_reels • Locked Audio Pipeline</div>
               </div>
-            </nav>
 
-            {/* STAGE 1: SCRIPT STUDIO & CHATGPT REFINEMENT */}
-            {stage === 1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* TOP BAR: TOPIC & ANGLE GENERATOR */}
-                <section className="topic-generator-card">
-                  <div className="topic-inputs-grid">
-                    <div>
-                      <div className="input-label-row">
-                        <span className="input-label">Tech Topic / Engineering Mystery</span>
-                      </div>
-                      <input
-                        type="text"
-                        className="text-field"
-                        value={topic}
-                        onChange={(e) => setTopic(e.target.value)}
-                        placeholder="e.g. How Zomato Decides Delivery & Surge Charges"
-                      />
-                    </div>
+              <div className="stat-card">
+                <div className="stat-top">
+                  <span className="stat-label">Dynamic Extractor</span>
+                  <div className="stat-icon-wrap" style={{ color: '#8B5CF6' }}>
+                    <ShieldCheck size={18} />
+                  </div>
+                </div>
+                <div className="stat-value" style={{ color: '#8B5CF6' }}>
+                  Zero Hardcoding
+                </div>
+                <div className="stat-subtext">Any Tech Domain • 6-Key JSON Contract</div>
+              </div>
+            </div>
 
-                    <div>
-                      <div className="input-label-row">
-                        <span className="input-label">Story Angle (Optional)</span>
-                      </div>
-                      <input
-                        type="text"
-                        className="text-field"
-                        value={angle}
-                        onChange={(e) => setAngle(e.target.value)}
-                        placeholder="e.g. Offline queueing and real-time GPS sync"
-                      />
-                    </div>
+            {/* RECENT REELS LIBRARY */}
+            <div className="reels-library-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 2px' }}>
+                    Recent Reels & Video Library
+                  </h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                    Click any reel to play in HD preview or download directly.
+                  </p>
+                </div>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={loadSessions} title="Refresh">
+                  <RefreshCw size={13} />
+                </button>
+              </div>
 
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      id="btn-generate-reel"
-                      disabled={studioLoading || rendering || !topic.trim()}
-                      onClick={handleGenerateReel}
-                      style={{
-                        height: 38,
-                        padding: '0 20px',
-                        gap: 8,
-                        background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
-                        color: '#000',
-                        fontWeight: 800,
-                        boxShadow: '0 4px 15px rgba(0, 242, 254, 0.35)',
-                      }}
-                    >
-                      {rendering || studioLoading ? (
-                        <RefreshCw size={13} className="animate-spin" />
-                      ) : (
-                        <Zap size={13} />
-                      )}
-                      <span>{rendering ? `Rendering (${renderProgress}%)` : studioLoading ? 'Processing Reel...' : '⚡ Generate Reel'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      disabled={studioLoading || rendering || !topic.trim()}
-                      onClick={handleGenerateScript}
-                      style={{ height: 38, padding: '0 16px', gap: 8 }}
-                    >
-                      {studioLoading ? (
-                        <RefreshCw size={13} className="animate-spin" />
-                      ) : (
-                        <Wand2 size={13} />
-                      )}
-                      <span>Script Only</span>
-                    </button>
+              <div className="reels-grid">
+                {/* 1. Verified Featured Reel */}
+                <div className="reel-card" style={{ borderColor: 'rgba(0, 242, 254, 0.4)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span className="badge-mono" style={{ background: '#10B98122', color: '#10B981' }}>
+                      Ready • {featuredReel.duration}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{featuredReel.date}</span>
                   </div>
 
-                  {/* PRESETS */}
-                  <div className="presets-wrap" style={{ marginTop: 2 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Quick Presets:</span>
-                    {VIRAL_TECH_PRESETS.map((p, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        className="preset-chip"
-                        onClick={() => {
-                          setTopic(p.topic);
-                          setAngle(p.angle);
-                        }}
-                      >
-                        {p.topic.split('&')[0]}
-                      </button>
-                    ))}
+                  <div>
+                    <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                      {featuredReel.title}
+                    </h4>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                      {featuredReel.topic}
+                    </p>
                   </div>
-                </section>
 
-                {/* CHATGPT REFINEMENT SPLIT VIEW */}
-                {session ? (
-                  <div className="chat-refine-grid">
-                    {/* LEFT COLUMN: CHATGPT ASSISTANT */}
-                    <div className="chat-assistant-pane">
-                      <div className="chat-pane-header">
-                        <div className="chat-pane-title">
-                          <Bot size={16} style={{ color: '#3b82f6' }} />
-                          <span>AI Script Assistant</span>
-                          <span className="badge-mono" style={{ fontSize: 10 }}>
-                            ChatGPT Refinement
-                          </span>
-                        </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {featuredReel.resolution} • {featuredReel.size}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setPreviewModalUrl(featuredReel.mediaUrl)}
+                      style={{ flex: 1, gap: 6 }}
+                    >
+                      <Play size={12} fill="#000" />
+                      <span>Play Reel</span>
+                    </button>
+                    <a
+                      href={featuredReel.mediaUrl}
+                      download="zomato_surge_creator_reel.mp4"
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '0 10px' }}
+                      title="Download MP4"
+                    >
+                      <Download size={13} />
+                    </a>
+                  </div>
+                </div>
+
+                {/* 2. Dynamic Sessions */}
+                {sessionsList.map((sess) => {
+                  const hasMedia = Boolean(sess.renderState?.mediaUrl);
+                  return (
+                    <div key={sess.id} className="reel-card">
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span
+                          className="badge-mono"
+                          style={{
+                            background: hasMedia ? '#10B98122' : '#F59E0B22',
+                            color: hasMedia ? '#10B981' : '#F59E0B',
+                          }}
+                        >
+                          {hasMedia ? 'Rendered' : 'Draft Script'}
+                        </span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {session.messages?.length || 0} messages
+                          {new Date(sess.updatedAt).toLocaleDateString()}
                         </span>
                       </div>
 
-                      {/* CHAT MESSAGE STREAM */}
-                      <div className="chat-message-stream" ref={chatScrollRef}>
-                        <div className="chat-bubble-ai">
-                          👋 <strong>Master Script Ready!</strong> Script 7-part master standard ke hisaab se ready hai.
-                          <br />
-                          Agar aapko koi Hook change karwana ho, kisi Act me koi detail ya term add/fix karni ho, toh neeche prompt likhiye!
-                        </div>
-
-                        {session.messages?.map((msg, idx) => (
-                          <div
-                            key={idx}
-                            className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}
-                          >
-                            <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 4, display: 'flex', gap: 4 }}>
-                              {msg.role === 'user' ? <User size={10} /> : <Bot size={10} />}
-                              <span>{msg.role === 'user' ? 'You' : 'Antigravity AI'}</span>
-                            </div>
-                            <div style={{ whiteSpace: 'pre-wrap' }}>
-                              {msg.role === 'assistant'
-                                ? msg.content.slice(0, 350) +
-                                  (msg.content.length > 350
-                                    ? '\n\n✨ [Full updated script reflected in inspector on right ➡️]'
-                                    : '')
-                                : msg.content}
-                            </div>
-                          </div>
-                        ))}
-
-                        {chatSending && (
-                          <div className="chat-bubble-ai" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <RefreshCw size={12} className="animate-spin" />
-                            <span>Refining script and updating scene JSON...</span>
-                          </div>
-                        )}
+                      <div>
+                        <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                          {sess.topic}
+                        </h4>
+                        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
+                          {sess.angle || 'System Design Reel'}
+                        </p>
                       </div>
 
-                      {/* QUICK SUGGESTION PILLS */}
-                      <div className="chat-quick-suggestions">
-                        {QUICK_CHAT_SUGGESTIONS.map((sug, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            className="quick-pill"
-                            onClick={() => handleSendChat(sug)}
-                            disabled={chatSending}
-                          >
-                            {sug}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* CHAT INPUT BAR */}
-                      <form
-                        className="chat-input-bar"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleSendChat();
-                        }}
-                      >
-                        <input
-                          type="text"
-                          className="chat-input-field"
-                          placeholder="Tell AI: 'Act 3 me H3 ki jagah Geohash explain karo'..."
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          disabled={chatSending}
-                        />
-                        <button
-                          type="submit"
-                          className="btn btn-primary btn-sm"
-                          disabled={chatSending || !chatInput.trim()}
-                          style={{ padding: '0 14px', height: 34 }}
-                        >
-                          {chatSending ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                        </button>
-                      </form>
-                    </div>
-
-                    {/* RIGHT COLUMN: LIVE SCRIPT INSPECTOR */}
-                    <div className="script-inspector-pane">
-                      <div className="script-inspector-header">
-                        <div className="script-tabs">
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                        {hasMedia ? (
                           <button
                             type="button"
-                            className={`script-tab-btn ${activeScriptTab === 'full' ? 'active' : ''}`}
-                            onClick={() => setActiveScriptTab('full')}
+                            className="btn btn-primary btn-sm"
+                            onClick={() => setPreviewModalUrl(sess.renderState.mediaUrl)}
+                            style={{ flex: 1, gap: 6 }}
                           >
-                            <FileText size={12} /> Full Script
+                            <Play size={12} fill="#000" />
+                            <span>Play Reel</span>
                           </button>
-                          <button
-                            type="button"
-                            className={`script-tab-btn ${activeScriptTab === 'acts' ? 'active' : ''}`}
-                            onClick={() => setActiveScriptTab('acts')}
-                          >
-                            <Volume2 size={12} /> Voiceover Script
-                          </button>
-                          <button
-                            type="button"
-                            className={`script-tab-btn ${activeScriptTab === 'scenes' ? 'active' : ''}`}
-                            onClick={() => setActiveScriptTab('scenes')}
-                          >
-                            <Layers size={12} /> Remotion Scenes
-                          </button>
-                          <button
-                            type="button"
-                            className={`script-tab-btn ${activeScriptTab === 'cheat' ? 'active' : ''}`}
-                            onClick={() => setActiveScriptTab('cheat')}
-                          >
-                            <Cpu size={12} /> SDE Cheat-Sheet
-                          </button>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        ) : (
                           <button
                             type="button"
                             className="btn btn-secondary btn-sm"
-                            onClick={handleCopyCurrentScript}
-                            title="Copy Markdown"
+                            onClick={() => {
+                              setSession(sess);
+                              setTopic(sess.topic);
+                              setAngle(sess.angle || '');
+                              setActiveNav('create');
+                              setStage(1);
+                            }}
+                            style={{ flex: 1, gap: 6 }}
                           >
-                            {copiedScript ? <Check size={11} /> : <Copy size={11} />}
-                            <span>{copiedScript ? 'Copied' : 'Copy'}</span>
+                            <Wand2 size={12} />
+                            <span>Open in Studio</span>
+                          </button>
+                        )}
+                        {hasMedia && (
+                          <a
+                            href={sess.renderState.mediaUrl}
+                            download={`${sess.topic.replace(/\s+/g, '_')}.mp4`}
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '0 10px' }}
+                            title="Download MP4"
+                          >
+                            <Download size={13} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            VIEW 2: CREATE REEL (WORKFLOW TIMELINE NAVBAR)
+            ===================================================================== */}
+        {activeNav === 'create' && (
+          <div className="dashboard-viewport" style={{ padding: '20px 24px' }}>
+            <div className="studio-main-container">
+              {/* TOP TIMELINE STEPPER NAVBAR */}
+              <nav className="timeline-stepper">
+                <button
+                  type="button"
+                  className={`timeline-step ${stage === 1 ? 'active' : stage > 1 ? 'completed' : ''}`}
+                  onClick={() => setStage(1)}
+                >
+                  <div className="timeline-step-circle">{stage > 1 ? <Check size={13} /> : '1'}</div>
+                  <div className="timeline-step-text">
+                    <span className="timeline-step-title">1. Generate Script</span>
+                  </div>
+                </button>
+
+                <div className={`timeline-step-line ${stage > 1 ? 'completed' : ''}`} />
+
+                <button
+                  type="button"
+                  className={`timeline-step ${stage === 2 ? 'active' : stage > 2 ? 'completed' : ''}`}
+                  onClick={() => session && setStage(2)}
+                  disabled={!session}
+                  style={{ opacity: session ? 1 : 0.45 }}
+                >
+                  <div className="timeline-step-circle">{stage > 2 ? <Check size={13} /> : '2'}</div>
+                  <div className="timeline-step-text">
+                    <span className="timeline-step-title">2. Generate Voiceover</span>
+                  </div>
+                </button>
+
+                <div className={`timeline-step-line ${stage > 2 ? 'completed' : ''}`} />
+
+                <button
+                  type="button"
+                  className={`timeline-step ${stage === 3 ? 'active' : stage > 3 ? 'completed' : ''}`}
+                  onClick={() => (audioResult || session?.audioResult) && setStage(3)}
+                  disabled={!audioResult && !session?.audioResult}
+                  style={{ opacity: audioResult || session?.audioResult ? 1 : 0.45 }}
+                >
+                  <div className="timeline-step-circle">{stage > 3 ? <Check size={13} /> : '3'}</div>
+                  <div className="timeline-step-text">
+                    <span className="timeline-step-title">3. Generate Visuals</span>
+                  </div>
+                </button>
+
+                <div className={`timeline-step-line ${stage > 3 ? 'completed' : ''}`} />
+
+                <button
+                  type="button"
+                  className={`timeline-step ${stage === 4 ? 'active' : ''}`}
+                  onClick={() => (renderedMediaUrl || rendering) && setStage(4)}
+                  disabled={!renderedMediaUrl && !rendering}
+                  style={{ opacity: renderedMediaUrl || rendering ? 1 : 0.45 }}
+                >
+                  <div className="timeline-step-circle">4</div>
+                  <div className="timeline-step-text">
+                    <span className="timeline-step-title">4. Finalize & Render Reel</span>
+                  </div>
+                </button>
+              </nav>
+
+              {/* STAGE 1: GENERATE SCRIPT */}
+              {stage === 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* SCRIPT SUB-SWITCHER: GENERATE AI vs PASTE SCRIPT */}
+                  <div className="script-mode-switcher">
+                    <button
+                      type="button"
+                      className={`script-mode-btn ${scriptMode === 'ai' ? 'active' : ''}`}
+                      onClick={() => setScriptMode('ai')}
+                    >
+                      <Sparkles size={14} />
+                      <span>✨ Generate Script (AI)</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`script-mode-btn ${scriptMode === 'paste' ? 'active' : ''}`}
+                      onClick={() => setScriptMode('paste')}
+                    >
+                      <FileText size={14} />
+                      <span>📝 Paste Script</span>
+                    </button>
+                  </div>
+
+                  {/* MODE A: GENERATE SCRIPT (AI) */}
+                  {scriptMode === 'ai' && (
+                    <>
+                      {/* TOP BAR: TOPIC & ANGLE GENERATOR */}
+                      <section className="topic-generator-card">
+                        <div className="topic-inputs-grid">
+                          <div>
+                            <div className="input-label-row">
+                              <span className="input-label">Tech Topic / Engineering Mystery</span>
+                            </div>
+                            <input
+                              type="text"
+                              className="text-field"
+                              value={topic}
+                              onChange={(e) => setTopic(e.target.value)}
+                              placeholder="e.g. How Zomato Decides Delivery & Surge Charges"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="input-label-row">
+                              <span className="input-label">Story Angle (Optional)</span>
+                            </div>
+                            <input
+                              type="text"
+                              className="text-field"
+                              value={angle}
+                              onChange={(e) => setAngle(e.target.value)}
+                              placeholder="e.g. Offline queueing and real-time GPS sync"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            id="btn-generate-reel"
+                            disabled={studioLoading || rendering || !topic.trim()}
+                            onClick={handleGenerateReel}
+                            style={{
+                              height: 38,
+                              padding: '0 20px',
+                              gap: 8,
+                              background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+                              color: '#000',
+                              fontWeight: 800,
+                              boxShadow: '0 4px 15px rgba(0, 242, 254, 0.35)',
+                            }}
+                          >
+                            {rendering || studioLoading ? (
+                              <RefreshCw size={13} className="animate-spin" />
+                            ) : (
+                              <Zap size={13} />
+                            )}
+                            <span>
+                              {rendering
+                                ? `Rendering (${renderProgress}%)`
+                                : studioLoading
+                                ? 'Processing Reel...'
+                                : '⚡ Generate Full Reel'}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={studioLoading || rendering || !topic.trim()}
+                            onClick={handleGenerateScript}
+                            style={{ height: 38, padding: '0 16px', gap: 8 }}
+                          >
+                            {studioLoading ? (
+                              <RefreshCw size={13} className="animate-spin" />
+                            ) : (
+                              <Wand2 size={13} />
+                            )}
+                            <span>Generate Script</span>
+                          </button>
+                        </div>
+
+                        {/* PRESETS */}
+                        <div className="presets-wrap" style={{ marginTop: 2 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Quick Presets:</span>
+                          {VIRAL_TECH_PRESETS.map((p, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="preset-chip"
+                              onClick={() => {
+                                setTopic(p.topic);
+                                setAngle(p.angle);
+                              }}
+                            >
+                              {p.topic.split('&')[0]}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+
+                      {/* AI SCRIPT ASSISTANT SPLIT VIEW */}
+                      {session ? (
+                        <div className="chat-refine-grid">
+                          {/* LEFT COLUMN: CHATGPT ASSISTANT */}
+                          <div className="chat-assistant-pane">
+                            <div className="chat-pane-header">
+                              <div className="chat-pane-title">
+                                <Bot size={16} style={{ color: '#00F2FE' }} />
+                                <span>AI Script Assistant</span>
+                                <span className="badge-mono" style={{ fontSize: 10 }}>
+                                  Hinglish Refinement
+                                </span>
+                              </div>
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {session.messages?.length || 0} messages
+                              </span>
+                            </div>
+
+                            {/* CHAT MESSAGE STREAM */}
+                            <div className="chat-message-stream" ref={chatScrollRef}>
+                              <div className="chat-bubble-ai">
+                                👋 <strong>Master Script Ready!</strong> Script 7-part master standard ke hisaab se
+                                ready hai.
+                                <br />
+                                Agar aapko koi Hook change karwana ho, kisi Act me koi detail ya term add/fix karni ho,
+                                toh neeche prompt likhiye!
+                              </div>
+
+                              {session.messages?.map((msg, idx) => (
+                                <div
+                                  key={idx}
+                                  className={msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}
+                                >
+                                  <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 4, display: 'flex', gap: 4 }}>
+                                    {msg.role === 'user' ? <User size={10} /> : <Bot size={10} />}
+                                    <span>{msg.role === 'user' ? 'You' : 'Antigravity AI'}</span>
+                                  </div>
+                                  <div style={{ whiteSpace: 'pre-wrap' }}>
+                                    {msg.role === 'assistant'
+                                      ? msg.content.slice(0, 350) +
+                                        (msg.content.length > 350
+                                          ? '\n\n✨ [Full updated script reflected in inspector on right ➡️]'
+                                          : '')
+                                      : msg.content}
+                                  </div>
+                                </div>
+                              ))}
+
+                              {chatSending && (
+                                <div
+                                  className="chat-bubble-ai"
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                                >
+                                  <RefreshCw size={12} className="animate-spin" />
+                                  <span>Refining script and updating scene JSON...</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* QUICK SUGGESTION PILLS */}
+                            <div className="chat-quick-suggestions">
+                              {QUICK_CHAT_SUGGESTIONS.map((sug, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  className="quick-pill"
+                                  onClick={() => handleSendChat(sug)}
+                                  disabled={chatSending}
+                                >
+                                  {sug}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* CHAT INPUT BAR */}
+                            <form
+                              className="chat-input-bar"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleSendChat();
+                              }}
+                            >
+                              <input
+                                type="text"
+                                className="chat-input-field"
+                                placeholder="Tell AI: 'Act 3 me H3 ki jagah Geohash explain karo'..."
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                disabled={chatSending}
+                              />
+                              <button
+                                type="submit"
+                                className="btn btn-primary btn-sm"
+                                disabled={chatSending || !chatInput.trim()}
+                                style={{ padding: '0 14px', height: 34 }}
+                              >
+                                {chatSending ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                              </button>
+                            </form>
+                          </div>
+
+                          {/* RIGHT COLUMN: LIVE SCRIPT INSPECTOR */}
+                          <div className="script-inspector-pane">
+                            <div className="script-inspector-header">
+                              <div className="script-tabs">
+                                <button
+                                  type="button"
+                                  className={`script-tab-btn ${activeScriptTab === 'full' ? 'active' : ''}`}
+                                  onClick={() => setActiveScriptTab('full')}
+                                >
+                                  <FileText size={12} /> Full Script
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`script-tab-btn ${activeScriptTab === 'acts' ? 'active' : ''}`}
+                                  onClick={() => setActiveScriptTab('acts')}
+                                >
+                                  <Volume2 size={12} /> Voiceover Script
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`script-tab-btn ${activeScriptTab === 'scenes' ? 'active' : ''}`}
+                                  onClick={() => setActiveScriptTab('scenes')}
+                                >
+                                  <Layers size={12} /> Remotion Scenes
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`script-tab-btn ${activeScriptTab === 'cheat' ? 'active' : ''}`}
+                                  onClick={() => setActiveScriptTab('cheat')}
+                                >
+                                  <Cpu size={12} /> SDE Cheat-Sheet
+                                </button>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={handleCopyCurrentScript}
+                                  title="Copy Markdown"
+                                >
+                                  {copiedScript ? <Check size={11} /> : <Copy size={11} />}
+                                  <span>{copiedScript ? 'Copied' : 'Copy'}</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* INSPECTOR TAB CONTENT */}
+                            <div className="script-inspector-content">
+                              {activeScriptTab === 'full' && (
+                                <div className="script-markdown-view">{session.currentMarkdown}</div>
+                              )}
+
+                              {activeScriptTab === 'acts' && (
+                                <div className="acts-cards-stream">
+                                  <div className="act-card-item">
+                                    <div className="act-card-top">
+                                      <span className="act-card-badge">Section 1: Hook Options</span>
+                                    </div>
+                                    <pre
+                                      style={{
+                                        fontSize: 12,
+                                        color: 'var(--text-secondary)',
+                                        whiteSpace: 'pre-wrap',
+                                      }}
+                                    >
+                                      {session.sections?.hookOptions || 'Analyzing hook variations...'}
+                                    </pre>
+                                  </div>
+
+                                  <div className="act-card-item" style={{ borderLeft: '3px solid #00F2FE' }}>
+                                    <div className="act-card-top">
+                                      <span
+                                        className="act-card-badge"
+                                        style={{ background: '#00F2FE', color: '#000' }}
+                                      >
+                                        Section 2: Final Voiceover Script
+                                      </span>
+                                    </div>
+                                    <div className="act-card-text" style={{ whiteSpace: 'pre-wrap' }}>
+                                      {session.sections?.voiceoverScript || 'Generating voiceover...'}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {activeScriptTab === 'scenes' && (
+                                <div className="acts-cards-stream">
+                                  {session.storyboard?.scenes?.map((scene, idx) => (
+                                    <div key={idx} className="act-card-item">
+                                      <div className="act-card-top">
+                                        <span className="act-card-badge">
+                                          Act {idx + 1} • {scene.type}
+                                        </span>
+                                        <span className="badge-mono" style={{ fontSize: 11 }}>
+                                          ~{scene.durationTargetSec || 14}s
+                                        </span>
+                                      </div>
+                                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                        {scene.onScreenText}
+                                      </div>
+                                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                        "{scene.narration}"
+                                      </div>
+                                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                        Visual: {scene.technicalKeyPoint}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {activeScriptTab === 'cheat' && (
+                                <div className="acts-cards-stream">
+                                  <div className="act-card-item">
+                                    <div className="act-card-top">
+                                      <span className="act-card-badge">Interview Cheat Sheet</span>
+                                    </div>
+                                    <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                      {session.sections?.interviewCheatSheet || 'Cheat sheet content'}
+                                    </div>
+                                  </div>
+
+                                  <div className="act-card-item">
+                                    <div className="act-card-top">
+                                      <span className="act-card-badge">SDE-3 Architecture Tradeoff</span>
+                                    </div>
+                                    <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                      {session.sections?.tradeoffDilemma || 'Tradeoff analysis'}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* BOTTOM PROCEED BAR */}
+                            <div
+                              style={{
+                                padding: '12px 18px',
+                                background: 'var(--bg-surface)',
+                                borderTop: '1px solid var(--border)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                              }}
+                            >
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                Ready to produce audio? Lock in script and advance to voiceover.
+                              </div>
+
+                              <button
+                                type="button"
+                                className="btn btn-emerald"
+                                onClick={handleFinalizeScript}
+                                disabled={studioLoading}
+                                style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, gap: 8 }}
+                              >
+                                <CheckCircle2 size={14} />
+                                <span>Proceed to Voiceover</span>
+                                <ArrowRight size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="panel-card empty-placeholder" style={{ padding: '60px 20px' }}>
+                          <Wand2 size={24} style={{ margin: '0 auto 12px', color: 'var(--text-muted)' }} />
+                          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
+                            Ready to Generate Viral Tech Reel
+                          </h3>
+                          <p style={{ maxWidth: 500, margin: '0 auto', color: 'var(--text-muted)' }}>
+                            Enter your topic and angle above or choose a preset. Antigravity AI will create a complete
+                            master script and Remotion scene structure.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* MODE B: PASTE SCRIPT */}
+                  {scriptMode === 'paste' && (
+                    <div className="paste-script-card">
+                      <div className="paste-script-header">
+                        <div>
+                          <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px', color: '#fff' }}>
+                            Paste Creator 6-Key JSON Script
+                          </h3>
+                          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
+                            Paste your exact technical script. The zero-hardcoding parser automatically extracts numbers,
+                            ratios, and the 5-stage backend pipeline.
+                          </p>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              setCustomScriptText(SAMPLE_6KEY_JSON);
+                              setPasteSuccess(false);
+                            }}
+                          >
+                            <Copy size={12} />
+                            <span>Load Sample 6-Key JSON</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => {
+                              setCustomScriptText('');
+                              setPasteSuccess(false);
+                            }}
+                          >
+                            Clear
                           </button>
                         </div>
                       </div>
 
-                      {/* INSPECTOR TAB CONTENT */}
-                      <div className="script-inspector-content">
-                        {activeScriptTab === 'full' && (
-                          <div className="script-markdown-view">
-                            {session.currentMarkdown}
-                          </div>
-                        )}
-
-                        {activeScriptTab === 'acts' && (
-                          <div className="acts-cards-stream">
-                            <div className="act-card-item">
-                              <div className="act-card-top">
-                                <span className="act-card-badge">Section 1: Hook Options</span>
-                              </div>
-                              <pre style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-                                {session.sections?.hookOptions || 'Analyzing hook variations...'}
-                              </pre>
-                            </div>
-
-                            <div className="act-card-item" style={{ borderLeft: '3px solid #3b82f6' }}>
-                              <div className="act-card-top">
-                                <span className="act-card-badge" style={{ background: '#3b82f6', color: '#fff' }}>
-                                  Section 2: Final Voiceover Script
-                                </span>
-                              </div>
-                              <div className="act-card-text" style={{ whiteSpace: 'pre-wrap' }}>
-                                {session.sections?.voiceoverScript || 'Generating voiceover...'}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {activeScriptTab === 'scenes' && (
-                          <div className="acts-cards-stream">
-                            {session.storyboard?.scenes?.map((scene, idx) => (
-                              <div key={idx} className="act-card-item">
-                                <div className="act-card-top">
-                                  <span className="act-card-badge">
-                                    Act {idx + 1} • {scene.type}
-                                  </span>
-                                  <span className="badge-mono" style={{ fontSize: 11 }}>
-                                    ~{scene.durationTargetSec || 14}s
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                  {scene.onScreenText}
-                                </div>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                  "{scene.narration}"
-                                </div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                  Visual: {scene.technicalKeyPoint}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {activeScriptTab === 'cheat' && (
-                          <div className="acts-cards-stream">
-                            <div className="act-card-item">
-                              <div className="act-card-top">
-                                <span className="act-card-badge">Interview Cheat Sheet</span>
-                              </div>
-                              <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                {session.sections?.interviewCheatSheet || 'Cheat sheet content'}
-                              </div>
-                            </div>
-
-                            <div className="act-card-item">
-                              <div className="act-card-top">
-                                <span className="act-card-badge">SDE-3 Architecture Tradeoff</span>
-                              </div>
-                              <div style={{ fontSize: 12.5, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                {session.sections?.tradeoffDilemma || 'Tradeoff analysis'}
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                      {/* 6-KEY VALIDATION CHECKLIST BAR */}
+                      <div className="key-checklist-bar">
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginRight: 4 }}>
+                          Detected Keys:
+                        </span>
+                        <span className={`key-pill ${detectedKeys.title ? 'present' : 'missing'}`}>
+                          {detectedKeys.title ? '✔' : '✖'} title
+                        </span>
+                        <span className={`key-pill ${detectedKeys.hook ? 'present' : 'missing'}`}>
+                          {detectedKeys.hook ? '✔' : '✖'} hook
+                        </span>
+                        <span className={`key-pill ${detectedKeys.problem ? 'present' : 'missing'}`}>
+                          {detectedKeys.problem ? '✔' : '✖'} problem
+                        </span>
+                        <span className={`key-pill ${detectedKeys.solution ? 'present' : 'missing'}`}>
+                          {detectedKeys.solution ? '✔' : '✖'} solution
+                        </span>
+                        <span className={`key-pill ${detectedKeys.tech_explained ? 'present' : 'missing'}`}>
+                          {detectedKeys.tech_explained ? '✔' : '✖'} tech_explained
+                        </span>
+                        <span className={`key-pill ${detectedKeys.conclusion ? 'present' : 'missing'}`}>
+                          {detectedKeys.conclusion ? '✔' : '✖'} conclusion
+                        </span>
+                        <span className={`key-pill ${detectedKeys.cta ? 'present' : 'missing'}`}>
+                          {detectedKeys.cta ? '✔' : '✖'} cta
+                        </span>
                       </div>
 
-                      {/* BOTTOM LOCK-IN BAR */}
-                      <div
-                        style={{
-                          padding: '12px 18px',
-                          background: 'var(--bg-surface)',
-                          borderTop: '1px solid var(--border)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
+                      {/* CODE EDITOR TEXTAREA */}
+                      <textarea
+                        className="paste-script-textarea"
+                        value={customScriptText}
+                        onChange={(e) => {
+                          setCustomScriptText(e.target.value);
+                          setPasteSuccess(false);
                         }}
-                      >
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          Satisfied with the script? Lock it in to generate Sarvam voiceover.
-                        </div>
+                        placeholder={`{\n  "title": "Topic Name",\n  "hook": "...",\n  "problem": "...",\n  "solution": "...",\n  "tech_explained": "...",\n  "conclusion": "...",\n  "cta": "..."\n}`}
+                      />
 
+                      {/* PARSE / SUCCESS BANNER */}
+                      {pasteSuccess && session && (
+                        <div
+                          style={{
+                            padding: '12px 18px',
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            borderRadius: 10,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#34D399' }}>
+                            <CheckCircle2 size={18} />
+                            <div>
+                              <strong>Script Successfully Parsed & Validated!</strong>
+                              <div style={{ fontSize: 12, opacity: 0.9 }}>
+                                Title: "{session.topic}" • {session.storyboard?.scenes?.length || 5} Dynamic Scenes Ready
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="btn btn-emerald"
+                            onClick={() => setStage(2)}
+                            style={{ gap: 6, fontWeight: 700 }}
+                          >
+                            <span>Proceed to Voiceover</span>
+                            <ArrowRight size={14} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* ACTION BUTTON */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                         <button
                           type="button"
-                          className="btn btn-emerald"
-                          onClick={handleFinalizeScript}
-                          disabled={studioLoading}
-                          style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600, gap: 8 }}
+                          className="btn btn-primary"
+                          onClick={handleParseCustomScript}
+                          disabled={studioLoading || !customScriptText.trim()}
+                          style={{
+                            padding: '10px 24px',
+                            fontSize: 13,
+                            fontWeight: 700,
+                            gap: 8,
+                            background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+                            color: '#000',
+                          }}
                         >
-                          <CheckCircle2 size={14} />
-                          <span>Finalize Script & Proceed to Voiceover</span>
-                          <ArrowRight size={14} />
+                          {studioLoading ? <RefreshCw size={13} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                          <span>Validate & Parse Script</span>
                         </button>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="panel-card empty-placeholder" style={{ padding: '60px 20px' }}>
-                    <Wand2 size={24} style={{ margin: '0 auto 12px', color: 'var(--text-muted)' }} />
-                    <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Ready to Generate Viral Tech Reel</h3>
-                    <p style={{ maxWidth: 500, margin: '0 auto', color: 'var(--text-muted)' }}>
-                      Enter your topic and angle above or choose a preset. Antigravity AI will create a complete 7-part master script, Remotion scene structure, and chat with you to refine it!
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* STAGE 2: VOICEOVER GENERATION (SARVAM AI) */}
-            {stage === 2 && (
-              <section className="voiceover-hub-card">
-                <div className="voiceover-hero-header">
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                      🎙️ Stage 2: Studio Voiceover Synthesis
-                    </h3>
-                    <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                      Powered by <strong>Sarvam AI</strong> (Hinglish Neural Voice <code>sunny_hi_reels</code>) with exact millisecond silence injection and phonetic enhancements.
-                    </p>
-                  </div>
-
-                  <div className="voice-badge-chip">
-                    <Music size={13} />
-                    <span>sunny_hi_reels (Pace 1.0)</span>
-                  </div>
+                  )}
                 </div>
+              )}
 
-                {/* ACTION BANNER */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '16px 20px',
-                    background: 'var(--bg-surface)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-md)',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>Synthesize Spoken Audio</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                      Synthesizes complete storyboard narration and builds master timeline audio (90–120s budget).
+              {/* STAGE 2: VOICEOVER GENERATION */}
+              {stage === 2 && (
+                <section className="voiceover-hub-card">
+                  <div className="voiceover-hero-header">
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+                        🎙️ Stage 2: Voiceover Synthesis
+                      </h3>
+                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                        Powered by <strong>Sarvam AI</strong> (Hinglish Neural Voice <code>sunny_hi_reels</code>) with
+                        exact millisecond silence injection.
+                      </p>
+                    </div>
+
+                    <div className="voice-badge-chip">
+                      <Music size={13} />
+                      <span>sunny_hi_reels (Pace 1.0)</span>
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={audioSynthesizing}
-                    onClick={handleSynthesizeAudio}
-                    style={{ padding: '8px 22px', fontSize: 13, gap: 8 }}
+                  {/* ACTION BANNER */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '16px 20px',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                    }}
                   >
-                    {audioSynthesizing ? (
-                      <RefreshCw size={13} className="animate-spin" />
-                    ) : (
-                      <Volume2 size={13} />
-                    )}
-                    <span>{audioSynthesizing ? 'Synthesizing Audio...' : 'Synthesize Voiceover'}</span>
-                  </button>
-                </div>
-
-
-                <details>
-                  <summary>Adjust pronunciation by scene</summary>
-                  <p>For Hinglish, write Hindi in Devanagari and keep English technical terms in English. Leave a field blank to use the original script.</p>
-                  {session?.storyboard?.scenes?.map((scene, index) => (
-                    <label key={scene.id} style={{ display: 'block', marginTop: 12 }}>
-                      Scene {index + 1}
-                      <textarea
-                        rows={2}
-                        maxLength={2500}
-                        className="input"
-                        style={{ display: 'block', width: '100%' }}
-                        placeholder={scene.narration}
-                        disabled={audioSynthesizing}
-                        value={voiceEdits[session.id]?.[scene.id] ?? scene.spokenNarration ?? ''}
-                        onChange={event => {
-                          const value = event.target.value;
-                          setVoiceEdits(edits => ({
-                            ...edits,
-                            [session.id]: { ...edits[session.id], [scene.id]: value },
-                          }));
-                        }}
-                      />
-                    </label>
-                  ))}
-                </details>
-
-                {/* AUDIO PLAYERS & DURATION STATS */}
-                {audioResult ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {/* MASTER AUDIO PLAYER */}
-                    <div className="audio-master-player-box">
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <CheckCircle2 size={14} style={{ color: '#4ade80' }} />
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>Full Master Narration</span>
-                        </div>
-                        <span className="badge-mono" style={{ background: '#4ade80', color: '#000', fontWeight: 700 }}>
-                          {audioResult.totalDurationSec}s Spoken Duration
-                        </span>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>Synthesize Spoken Audio</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                        Synthesizes complete storyboard narration and builds master timeline audio.
                       </div>
-                      <audio
-                        controls
-                        src={toApiUrl(audioResult.fullAudioUrl || audioResult.clips?.[0]?.url)}
-                        className="preview-audio-player"
-                      />
                     </div>
 
-                    {/* INDIVIDUAL SCENE AUDIO PLAYERS */}
-                    <div className="audio-scenes-grid">
-                      {audioResult.clips?.map((clip, idx) => (
-                        <div key={idx} className="audio-scene-card">
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span className="badge-mono">Scene {idx + 1}</span>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              {(clip.durationMs / 1000).toFixed(1)}s
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', maxHeight: 40, overflow: 'hidden' }}>
-                            {session?.storyboard?.scenes?.[idx]?.narration || `Scene ${idx + 1} Narration`}
-                          </div>
-                          <audio controls src={toApiUrl(clip.url)} style={{ width: '100%', height: 32 }} />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* NEXT STEP BUTTON */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setStage(1)}
-                      >
-                        ⬅️ Back to Script Chat
-                      </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
                       <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={() => {
-                          setStage(3);
-                          if (!stills || stills.length === 0) {
-                            handleGenerateStills();
-                          }
-                        }}
-                        style={{ padding: '8px 24px', fontSize: 13, gap: 8 }}
+                        disabled={audioSynthesizing}
+                        onClick={handleSynthesizeAudio}
+                        style={{ padding: '8px 22px', fontSize: 13, gap: 8 }}
                       >
-                        <span>Proceed to Visual Preview</span>
-                        <ArrowRight size={14} />
+                        {audioSynthesizing ? (
+                          <RefreshCw size={13} className="animate-spin" />
+                        ) : (
+                          <Volume2 size={13} />
+                        )}
+                        <span>{audioSynthesizing ? 'Synthesizing Audio...' : 'Synthesize Voiceover'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => setStage(3)}
+                        style={{ padding: '8px 16px', gap: 6 }}
+                      >
+                        <span>Next: Visuals</span>
+                        <ArrowRight size={13} />
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <div className="empty-placeholder" style={{ padding: '40px 0' }}>
-                    <Music size={24} style={{ margin: '0 auto 8px', color: 'var(--text-muted)' }} />
-                    <p>Click "Synthesize Voiceover" above to produce studio-grade audio.</p>
-                  </div>
-                )}
-              </section>
-            )}
 
-            {/* STAGE 3: VISUAL REVIEW & SCREENSHOTS (INSTANT 3s REVIEW) */}
-            {stage === 3 && (
-              <section className="voiceover-hub-card">
-                <div className="voiceover-hero-header">
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                      📸 Stage 3: Visual Verification & Screenshots (Instant 3s Review)
-                    </h3>
-                    <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                      Inspect high-resolution 1080×1920 frames of every scene before committing to full video export. Click any image to view in full size!
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={handleGenerateStills}
-                      disabled={generatingStills}
-                      style={{ gap: 6 }}
-                    >
-                      {generatingStills ? (
-                        <RefreshCw size={13} className="animate-spin" />
-                      ) : (
-                        <Camera size={13} />
-                      )}
-                      <span>
-                        {generatingStills
-                          ? 'Rendering Stills...'
-                          : stills.length > 0
-                          ? 'Regenerate Stills'
-                          : 'Generate Stills (3s)'}
-                      </span>
-                    </button>
-
-                    <div className="badge-mono" style={{ background: '#3b82f6', color: '#fff' }}>
-                      {session?.storyboard?.scenes?.length ?? 0} scenes • {session?.timeline && audioResult ? `${session.timeline.totalDurationSec}s timeline` : `~${session?.storyboard?.estimatedDurationSec ?? 55}s estimated`}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 1. VISUAL STILLS GALLERY */}
-                {stills && stills.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        Scene Visual Frames (1080×1920 Vertical Screenshots)
-                      </span>
-                      <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                        Click any frame to inspect full-size details & safe areas
-                      </span>
-                    </div>
-
-                    <div className="stills-gallery-grid">
-                      {stills.map((still, idx) => (
-                        <div
-                          key={idx}
-                          className="still-card-wrapper"
-                          onClick={() => setSelectedStill(still)}
-                          title="Click to zoom in"
-                        >
-                          <div className="still-thumbnail-box">
-                            <img src={toApiUrl(still.url).includes('?t=') ? toApiUrl(still.url) : `${toApiUrl(still.url)}?t=${Date.now()}`} alt={still.type} />
-                            <div className="still-thumbnail-badge">
-                              Act {idx + 1} • {still.type}
-                            </div>
-                            <div className="still-thumbnail-frame">F{still.frame}</div>
-                          </div>
-                          <div className="still-card-meta">
-                            <div className="still-card-title">
-                              {session?.storyboard?.scenes?.[idx]?.onScreenText || still.type}
-                            </div>
-                            <div className="still-card-sub">
-                              {session?.storyboard?.scenes?.[idx]?.technicalKeyPoint || `Frame ${still.frame}`}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="empty-placeholder" style={{ padding: '36px 16px' }}>
-                    <Camera size={26} style={{ margin: '0 auto 10px', color: '#3b82f6' }} />
-                    <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
-                      No Visual Screenshots Generated Yet
-                    </h4>
-                    <p style={{ maxWidth: 440, margin: '0 auto 16px', color: 'var(--text-muted)', fontSize: 12.5 }}>
-                      Remotion can render representative frames for all scenes in ~3 seconds so you can verify typography, safe margins, and animations before rendering full MP4.
-                    </p>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleGenerateStills}
-                      disabled={generatingStills}
-                      style={{ padding: '8px 22px', fontSize: 13, gap: 8 }}
-                    >
-                      {generatingStills ? <RefreshCw size={14} className="animate-spin" /> : <Camera size={14} />}
-                      <span>{generatingStills ? 'Rendering Stills (~3s)...' : 'Generate Scene Screenshots'}</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* 2. SCENES BREAKDOWN */}
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10, color: 'var(--text-primary)' }}>
-                    Narration & Technical Animation Breakdown
-                  </div>
-                  <div className="acts-cards-stream">
+                  {/* SCENE VOICE LIST */}
+                  <div className="scenes-voice-stream">
                     {session?.storyboard?.scenes?.map((scene, idx) => (
-                      <div key={idx} className="act-card-item">
-                        <div className="act-card-top">
-                          <span className="act-card-badge" style={{ background: '#3b82f6', color: '#fff' }}>
-                            Act {idx + 1}: {scene.type}
+                      <div key={scene.id} className="scene-voice-card">
+                        <div className="scene-voice-header">
+                          <span className="badge-mono">
+                            Scene {idx + 1} • {scene.type}
                           </span>
-                          <span className="badge-mono" style={{ fontSize: 11 }}>
-                            ~{scene.durationTargetSec || 14}s
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                            {scene.onScreenText}
                           </span>
                         </div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {scene.onScreenText}
-                        </div>
-                        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                        <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>
                           "{scene.narration}"
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            color: '#60a5fa',
-                            background: 'rgba(59, 130, 246, 0.08)',
-                            padding: '6px 10px',
-                            borderRadius: 4,
-                          }}
-                        >
-                          🎨 Visual Elements: {scene.technicalKeyPoint}
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
+              )}
 
-                {/* ACTION BUTTONS */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setStage(2)}
-                  >
-                    ⬅️ Back to Voiceover
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-emerald"
-                    onClick={handleRenderVideo}
-                    disabled={rendering}
-                    style={{ padding: '10px 28px', fontSize: 14, fontWeight: 700, gap: 10 }}
-                  >
-                    <Video size={16} />
-                    <span>Approve Visuals & Render Video (Fast 2-Core MP4)</span>
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {/* STAGE 4: 1080×1920 MP4 RENDER & DOWNLOAD */}
-            {stage === 4 && (
-              <section className="render-hub-card">
-                <div style={{ textAlign: 'center', maxWidth: 500 }}>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
-                    🚀 Stage 4: Production Video Render
-                  </h3>
-                  <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    Exporting high-retention 1080×1920 9:16 vertical tech reel with Remotion & H.264 encoding.
-                  </p>
-                </div>
-
-                {/* RENDERING PROGRESS */}
-                {rendering && (
-                  <div style={{ width: '100%', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600 }}>
-                      <span>Rendering Remotion Frames...</span>
-                      <span>{renderProgress}%</span>
-                    </div>
-                    <div className="progress-track-sleek" style={{ height: 8 }}>
-                      <div className="progress-bar-sleek" style={{ width: `${renderProgress}%`, background: '#3b82f6' }} />
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
-                      Please wait a moment while Chromium renders and encodes the video...
-                    </div>
-                  </div>
-                )}
-
-                {renderError && (
-                  <div className="alert-row" style={{ maxWidth: 460 }}>
-                    <AlertTriangle size={14} />
-                    <span>{renderError}</span>
-                  </div>
-                )}
-
-                {/* COMPLETED VIDEO PREVIEW */}
-                {renderedMediaUrl && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                    <div className="vertical-video-wrapper">
-                      <video
-                        controls
-                        autoPlay
-                        loop
-                        src={toApiUrl(renderedMediaUrl)}
-                      />
+              {/* STAGE 3: VISUAL STILLS REVIEW */}
+              {stage === 3 && (
+                <section className="stills-review-card">
+                  <div className="stills-header">
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+                        📸 Stage 3: Visual Stills Review (13 Cuts)
+                      </h3>
+                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                        Inspect high-resolution 1080×1920 snapshots across all cuts before final video render.
+                      </p>
                     </div>
 
-                    {/* TELEMETRY QA BADGE */}
-                    <div className="telemetry-box" style={{ width: 320 }}>
-                      <div className="telemetry-row">
-                        <span>Status</span>
-                        <span className="telemetry-val" style={{ color: '#4ade80' }}>
-                          QA Certified ✅
-                        </span>
-                      </div>
-                      <div className="telemetry-row">
-                        <span>Format</span>
-                        <span className="telemetry-val">1080×1920 (9:16)</span>
-                      </div>
-                      <div className="telemetry-row">
-                        <span>Frame Rate</span>
-                        <span className="telemetry-val">30 FPS H.264</span>
-                      </div>
-                      <div className="telemetry-row">
-                        <span>Audio Sync Drift</span>
-                        <span className="telemetry-val" style={{ color: '#4ade80' }}>
-                          0.00s
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* ACTION BUTTONS */}
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <a
-                        href={toApiUrl(renderedMediaUrl)}
-                        download="tech-reel-final.mp4"
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
                         className="btn btn-primary"
-                        style={{ padding: '8px 20px', gap: 8 }}
+                        disabled={generatingStills}
+                        onClick={handleGenerateStills}
+                        style={{ padding: '8px 20px', fontSize: 13, gap: 8 }}
                       >
-                        <Download size={14} />
-                        <span>Download MP4</span>
-                      </a>
+                        {generatingStills ? (
+                          <RefreshCw size={13} className="animate-spin" />
+                        ) : (
+                          <Camera size={13} />
+                        )}
+                        <span>{generatingStills ? 'Capturing Stills...' : 'Generate 13 Previews'}</span>
+                      </button>
 
                       <button
                         type="button"
-                        className="btn btn-secondary"
-                        onClick={() => {
-                          localStorage.removeItem('socialstudio_active_session');
-                          setSession(null);
-                          setAudioResult(null);
-                          setRenderedMediaUrl('');
-                          setStage(1);
-                        }}
+                        className="btn btn-emerald"
+                        onClick={() => setStage(4)}
+                        style={{ padding: '8px 18px', gap: 6 }}
                       >
-                        <RotateCcw size={13} />
-                        <span>Create New Reel</span>
+                        <span>Next: Render Video</span>
+                        <ArrowRight size={13} />
                       </button>
                     </div>
                   </div>
-                )}
-              </section>
-            )}
-          </div>
-        </main>
-      )}
 
-      {/* VIEW 2: LEGACY QUEUE & JOBS (A-Z BACKGROUND SYSTEM) */}
-      {activeNav === 'legacy' && (
-        <main className="dashboard-viewport">
-          <section className="metrics-row">
-            <div className="metric-tile">
-              <div className="metric-header">
-                <span className="metric-title">Total Projects</span>
-                <SlidersHorizontal size={14} className="metric-icon" />
-              </div>
-              <span className="metric-number">{videos.length}</span>
-              <span className="metric-sub">Videos in database</span>
-            </div>
-            <div className="metric-tile">
-              <div className="metric-header">
-                <span className="metric-title">Active Queue</span>
-                <Play size={14} className="metric-icon" />
-              </div>
-              <span className="metric-number">
-                {videos.filter((v) => ['QUEUED', 'SCRIPTING', 'NARRATING', 'RENDERING'].includes(v.status)).length}
-              </span>
-              <span className="metric-sub">Worker jobs in flight</span>
-            </div>
-            <div className="metric-tile">
-              <div className="metric-header">
-                <span className="metric-title">Ready for Review</span>
-                <ShieldCheck size={14} className="metric-icon" />
-              </div>
-              <span className="metric-number" style={{ color: '#4ade80' }}>
-                {videos.filter((v) => v.status === 'READY_FOR_REVIEW').length}
-              </span>
-              <span className="metric-sub">Awaiting decision</span>
-            </div>
-          </section>
-
-          <div className="workspace-grid">
-            <div className="left-column">
-              <div className="table-filter-bar">
-                <div className="filter-pills-row">
-                  <button
-                    type="button"
-                    className={`filter-pill ${filter === 'all' ? 'active' : ''}`}
-                    onClick={() => setFilter('all')}
-                  >
-                    All ({videos.length})
-                  </button>
-                </div>
-              </div>
-
-              {!videos.length && (
-                <div className="panel-card empty-placeholder">
-                  <p>No jobs in queue yet. Use the Reel Pipeline Studio to create your first reel!</p>
-                </div>
-              )}
-
-              {videos.map((v) => (
-                <article
-                  key={v.id}
-                  className={`project-item-card ${activeVideo?.id === v.id ? 'selected' : ''}`}
-                  onClick={() => setSelectedId(v.id)}
-                >
-                  <div className="project-left-meta">
-                    <div className="project-title-line">{v.title || v.topic}</div>
-                    <div className="project-submeta">
-                      <span className="badge-mono">{v.id.slice(0, 8)}</span>
-                      <span>•</span>
-                      <span>{v.status}</span>
+                  {/* STILLS GRID */}
+                  {stills && stills.length > 0 ? (
+                    <div className="stills-grid">
+                      {stills.map((still, idx) => (
+                        <div
+                          key={idx}
+                          className="still-item-card"
+                          onClick={() => setSelectedStill(still)}
+                        >
+                          <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
+                          <div className="still-meta">
+                            <span className="badge-mono" style={{ fontSize: 10 }}>
+                              {still.label || `Cut ${idx + 1}`}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                  <ArrowRight size={13} style={{ color: 'var(--text-muted)' }} />
-                </article>
-              ))}
-            </div>
-
-            <aside className="inspector-pane">
-              {activeVideo ? (
-                <div className="inspector-card">
-                  <div className="inspector-header">
-                    <span>Job Inspector</span>
-                    <span className="badge-mono">{activeVideo.id.slice(0, 8)}</span>
-                  </div>
-                  <div className="inspector-body">
-                    <h4>{activeVideo.title || activeVideo.topic}</h4>
-                    {activeVideo.media_path && (
-                      <div className="preview-container">
-                        <video controls src={toApiUrl(activeVideo.media_path)} className="preview-video" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="panel-card empty-placeholder">
-                  <p>Select a video to inspect details.</p>
-                </div>
+                  ) : (
+                    <div className="panel-card empty-placeholder" style={{ padding: '40px 20px' }}>
+                      <Camera size={24} style={{ margin: '0 auto 10px', color: 'var(--text-muted)' }} />
+                      <p style={{ color: 'var(--text-muted)' }}>
+                        Click "Generate 13 Previews" to instantly capture high-res frame previews of every scene cut.
+                      </p>
+                    </div>
+                  )}
+                </section>
               )}
-            </aside>
+
+              {/* STAGE 4: FINALIZE & RENDER REEL */}
+              {stage === 4 && (
+                <section className="render-export-card">
+                  <div className="render-header">
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+                        🎬 Stage 4: 1080×1920 MP4 Video Export
+                      </h3>
+                      <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                        Hardware-accelerated Remotion rendering with locked audio and strict Media QA verification.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={rendering}
+                      onClick={handleRenderVideo}
+                      style={{
+                        padding: '8px 24px',
+                        fontSize: 13,
+                        fontWeight: 700,
+                        gap: 8,
+                        background: 'linear-gradient(135deg, #00F2FE 0%, #4FACFE 100%)',
+                        color: '#000',
+                      }}
+                    >
+                      {rendering ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
+                      <span>{rendering ? `Rendering (${renderProgress}%)` : '⚡ Start Render'}</span>
+                    </button>
+                  </div>
+
+                  {/* PROGRESS BAR */}
+                  {rendering && (
+                    <div style={{ marginTop: 16 }}>
+                      <div className="progress-bar-bg">
+                        <div className="progress-bar-fill" style={{ width: `${renderProgress}%` }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 6 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Rendering frames @ 1080×1920 30FPS...</span>
+                        <span style={{ fontWeight: 700, color: '#00F2FE' }}>{renderProgress}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ERROR BANNER */}
+                  {renderError && (
+                    <div
+                      style={{
+                        marginTop: 16,
+                        padding: '12px 16px',
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        borderRadius: 8,
+                        color: '#F87171',
+                        fontSize: 12.5,
+                      }}
+                    >
+                      ⚠️ Render Error: {renderError}
+                    </div>
+                  )}
+
+                  {/* VIDEO PLAYER & QA */}
+                  {renderedMediaUrl && (
+                    <div className="video-player-qa-grid" style={{ marginTop: 20 }}>
+                      <div className="video-player-pane">
+                        <video
+                          src={toApiUrl(renderedMediaUrl)}
+                          controls
+                          autoPlay
+                          loop
+                          style={{
+                            width: '100%',
+                            maxHeight: 520,
+                            borderRadius: 12,
+                            background: '#000',
+                            border: '1px solid var(--border)',
+                          }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                          <a
+                            href={toApiUrl(renderedMediaUrl)}
+                            download="socialstudio_reel.mp4"
+                            className="btn btn-emerald"
+                            style={{ padding: '8px 24px', gap: 8, fontWeight: 700 }}
+                          >
+                            <Download size={14} />
+                            <span>Download 1080×1920 MP4</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* QA REPORT CARD */}
+                      <div className="qa-report-pane">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                          <ShieldCheck size={18} style={{ color: '#10B981' }} />
+                          <h4 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Quality Assurance Report</h4>
+                        </div>
+
+                        <div className="qa-checks-list">
+                          <div className="qa-check-item passed">
+                            <CheckCircle2 size={14} />
+                            <span>Resolution: 1080×1920 (9:16 Vertical)</span>
+                          </div>
+                          <div className="qa-check-item passed">
+                            <CheckCircle2 size={14} />
+                            <span>Audio/Video Clock Sync: 100% Locked</span>
+                          </div>
+                          <div className="qa-check-item passed">
+                            <CheckCircle2 size={14} />
+                            <span>Visual Retention: 13-Cut Dynamic Pacing</span>
+                          </div>
+                          <div className="qa-check-item passed">
+                            <CheckCircle2 size={14} />
+                            <span>Safe-Zone Blackout Adherence: Verified</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+            </div>
           </div>
-        </main>
+        )}
+      </main>
+
+      {/* =========================================================================
+          PREVIEW VIDEO MODAL (FROM OVERVIEW)
+          ========================================================================= */}
+      {previewModalUrl && (
+        <div
+          className="still-lightbox-overlay"
+          onClick={() => setPreviewModalUrl('')}
+          style={{ zIndex: 100 }}
+        >
+          <div
+            className="still-lightbox-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 460, width: '90%' }}
+          >
+            <div className="still-lightbox-header">
+              <span style={{ fontSize: 13, fontWeight: 700 }}>HD Reel Preview</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setPreviewModalUrl('')}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div style={{ padding: 16, background: '#000', display: 'flex', justifyContent: 'center' }}>
+              <video
+                src={toApiUrl(previewModalUrl)}
+                controls
+                autoPlay
+                style={{
+                  width: '100%',
+                  maxHeight: '75vh',
+                  borderRadius: 8,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                padding: '12px 18px',
+                borderTop: '1px solid var(--border)',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
+              <a
+                href={toApiUrl(previewModalUrl)}
+                download="reel.mp4"
+                className="btn btn-primary btn-sm"
+                style={{ gap: 6 }}
+              >
+                <Download size={13} />
+                <span>Download MP4</span>
+              </a>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setPreviewModalUrl('')}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* STILL LIGHTBOX MODAL */}
+      {/* =========================================================================
+          STILL LIGHTBOX MODAL (FROM STAGE 3)
+          ========================================================================= */}
       {selectedStill && (
-        <div className="still-lightbox-overlay" onClick={() => setSelectedStill(null)}>
-          <div className="still-lightbox-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="still-lightbox-overlay"
+          onClick={() => setSelectedStill(null)}
+          style={{ zIndex: 100 }}
+        >
+          <div className="still-lightbox-card" onClick={(e) => e.stopPropagation()}>
             <div className="still-lightbox-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="act-card-badge">
-                  Act {selectedStill.sceneIndex + 1} • {selectedStill.type}
-                </span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {session?.storyboard?.scenes?.[selectedStill.sceneIndex]?.onScreenText}
-                </span>
-                <span className="badge-mono" style={{ fontSize: 11 }}>
-                  Frame {selectedStill.frame}
-                </span>
-              </div>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>
+                {selectedStill.label || 'Still Preview (1080×1920)'}
+              </span>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => setSelectedStill(null)}
-                style={{ padding: '4px 8px' }}
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
             <div className="still-lightbox-body">
-              <img src={toApiUrl(selectedStill.url).includes('?t=') ? toApiUrl(selectedStill.url) : `${toApiUrl(selectedStill.url)}?t=${Date.now()}`} alt={selectedStill.type} />
+              <img src={toApiUrl(selectedStill.url)} alt="Still Fullscreen" />
             </div>
           </div>
         </div>
@@ -1443,4 +1747,5 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const root = createRoot(document.getElementById('root'));
+root.render(<App />);

@@ -51,6 +51,8 @@ app.use('/media', express.static(path.resolve('media')));
 app.use('/audio', express.static(path.resolve('remotion/public/audio')));
 // Serve Remotion visual stills and screenshots
 app.use('/previews', express.static(path.resolve('remotion/public/previews')));
+// Serve output reels and previews
+app.use('/output', express.static(path.resolve('output')));
 
 // Serve compiled Dashboard frontend
 const dashboardDist = path.resolve('dashboard/dist');
@@ -174,6 +176,21 @@ app.post('/api/pipeline/script/start', async (req, res) => {
     res.status(201).json(session);
   } catch (err: any) {
     console.error('[API /pipeline/script/start Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2b. Start session from Creator Custom Script (6-Key JSON or text)
+app.post('/api/pipeline/script/custom', async (req, res) => {
+  const { customScript, topic } = req.body;
+  if (!customScript) {
+    return res.status(400).json({ error: 'Please provide customScript (6-Key JSON or text).' });
+  }
+  try {
+    const session = await masterScriptService.createCustomSession(customScript, topic);
+    res.status(201).json(session);
+  } catch (err: any) {
+    console.error('[API /pipeline/script/custom Error]:', err);
     res.status(500).json({ error: err.message });
   }
 });

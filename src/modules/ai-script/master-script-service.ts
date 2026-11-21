@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
 import { Storyboard, StoryboardSchema, SceneTypeEnum } from '../contracts/storyboard.js';
 
@@ -1267,6 +1268,35 @@ Always return the full updated 7 sections so the script remains complete and sel
     sessions.set(sessionId, session);
     saveSessionToDisk(session);
     console.log(`[MasterScript] Session ${sessionId} locked and finalized with ${session.storyboard.scenes.length} scenes.`);
+    return session;
+  }
+
+  async createCustomSession(customScript: string | Record<string, any>, topicFallback = 'Creator Custom Script'): Promise<ScriptSession> {
+    const { parseCustomScriptToStoryboard } = await import('./custom-script-parser.js');
+    const storyboard = await parseCustomScriptToStoryboard(customScript, topicFallback);
+    const id = `session_${randomUUID()}`;
+    const rawText = typeof customScript === 'string' ? customScript : JSON.stringify(customScript, null, 2);
+    const session: ScriptSession = {
+      id,
+      topic: storyboard.title || topicFallback,
+      angle: 'Creator Custom Script',
+      messages: [{ role: 'assistant', content: 'Creator custom script parsed and validated successfully.' }],
+      currentMarkdown: rawText,
+      sections: {
+        voiceoverScript: storyboard.scenes.map((s) => s.narration).join('\n\n'),
+        remotionSceneJson: {
+          meta: { title: storyboard.title, durationSeconds: storyboard.estimatedDurationSec },
+          scenes: storyboard.scenes,
+        },
+      },
+      storyboard,
+      finalized: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    sessions.set(id, session);
+    saveSessionToDisk(session);
+    console.log(`[MasterScript] Created custom script session ${id} with ${storyboard.scenes.length} scenes.`);
     return session;
   }
 
