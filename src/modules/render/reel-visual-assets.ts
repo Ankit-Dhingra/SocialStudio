@@ -7,6 +7,7 @@ import type { Storyboard } from '../contracts/storyboard.js';
 import type { VideoTimeline } from '../video/timeline.js';
 import { GeminiProvider, GeminiRequestError, geminiRequest } from '../ai-script/gemini-provider.js';
 import { GroqProvider } from '../ai-script/groq-provider.js';
+import { cloudflareImageModel, cloudflareImageSize, generateCloudflareImage } from './cloudflare-image-provider.js';
 import { cleanNarration, compileVisualPlan, narrationAnchors, numericFacts, visualSceneSchema, type VisualPlan, type VisualStory } from '../video/visual-story.js';
 
 export interface ReelVisualAssets {
@@ -164,12 +165,12 @@ async function cachedPlate(hash: string): Promise<string | undefined> {
   }
 }
 
-async function generatePlate(apiKey: string, model: string, prompt: string, hash: string, reference?: string): Promise<string> {
-  const parts: object[] = [{ text: reference ? `${prompt}\nUse the reference for continuity while changing the composition.` : prompt }];
-  if (reference) {
+async function generateGeminiImage(apiKey: string, model: string, prompt: string, referencePath?: string): Promise<Buffer> {
+  const parts: object[] = [{ text: referencePath ? `${prompt}\nUse the reference for continuity while changing the composition.` : prompt }];
+  if (referencePath) {
     parts.push({ inlineData: {
-      mimeType: reference.endsWith('.png') ? 'image/png' : 'image/jpeg',
-      data: (await fs.readFile(path.join('media', reference))).toString('base64'),
+      mimeType: referencePath.endsWith('.png') ? 'image/png' : 'image/jpeg',
+      data: (await fs.readFile(referencePath)).toString('base64'),
     } });
   }
   const result = await geminiRequest(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, apiKey, {
@@ -181,13 +182,13 @@ async function generatePlate(apiKey: string, model: string, prompt: string, hash
   const image = response.candidates?.flatMap(candidate => candidate.content?.parts ?? [])
     .find(part => !part.thought && part.inlineData?.data && /^image\/(png|jpeg)$/.test(part.inlineData.mimeType ?? ''))?.inlineData;
   if (!image?.data) throw new Error('Gemini returned no usable image.');
+  return Buffer.from(image.data, 'base64');
+}
 
-  const bytes = Buffer.from(image.data, 'base64');
-  const extension = image.mimeType === 'image/png' ? 'png' : 'jpg';
-  const validHeader = extension === 'png'
-    ? bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
-    : bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex'));
-  if (!validHeader || bytes.length < 64 || bytes.length > 20 * 1024 * 1024) throw new Error('Gemini returned an invalid image file.');
+async function savePlate(hash: string, bytes: Buffer): Promise<string> {
+  const extension = bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) ? 'png'
+    : bytes.subarray(0, 3).equals(Buffer.from('ffd8ff', 'hex')) ? 'jpg' : undefined;
+  if (!extension || bytes.length < 64 || bytes.length > 20 * 1024 * 1024) throw new Error('The artwork provider returned an invalid image file.');
 
   await fs.mkdir(library, { recursive: true });
   const filename = `${hash}.${extension}`;
@@ -206,7 +207,10 @@ export async function prepareReelVisuals(
   timeline: VideoTimeline,
   previous?: ReelVisualAssets,
 ): Promise<ReelVisualAssets> {
-  const model = process.env.REEL_IMAGE_MODEL?.trim() || 'gemini-3.1-flash-image';
+  const imageProvider = process.env.REEL_IMAGE_PROVIDER?.trim() || 'gemini';
+  if (imageProvider !== 'gemini' && imageProvider !== 'cloudflare') throw new Error('REEL_IMAGE_PROVIDER must be gemini or cloudflare.');
+  const geminiImageModel = process.env.REEL_IMAGE_MODEL?.trim() || 'gemini-3.1-flash-image';
+  const model = imageProvider === 'cloudflare' ? cloudflareImageModel : geminiImageModel;
   const directorProvider = process.env.LLM_PROVIDER === 'groq' ? 'groq' : 'gemini';
   const directorModel = process.env.REEL_DIRECTOR_MODEL?.trim() ||
     (directorProvider === 'groq' ? process.env.GROQ_MODEL?.trim() : process.env.GEMINI_MODEL?.trim());
@@ -216,7 +220,10 @@ export async function prepareReelVisuals(
     durationSec: (timeline.segments[sceneIndex]?.audioDurationMs ?? 0) / 1000,
   }));
   const scriptInput = JSON.stringify({ title: storyboard.title, scenes });
-  const fingerprint = createHash('sha256').update(JSON.stringify([direction, model, directorProvider, directorModel, scriptInput, timeline])).digest('hex');
+  // Retain the legacy plan key so switching to Workers AI reuses Gemini-era plans and partial checkpoints.
+  const planFingerprint = createHash('sha256').update(JSON.stringify([direction, geminiImageModel, directorProvider, directorModel, scriptInput, timeline])).digest('hex');
+  const fingerprint = imageProvider === 'gemini' ? planFingerprint
+    : createHash('sha256').update(JSON.stringify([planFingerprint, imageProvider, model, cloudflareImageSize])).digest('hex');
   if (previous?.fingerprint === fingerprint && previous.shots) {
     const paths = previous.shots.flat().flatMap(shot => shot.asset ? [shot.asset] : []);
     if ((await Promise.all(paths.map(file => fs.access(path.join('media', file)).then(() => true, () => false)))).every(Boolean)) return previous;
@@ -224,7 +231,7 @@ export async function prepareReelVisuals(
   const pending = active.get(fingerprint);
   if (pending) return pending;
   const work = (async (): Promise<ReelVisualAssets> => {
-    const file = path.join(library, `${fingerprint}.json`);
+    const file = path.join(library, `${planFingerprint}.json`);
     const saved = await readPlan(file);
     let shots: VisualPlan | undefined;
     if (saved) {
@@ -281,7 +288,7 @@ export async function prepareReelVisuals(
           });
           return requestVisualPlan(() => provider.generateJSON(prompt, anchorDirection, 60_000, shotResponseSchema));
         };
-        const checkpoint = path.join(library, `${fingerprint}.${start}.json`);
+        const checkpoint = path.join(library, `${planFingerprint}.${start}.json`);
         checkpoints.push(checkpoint);
         let checkpointCount = 0;
         const saveApproved = async () => {
@@ -374,8 +381,11 @@ export async function prepareReelVisuals(
         shot.asset = await cachedPlate(hash);
         if (!shot.asset) {
           if (process.env.REEL_IMAGE_GENERATION === 'off') throw new Error('Image generation is disabled.');
-          if (!apiKey) throw new Error('Image generation requires GEMINI_API_KEY.');
-          shot.asset = await generatePlate(apiKey, model, prompt, hash, reference);
+          const referencePath = reference ? path.join('media', reference) : undefined;
+          if (imageProvider === 'gemini' && !apiKey) throw new Error('Gemini artwork requires GEMINI_API_KEY.');
+          const bytes = imageProvider === 'cloudflare' ? await generateCloudflareImage(prompt, referencePath)
+            : await generateGeminiImage(apiKey!, model, prompt, referencePath);
+          shot.asset = await savePlate(hash, bytes);
         }
         if (!reference) continuity.set(shot.continuity, shot.asset);
       } catch (error) {

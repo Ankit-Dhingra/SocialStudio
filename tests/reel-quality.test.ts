@@ -33,8 +33,9 @@ test('the director retries only missing artwork and preserves continuity across 
     { cue: '', kind: 'image', headline: 'Enter the warehouse', evidence: 'The worker enters the warehouse', brief: 'A worker enters the warehouse through its front door', continuity: 'warehouse team' },
     { cue: 'The worker scans the bin', kind: 'image', headline: 'Scan the bin', evidence: 'The worker scans the bin', brief: 'The same worker holds a scanner beside a bin', continuity: 'warehouse team' },
   ] }] };
-  const state = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY, REEL_IMAGE_GENERATION: process.env.REEL_IMAGE_GENERATION, REEL_IMAGE_MODEL: process.env.REEL_IMAGE_MODEL };
-  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_IMAGE_GENERATION: 'on', REEL_IMAGE_MODEL: 'test-image-model' });
+  const envKeys = ['LLM_PROVIDER', 'GEMINI_API_KEY', 'REEL_IMAGE_GENERATION', 'REEL_IMAGE_PROVIDER', 'REEL_IMAGE_MODEL', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
+  const state = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_IMAGE_GENERATION: 'on', REEL_IMAGE_PROVIDER: 'gemini', REEL_IMAGE_MODEL: 'test-image-model' });
   t.after(() => {
     for (const [name, value] of Object.entries(state)) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
@@ -42,8 +43,29 @@ test('the director retries only missing artwork and preserves continuity across 
   });
   let plans = 0;
   const images: string[] = [];
+  const cloudflareCalls: string[] = [];
   let failSecond = true;
   t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (String(url).startsWith('https://api.cloudflare.com/')) {
+      assert.match(String(url), /\/accounts\/[a-f0-9]{32}\/ai\/run\/@cf\/black-forest-labs\/flux-2-klein-4b$/);
+      assert.equal(new Headers(options?.headers).get('Authorization'), 'Bearer test-workers-ai-token');
+      assert.ok(options?.body instanceof FormData);
+      const form = options.body;
+      assert.equal(form.get('width'), '720');
+      assert.equal(form.get('height'), '1280');
+      const prompt = String(form.get('prompt'));
+      cloudflareCalls.push(prompt);
+      const reference = form.get('input_image_0');
+      if (prompt.includes('holds a scanner')) {
+        assert.match(prompt, /Use image 0 as a reference/);
+        assert.ok(reference instanceof Blob);
+        const png = Buffer.from(await reference.arrayBuffer());
+        assert.ok(png.readUInt32BE(16) < 512 && png.readUInt32BE(20) < 512);
+      } else {
+        assert.equal(reference, null);
+      }
+      return Response.json({ success: true, result: { image: image.toString('base64') } });
+    }
     const body = JSON.parse(String(options?.body));
     if (!String(url).includes('/test-image-model:')) {
       plans++;
@@ -77,6 +99,17 @@ test('the director retries only missing artwork and preserves continuity across 
   t.after(() => fs.rmSync(bundlePath, { recursive: true, force: true }));
   await stageReelVisuals(bundlePath, preview.shots);
   for (const file of paths) assert.deepEqual(fs.readFileSync(path.join(bundlePath, 'public', file)), image);
+
+  Object.assign(process.env, { REEL_IMAGE_PROVIDER: 'cloudflare', CLOUDFLARE_ACCOUNT_ID: 'a'.repeat(32), CLOUDFLARE_API_TOKEN: 'test-workers-ai-token' });
+  const cloudflare = await prepareReelVisuals(board, timeline, preview);
+  const workerPaths = cloudflare.shots.flat().map(shot => shot.asset!);
+  t.after(() => workerPaths.forEach(file => fs.rmSync(path.join('media', file), { force: true })));
+  assert.equal(plans, 1);
+  assert.equal(cloudflareCalls.length, 2);
+  assert.notEqual(cloudflare.fingerprint, preview.fingerprint);
+  assert.notDeepEqual(workerPaths, paths);
+  await prepareReelVisuals(board, timeline);
+  assert.equal(cloudflareCalls.length, 2);
 });
 
 test('long visual plans resume at the failed batch and retry a brief Gemini outage', async (t) => {
