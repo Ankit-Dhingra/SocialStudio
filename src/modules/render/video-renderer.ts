@@ -239,8 +239,12 @@ export interface StillPreviewResult {
   label?: string;
   shotId?: string;
   evidence?: string;
+  motionFrames?: Array<{ frame: number; label: string; url: string }>;
 }
-type PreviewTarget = Omit<StillPreviewResult, 'url' | 'filePath'> & { filename: string };
+type PreviewTarget = Omit<StillPreviewResult, 'url' | 'filePath' | 'motionFrames'> & {
+  filename: string;
+  motion?: Array<{ frame: number; label: string }>;
+};
 
 export async function renderStillPreviews(
   storyboard: Storyboard,
@@ -257,12 +261,23 @@ export async function renderStillPreviews(
     const seg = timeline.segments[idx];
     if (!seg) return [];
     const metadata = { sceneIndex: idx, sceneId: scene.id, type: scene.type };
-    return visualPlan ? visualPlan[idx].map(shot => ({
-      ...metadata, label: shot.headline, shotId: shot.id, evidence: shot.evidence, filename: `shot-${shot.id}.jpg`,
-      frame: seg.startFrame + shot.from + Math.min(shot.duration - 1, Math.max(
-        Math.floor(shot.duration * 0.6), Math.max(shot.takeawayFrame, ...shot.reveals, ...shot.movements, ...(shot.focus?.beats.map(beat => beat.from) ?? [])) + Math.round(timeline.fps * 0.23),
-      )),
-    })) : [{
+    return visualPlan ? visualPlan[idx].map(shot => {
+      const start = seg.startFrame + shot.from;
+      const event = shot.scanFrame ?? (shot.eventFrames?.length ? Math.max(...shot.eventFrames) : undefined);
+      const finalFrame = start + shot.duration - 1;
+      const nextScreen = shot.scanFrame !== undefined ? shot.reveals.find(at => at > shot.scanFrame!) : undefined;
+      const motion = event !== undefined ? [
+        { label: 'Before', frame: Math.max(0, start + event - Math.round(timeline.fps * 0.15)) },
+        { label: 'Action', frame: Math.min(finalFrame, start + event + Math.round(timeline.fps * 0.30), start + (nextScreen ?? shot.duration) - 1) },
+        { label: 'After', frame: Math.min(finalFrame, start + (nextScreen ?? event) + Math.round(timeline.fps * 0.93)) },
+      ] : undefined;
+      return {
+        ...metadata, label: shot.headline, shotId: shot.id, evidence: shot.evidence, filename: `shot-${shot.id}.jpg`, motion,
+        frame: motion?.at(-1)?.frame ?? start + Math.min(shot.duration - 1, Math.max(
+          Math.floor(shot.duration * 0.6), Math.max(shot.takeawayFrame, ...shot.reveals, ...shot.movements, shot.scanFrame ?? 0, ...(shot.focus?.beats.map(beat => beat.from) ?? [])) + Math.round(timeline.fps * 0.23),
+        )),
+      };
+    }) : [{
       ...metadata,
       filename: `scene-${idx}-${scene.type}.jpg`, frame: seg.startFrame + Math.min(120, Math.floor(seg.durationInFrames * 0.4)),
     }];
@@ -283,25 +298,35 @@ export async function renderStillPreviews(
       inputProps,
     });
     const results: StillPreviewResult[] = [];
-    for (const { filename, ...target } of targets) {
-      const targetPath = path.join(outputDir, filename);
-
+    const renderFrame = async (frame: number, filename: string) => {
       await renderStill({
         composition,
         serveUrl: bundleLocation,
-        frame: target.frame,
-        output: targetPath,
+        frame,
+        output: path.join(outputDir, filename),
         imageFormat: 'jpeg',
         jpegQuality: 93,
         timeoutInMilliseconds: 120000,
         puppeteerInstance,
         inputProps,
       });
-
+      return `${urlPrefix}/${filename}?t=${Date.now()}`;
+    };
+    for (const { filename, motion, ...target } of targets) {
+      const url = await renderFrame(target.frame, filename);
+      const motionFrames: StillPreviewResult['motionFrames'] = [];
+      const rendered = new Map([[target.frame, url]]);
+      for (const beat of motion ?? []) {
+        const beatUrl = rendered.get(beat.frame) ??
+          await renderFrame(beat.frame, `shot-${target.shotId}-${beat.label.toLowerCase()}.jpg`);
+        rendered.set(beat.frame, beatUrl);
+        motionFrames.push({ ...beat, url: beatUrl });
+      }
       results.push({
         ...target,
-        url: `${urlPrefix}/${filename}?t=${Date.now()}`,
-        filePath: targetPath,
+        url,
+        filePath: path.join(outputDir, filename),
+        motionFrames: motionFrames.length ? motionFrames : undefined,
       });
     }
     return results;

@@ -2,14 +2,39 @@ import { z } from 'zod';
 import type { Storyboard } from '../contracts/storyboard.js';
 import type { VideoTimeline } from './timeline.js';
 
+// Structured responses may use null or whitespace for an unused optional field.
+function optionalVisualField<T extends z.ZodType>(schema: T) {
+  return z.preprocess(value =>
+    value === null || (typeof value === 'string' && !value.trim()) ? undefined : value,
+  schema.optional());
+}
+
 const label = z.string().trim().min(1).max(72);
 const actor = z.object({
   entity: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
   label: z.string().trim().min(1).max(36),
-  value: z.string().trim().max(40).optional(),
-  cue: z.string().trim().max(140).optional(),
-  tone: z.enum(['neutral', 'success', 'warning']).optional(),
+  value: optionalVisualField(z.string().trim().max(40)),
+  cue: optionalVisualField(z.string().trim().max(140)),
+  tone: optionalVisualField(z.enum(['neutral', 'success', 'warning'])),
 });
+export const motionIcons = ['person', 'phone', 'server', 'database', 'lock', 'queue', 'map', 'store', 'package', 'service'] as const;
+export const motionEffects = ['change', 'countdown', 'expire', 'offline'] as const;
+export const packetOutcomes = ['arrive', 'blocked'] as const;
+const motionActor = actor.pick({ entity: true, label: true }).extend({
+  icon: z.enum(motionIcons), brand: optionalVisualField(z.string().trim().min(1).max(36)),
+});
+const eventCue = z.string().trim().min(1).max(140);
+const motionEvent = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('update'), entity: z.string(), cue: eventCue,
+    value: z.string().trim().min(1).max(40), tone: actor.shape.tone,
+    effect: optionalVisualField(z.enum(motionEffects)),
+  }),
+  z.object({
+    kind: z.literal('send'), source: z.string(), target: z.string(), cue: eventCue,
+    outcome: optionalVisualField(z.enum(packetOutcomes)),
+  }),
+]);
 const transfer = z.object({
   source: z.string(),
   target: z.string(),
@@ -19,17 +44,28 @@ const start = z.object({
   cue: z.string().trim().max(140).default(''),
   headline: label,
   evidence: z.string().trim().min(1).max(180),
-  takeaway: z.string().trim().max(108).optional(),
-  takeawayCue: z.string().trim().max(140).optional(),
+  takeaway: optionalVisualField(z.string().trim().max(108)),
+  takeawayCue: optionalVisualField(z.string().trim().max(140)),
 });
 const shot = z.discriminatedUnion('kind', [
   start.extend({ kind: z.literal('image'), brief: z.string().trim().min(12).max(500), continuity: z.string().trim().min(1).max(70) }),
+  start.extend({
+    kind: z.literal('motion'),
+    actors: z.array(motionActor).min(1).max(4),
+    events: z.array(motionEvent).min(1).max(6),
+    reset: optionalVisualField(z.boolean()),
+    backdrop: optionalVisualField(z.boolean()),
+  }),
   start.extend({ kind: z.literal('flow'), actors: z.array(actor).min(2).max(4), transfers: z.array(transfer).min(1).max(4) }),
   start.extend({ kind: z.literal('state'), actors: z.array(actor).min(2).max(4), transfers: z.array(transfer).max(4).default([]) }),
   start.extend({ kind: z.literal('comparison'), actors: z.array(actor).min(2).max(3) }),
-  start.extend({ kind: z.literal('device'), actors: z.array(actor).min(1).max(4) }),
+  start.extend({
+    kind: z.literal('device'), actors: z.array(actor).min(1).max(4),
+    backdrop: optionalVisualField(z.boolean()), scanCue: optionalVisualField(eventCue),
+  }),
   start.extend({ kind: z.literal('code'), code: z.string().trim().min(1).max(300) }),
-  start.extend({ kind: z.enum(['focus', 'cta']) }),
+  start.extend({ kind: z.literal('focus') }),
+  start.extend({ kind: z.literal('cta'), headline: z.string().trim().min(1).max(240) }),
 ]);
 export const visualSceneSchema = z.object({
   sceneIndex: z.number().int().nonnegative(),
@@ -45,6 +81,9 @@ export type TimedShot = z.infer<typeof shot> & {
   asset?: string;
   reveals: number[];
   movements: number[];
+  eventFrames?: number[];
+  codeFrames?: number[];
+  scanFrame?: number;
   takeawayFrame: number;
   focus?: { beats: Array<{ text: string; from: number }>; code?: string };
 };
@@ -76,8 +115,12 @@ function findCue(words: string[], phrase: string, from: number, end = words.leng
 
 // Preserve exact digits while treating comma-separated numbers as a single value.
 export function numericFacts(text: string): string[] {
-  return text.normalize('NFKC').replace(/−/g, '-').match(/(?<![\p{L}\p{Nd}])[+-]?\p{Nd}+(?:[,.]\p{Nd}+)*/gu)
+  return text.normalize('NFKC').replace(/−/g, '-').match(/(?<![\p{L}\p{M}\p{Nd}_])[+-]?\p{Nd}+(?:[,.]\p{Nd}+)*(?![\p{Nd}_])/gu)
     ?.map(value => value.replace(/,/g, '').replace(/^\+/, '')) ?? [];
+}
+
+function numericIdentifiers(text: string) {
+  return (text.match(/[\p{L}\p{N}]+(?:_[\p{L}\p{N}]+)+/gu) ?? []).filter(identifier => /\p{Nd}/u.test(identifier));
 }
 
 export function compileVisualPlan(
@@ -86,12 +129,21 @@ export function compileVisualPlan(
   timeline: VideoTimeline,
   startIndex = 0,
   endIndex = storyboard.scenes.length,
+  { repairAnnotations = false } = {},
 ): VisualPlan {
   const { scenes } = visualStorySchema.parse(raw);
   if (scenes.length !== endIndex - startIndex || timeline.segments.length !== storyboard.scenes.length) {
     throw new Error('The visual plan must cover every narration scene exactly once.');
   }
-  const scriptFacts = new Set(numericFacts([storyboard.title, ...storyboard.scenes.map(s => cleanNarration(s.narration))].join(' ')));
+  const script = [storyboard.title, ...storyboard.scenes.map(s => cleanNarration(s.narration))].join(' ');
+  const scriptFacts = new Set(numericFacts(script));
+  const scriptIdentifiers = new Set(numericIdentifiers(script));
+  const hasUnknownIdentifier = (value: string) => numericIdentifiers(value).some(identifier => !scriptIdentifiers.has(identifier));
+  const removeUnsupportedLabelParts = (label: string, entity: string) => {
+    const supported = (part: string) => !hasUnknownIdentifier(part) && numericFacts(part).every(fact => scriptFacts.has(fact));
+    return label.split(/\s+/).filter(supported).join(' ') || entity.split('-').filter(supported).join(' ');
+  };
+  const scriptWords = script.split(' ').map(token);
   return scenes.map(({ sceneIndex, shots }, batchIndex) => {
     const index = startIndex + batchIndex;
     const scene = storyboard.scenes[index];
@@ -122,7 +174,8 @@ export function compileVisualPlan(
       lastWord = word;
       return { word, frame: i === 0 ? 0 : frameAt(word) };
     });
-    return shots.map((entry, i) => {
+    return shots.map((planned, i) => {
+      let entry = planned;
       const startAt = starts[i];
       const next = starts[i + 1];
       const duration = (next?.frame ?? segment.durationInFrames) - startAt.frame;
@@ -133,17 +186,57 @@ export function compileVisualPlan(
       const localCue = (phrase: string) => findSceneCue(phrase, startAt.word, endWord);
       if (localCue(entry.evidence) < 0) throw new Error(`${sceneLabel}, shot ${i + 1} needs an exact supporting phrase from its narration.`);
       const missingFacts = (value: string, cue = '') => numericFacts(value).some(fact => !numericFacts(cueText(cue)).includes(fact));
-      if (missingFacts(entry.headline, i === 0 ? '' : entry.cue)) {
+      const anchorForValue = (value: string) => {
+        if (!numericFacts(value).length || hasUnknownIdentifier(value)) return undefined;
+        const matching = [...anchors.values()].filter(anchor =>
+          anchor.start >= startAt.word && anchor.end <= endWord && !missingFacts(value, anchor.id));
+        return matching.length === 1 ? matching[0].id : undefined;
+      };
+      const untimedHeadline = entry.kind !== 'cta' && missingFacts(entry.headline, i === 0 ? '' : entry.cue);
+      if (untimedHeadline && !repairAnnotations) {
         throw new Error(`${sceneLabel}, shot ${i + 1} needs to reveal its numbers through a timed value or takeaway.`);
       }
+      const headline = repairAnnotations && (untimedHeadline || hasUnknownIdentifier(entry.headline)) ? '' : entry.headline;
       if (entry.kind === 'cta' && findCue(words, entry.headline, startAt.word, endWord) < 0) {
         throw new Error(`${sceneLabel} CTA must use the approved narration verbatim.`);
       }
-      const takeawayWord = entry.takeawayCue ? localCue(entry.takeawayCue) : startAt.word;
-      const takeawayFrame = entry.takeawayCue && takeawayWord >= 0 ? Math.max(0, frameAt(takeawayWord) - startAt.frame) : 0;
-      const takeaway = takeawayWord >= 0 && takeawayFrame < duration && !missingFacts(entry.takeaway ?? '', entry.takeawayCue)
-        ? entry.takeaway : undefined;
-      const displayed = [{ field: 'headline', value: entry.headline }, { field: 'takeaway', value: takeaway ?? '' }];
+      let takeawayCue = entry.takeawayCue;
+      let takeaway = entry.takeaway;
+      if (repairAnnotations) {
+        if (takeaway && (missingFacts(takeaway, takeawayCue) || (takeawayCue && localCue(takeawayCue) < 0))) {
+          takeawayCue = anchorForValue(takeaway);
+          if (!takeawayCue) takeaway = undefined;
+        }
+        if (!takeaway && untimedHeadline) {
+          takeawayCue = anchorForValue(entry.headline);
+          if (takeawayCue) takeaway = entry.headline;
+        }
+        if (entry.kind === 'motion') {
+          entry = { ...entry, actors: entry.actors.map(actor => ({
+            ...actor, label: removeUnsupportedLabelParts(actor.label, actor.entity),
+          })) };
+        } else if ('actors' in entry) {
+          const actors = entry.actors.map(actor => {
+            let { cue, value } = actor;
+            if (value && (missingFacts(value, cue) || (cue && localCue(cue) < 0))) {
+              cue = anchorForValue(value) ?? cue;
+              if (missingFacts(value, cue) || (cue && localCue(cue) < 0)) value = undefined;
+            }
+            if (cue && localCue(cue) < 0) cue = undefined;
+            if (value && hasUnknownIdentifier(value)) value = undefined;
+            return { ...actor, label: removeUnsupportedLabelParts(actor.label, actor.entity), cue, value };
+          });
+          if (entry.kind === 'flow' || entry.kind === 'device') {
+            actors.sort((a, b) => (a.cue ? localCue(a.cue) : startAt.word) - (b.cue ? localCue(b.cue) : startAt.word));
+          }
+          entry = { ...entry, actors };
+        }
+      }
+      const takeawayWord = takeawayCue ? localCue(takeawayCue) : startAt.word;
+      const takeawayFrame = takeawayCue && takeawayWord >= 0 ? Math.max(0, frameAt(takeawayWord) - startAt.frame) : 0;
+      if (takeawayWord < 0 || takeawayFrame >= duration || missingFacts(takeaway ?? '', takeawayCue) ||
+          (repairAnnotations && hasUnknownIdentifier(takeaway ?? ''))) takeaway = undefined;
+      const displayed = [{ field: 'headline', value: headline }, { field: 'takeaway', value: takeaway ?? '' }];
       if (entry.kind === 'code') {
         if (!narration.includes(cleanNarration(entry.code))) throw new Error(`${sceneLabel} contains code absent from its narration.`);
         displayed.push({ field: 'code', value: entry.code });
@@ -154,16 +247,27 @@ export function compileVisualPlan(
         }
         displayed.push(...entry.actors.flatMap((actor, actorIndex) => [
           { field: `actor ${actorIndex + 1} label`, value: actor.label },
-          { field: `actor ${actorIndex + 1} value`, value: actor.value ?? '' },
+          { field: `actor ${actorIndex + 1} value`, value: 'value' in actor ? actor.value ?? '' : '' },
         ]));
       }
+      if (entry.kind === 'motion') {
+        for (const actor of entry.actors) {
+          if (actor.brand && findCue(scriptWords, actor.brand, 0) < 0) {
+            throw new Error(`${sceneLabel}, shot ${i + 1} uses a brand absent from the approved script.`);
+          }
+        }
+        entry.events.forEach((event, eventIndex) => {
+          if (event.kind === 'update') displayed.push({ field: `event ${eventIndex + 1} value`, value: event.value });
+        });
+      }
       for (const { field, value } of displayed) {
+        if (hasUnknownIdentifier(value)) throw new Error(`${sceneLabel}, shot ${i + 1} uses an identifier absent from the approved script in ${field}.`);
         const unsupported = numericFacts(value).find(number => !scriptFacts.has(number));
         if (unsupported) {
           throw new Error(`${sceneLabel}, shot ${i + 1} introduces a number absent from the approved script (${unsupported.slice(0, 32)} in ${field}).`);
         }
       }
-      const reveals = 'actors' in entry ? entry.actors.map((item, actorIndex) => {
+      const reveals = 'actors' in entry && entry.kind !== 'motion' ? entry.actors.map((item, actorIndex) => {
         if (missingFacts(item.value ?? '', item.cue)) {
           throw new Error(`${sceneLabel}, shot ${i + 1}, item ${actorIndex + 1} needs the exact phrase containing its number.`);
         }
@@ -187,6 +291,32 @@ export function compileVisualPlan(
         if (frame >= duration) throw new Error(`${sceneLabel}, shot ${i + 1} has a transfer outside its shot.`);
         return frame;
       }) : [];
+      const eventFrames = entry.kind === 'motion' ? entry.events.map((event, eventIndex) => {
+        const word = localCue(event.cue);
+        const frame = word < 0 ? -1 : frameAt(word) - startAt.frame;
+        if (frame < 0 || frame >= duration) {
+          throw new Error(`${sceneLabel}, shot ${i + 1}, event ${eventIndex + 1} needs a cue inside its shot.`);
+        }
+        const entities = entry.actors.map(({ entity }) => entity);
+        if (event.kind === 'send' && (!entities.includes(event.source) || !entities.includes(event.target) || event.source === event.target)) {
+          throw new Error(`${sceneLabel}, shot ${i + 1}, event ${eventIndex + 1} needs two different actors in its shot.`);
+        }
+        if (event.kind === 'update' && (!entities.includes(event.entity) || missingFacts(event.value, event.cue))) {
+          throw new Error(`${sceneLabel}, shot ${i + 1}, event ${eventIndex + 1} needs a listed actor and the exact phrase containing its value's numbers.`);
+        }
+        return frame;
+      }) : undefined;
+      const codeFrames = entry.kind === 'code'
+        ? cleanNarration(entry.code).split(' ').map((_, index) => Math.max(0, frameAt(localCue(entry.code) + index) - startAt.frame))
+        : undefined;
+      let scanFrame: number | undefined;
+      if (entry.kind === 'device' && entry.scanCue) {
+        const word = localCue(entry.scanCue);
+        const frame = word < 0 ? -1 : frameAt(word) - startAt.frame;
+        if (frame >= 0 && frame < duration && /\bq[\s.-]*r\b|क्यू\s*आर/iu.test(cueText(entry.scanCue))) {
+          scanFrame = frame;
+        }
+      }
       let focus: TimedShot['focus'];
       if (entry.kind === 'focus' && duration > timeline.fps * 6) {
         const beatStarts = [startAt.word, ...narrationAnchors(narration, 16).map(anchor => anchor.start).filter(word =>
@@ -201,8 +331,9 @@ export function compileVisualPlan(
         };
       }
       return {
-        ...entry, cue: i === 0 ? '' : entry.cue, id: `${index + 1}-${i + 1}`, from: startAt.frame,
-        duration, reveals, movements, focus, takeaway, takeawayCue: takeaway ? entry.takeawayCue : undefined,
+        ...entry, headline, cue: i === 0 ? '' : entry.cue, id: `${index + 1}-${i + 1}`, from: startAt.frame,
+        duration, reveals, movements, eventFrames, codeFrames, scanFrame, focus, takeaway,
+        takeawayCue: takeaway ? takeawayCue : undefined,
         takeawayFrame: takeaway ? takeawayFrame : 0,
       };
     });

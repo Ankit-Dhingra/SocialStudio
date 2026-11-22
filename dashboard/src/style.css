@@ -1790,6 +1790,14 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
   overflow: hidden;
 }
 
+.still-motion-controls {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 .still-lightbox-body img {
   max-height: 70vh;
   width: auto;

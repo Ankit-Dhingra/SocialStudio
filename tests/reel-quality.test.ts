@@ -12,6 +12,7 @@ import { StoryboardSchema } from '../src/modules/contracts/storyboard.js';
 import { findFfmpeg } from '../src/modules/tts/sarvam-provider.js';
 import { parseCustomScriptToStoryboard } from '../src/modules/ai-script/custom-script-parser.js';
 import { compileVisualPlan } from '../src/modules/video/visual-story.js';
+import { buildMotionStages } from '../src/modules/video/motion-stage.js';
 import { prepareReelVisuals, stageReelVisuals } from '../src/modules/render/reel-visual-assets.js';
 import { randomUUID } from 'node:crypto';
 
@@ -33,9 +34,9 @@ test('the director retries only missing artwork and preserves continuity across 
     { cue: '', kind: 'image', headline: 'Enter the warehouse', evidence: 'The worker enters the warehouse', brief: 'A worker enters the warehouse through its front door', continuity: 'warehouse team' },
     { cue: 'The worker scans the bin', kind: 'image', headline: 'Scan the bin', evidence: 'The worker scans the bin', brief: 'The same worker holds a scanner beside a bin', continuity: 'warehouse team' },
   ] }] };
-  const envKeys = ['LLM_PROVIDER', 'GEMINI_API_KEY', 'REEL_IMAGE_GENERATION', 'REEL_IMAGE_PROVIDER', 'REEL_IMAGE_MODEL', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
+  const envKeys = ['LLM_PROVIDER', 'GEMINI_API_KEY', 'REEL_DIRECTOR_PROVIDER', 'REEL_IMAGE_GENERATION', 'REEL_IMAGE_PROVIDER', 'REEL_IMAGE_MODEL', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
   const state = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
-  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_IMAGE_GENERATION: 'on', REEL_IMAGE_PROVIDER: 'gemini', REEL_IMAGE_MODEL: 'test-image-model' });
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_DIRECTOR_PROVIDER: 'gemini', REEL_IMAGE_GENERATION: 'on', REEL_IMAGE_PROVIDER: 'gemini', REEL_IMAGE_MODEL: 'test-image-model' });
   t.after(() => {
     for (const [name, value] of Object.entries(state)) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
@@ -118,8 +119,8 @@ test('long visual plans resume at the failed batch and retry a brief Gemini outa
     ...board.scenes[0], id: `cut-${sceneIndex}`, sceneIndex, durationTargetSec: 4,
   }));
   const timeline = buildVideoTimeline(board);
-  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
-  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key' });
+  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY, REEL_DIRECTOR_PROVIDER: process.env.REEL_DIRECTOR_PROVIDER };
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_DIRECTOR_PROVIDER: 'gemini' });
   t.after(() => {
     for (const [key, value] of Object.entries(vars)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -141,7 +142,7 @@ test('long visual plans resume at the failed batch and retry a brief Gemini outa
     }
     const plan = { scenes: indices.map((sceneIndex: number) => ({ sceneIndex, shots: [{
       kind: 'state', cue: '', evidence: 'A worker scans the bin', headline: 'Scan the bin', transfers: [],
-      actors: [{ entity: 'worker', label: 'Worker' }, { entity: 'bin', label: 'Bin' }],
+      actors: [{ entity: 'worker', label: 'Worker' }, { entity: 'bin', label: 'Bin', cue: 'scans the bin' }],
     }] })) };
     const json = JSON.stringify(plan);
     return Response.json({ candidates: [{ content: { parts: [
@@ -160,42 +161,71 @@ test('long visual plans resume at the failed batch and retry a brief Gemini outa
   assert.deepEqual(ready.shots.flat().map(shot => shot.id), ['1-1', '2-1', '3-1', '4-1', '5-1', '6-1', '7-1']);
 });
 
-test('a malformed shot retries only its scene and reports the exact rejected anchor', async (t) => {
+test('an isolated retry reports the failed anchor and a Groq switch resumes the same plan', async (t) => {
   const board = storyboardFor('Do requests ek saath aati hain. Dono ko last seat available dikhti hai.', `Concurrent booking ${randomUUID()}`);
   board.scenes = Array.from({ length: 5 }, (_, sceneIndex) => ({
     ...board.scenes[0], id: `cut-${sceneIndex}`, sceneIndex,
   }));
   const timeline = buildVideoTimeline(board);
-  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
-  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key' });
+  const keys = ['LLM_PROVIDER', 'GEMINI_API_KEY', 'REEL_DIRECTOR_PROVIDER', 'REEL_DIRECTOR_MODEL', 'GROQ_API_KEYS', 'GROQ_MODEL'];
+  const vars = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_DIRECTOR_PROVIDER: 'gemini' });
+  delete process.env.REEL_DIRECTOR_MODEL;
   t.after(() => {
     for (const [key, value] of Object.entries(vars)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   });
   const requests: number[][] = [];
+  const providers: string[] = [];
   let repairPasses = false;
-  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
     const body = JSON.parse(String(options?.body));
-    assert.deepEqual(body.generationConfig.responseJsonSchema.required, ['scenes']);
-    const prompt = JSON.parse(body.contents[0].parts[0].text);
+    const groq = String(url).startsWith('https://api.groq.com/');
+    providers.push(groq ? 'groq' : 'gemini');
+    if (!groq && body.generationConfig.responseJsonSchema.properties.updates) {
+      const prompt = JSON.parse(body.contents[0].parts[0].text);
+      assert.equal(prompt.narration, board.scenes[2].narration);
+      requests.push([2]);
+      const invalidMotion = {
+        headline: 'Competing requests', actors: [{ entity: 'request-a', label: 'Request A', icon: 'service' }],
+        updates: [{ entity: 'request-a', cue: '@99', value: 'Sent' }],
+      };
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(invalidMotion) }] } }] });
+    }
+    if (groq) {
+      assert.equal(body.model, 'qwen/qwen3.8-27b');
+      assert.equal(body.response_format.json_schema.strict, true);
+      assert.deepEqual(body.response_format.json_schema.schema.required, ['scenes']);
+      assert.ok(body.response_format.json_schema.schema.properties.scenes.items.properties.shots.items.anyOf[0].required.includes('brief'));
+    } else {
+      assert.deepEqual(body.generationConfig.responseJsonSchema.required, ['scenes']);
+    }
+    const prompt = JSON.parse(groq ? body.messages[1].content : body.contents[0].parts[0].text);
     const indices: number[] = prompt.scenes.map((scene: { sceneIndex: number }) => scene.sceneIndex);
     requests.push(indices);
     const repair = Boolean(prompt.validationFeedback);
     assert.equal(prompt.scenes[0].anchors[1].text, 'Dono ko last seat available dikhti hai.');
     if (repair) assert.match(prompt.validationFeedback, /Scene 3, shot 1.*supporting phrase/);
     const plan = { scenes: indices.map((sceneIndex) => ({ sceneIndex, shots: [{
-      kind: 'state', evidence: sceneIndex === 2 && !repairPasses ? '@99' : '@1', headline: 'Competing requests',
+      kind: groq ? 'device' : 'state',
+      scanCue: groq ? '   ' : undefined,
+      evidence: sceneIndex === 2 && !repairPasses ? '@99' : '@1', headline: 'Competing requests',
       actors: [{ entity: 'request-a', label: 'Request A' }, { entity: 'request-b', label: 'Request B', cue: '@2' }],
     }] })) };
+    if (groq) return Response.json({ choices: [{ message: { content: JSON.stringify(plan) } }] });
     return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(plan) }] } }] });
   });
   await assert.rejects(prepareReelVisuals(board, timeline), /Scene 3, shot 1 needs an exact supporting phrase.*4 validated scenes are saved.*resume at scene 3/);
   repairPasses = true;
+  Object.assign(process.env, { REEL_DIRECTOR_PROVIDER: 'groq', REEL_DIRECTOR_MODEL: 'qwen/qwen3.8-27b', GROQ_API_KEYS: 'test-groq', GROQ_MODEL: 'qwen/qwen3.8-27b' });
   const ready = await prepareReelVisuals(board, timeline);
   t.after(() => fs.rmSync(path.join('media', 'generated-reel-visuals', `${ready.fingerprint}.json`), { force: true }));
-  assert.deepEqual(requests, [[0, 1, 2, 3, 4], [2], [2]]);
+  assert.deepEqual(requests, [[0, 1, 2, 3, 4], [2], [2], [2]]);
+  assert.deepEqual(providers, ['gemini', 'gemini', 'gemini', 'groq']);
   assert.deepEqual(ready.shots.flat().map(shot => shot.id), ['1-1', '2-1', '3-1', '4-1', '5-1']);
+  assert.equal(ready.shots[2][0].kind, 'device');
+  assert.equal(ready.shots[2][0].scanFrame, undefined);
   assert.ok(ready.shots[2][0].reveals[1] > 0);
 });
 
@@ -203,8 +233,8 @@ test('the planner drops unsupported numeric annotations without dropping timed a
   const board = storyboardFor('The server decrements the seat count. It confirms the booking.', `Booking update ${randomUUID()}`);
   board.scenes.push({ ...board.scenes[0], id: 'other-cut', sceneIndex: 1, narration: 'After 10 seconds the lock expires.' });
   const timeline = buildVideoTimeline(board);
-  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
-  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key' });
+  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY, REEL_DIRECTOR_PROVIDER: process.env.REEL_DIRECTOR_PROVIDER };
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_DIRECTOR_PROVIDER: 'gemini' });
   t.after(() => {
     for (const [key, value] of Object.entries(vars)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -240,6 +270,119 @@ test('the planner drops unsupported numeric annotations without dropping timed a
   assert.equal(expiry.actors[0].value, '10 seconds');
 });
 
+test('an opener mislabeled as a CTA is repaired and the approved closing line bypasses the model', async (t) => {
+  const title = `Warehouse relay ${randomUUID()}`;
+  const opener = 'A worker scans the bin. The request reaches the warehouse server.';
+  const closing = 'Aise hi engineering examples aur unke backend decisions samajhne ke liye, follow 100 Days of Engineering.';
+  const draft = storyboardFor(opener, title);
+  const board = StoryboardSchema.parse({
+    ...draft, scenes: [...draft.scenes, {
+      ...draft.scenes[0], id: 'closing', sceneIndex: 1, type: 'tradeoffHUD',
+      narration: closing, visualProps: { callToAction: closing },
+    }],
+  });
+  const timeline = buildVideoTimeline(board);
+  const keys = ['LLM_PROVIDER', 'GROQ_API_KEYS', 'REEL_DIRECTOR_PROVIDER', 'REEL_DIRECTOR_MODEL', 'REEL_IMAGE_PROVIDER'];
+  const vars = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  Object.assign(process.env, {
+    LLM_PROVIDER: 'groq', GROQ_API_KEYS: 'test-key',
+    REEL_DIRECTOR_PROVIDER: 'groq', REEL_DIRECTOR_MODEL: 'qwen/qwen3.8-27b', REEL_IMAGE_PROVIDER: 'gemini',
+  });
+  t.after(() => {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const provider = t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    const variants = body.response_format.json_schema.schema.properties.scenes.items.properties.shots.items.anyOf;
+    assert.ok(!variants.some((variant: { properties: { kind: { enum: string[] } } }) => variant.properties.kind.enum.includes('cta')));
+    const prompt = JSON.parse(body.messages[1].content);
+    assert.deepEqual(prompt.scenes.map((scene: { sceneIndex: number }) => scene.sceneIndex), [0]);
+    const repair = Boolean(prompt.validationFeedback);
+    if (repair) assert.match(prompt.validationFeedback, /Scene 1 needs an explanatory shot/);
+    const shot = repair ? {
+      kind: 'motion', headline: 'The scanned request moves', evidence: '@2',
+      actors: [{ entity: 'scanner', label: 'Scanner', icon: 'phone' }, { entity: 'server', label: 'Warehouse server', icon: 'server' }],
+      events: [{ kind: 'send', source: 'scanner', target: 'server', cue: '@2' }],
+    } : {
+      kind: 'cta', headline: 'Follow Warehouse School', evidence: '@1',
+    };
+    const plan = { scenes: [{ sceneIndex: 0, shots: [shot] }] };
+    if (!repair) return Response.json({ error: { code: 'json_validate_failed', failed_generation: JSON.stringify(plan) } }, { status: 400 });
+    return Response.json({ choices: [{ message: { content: JSON.stringify(plan) } }] });
+  });
+  const ready = await prepareReelVisuals(board, timeline);
+  t.after(() => fs.rmSync(path.join('media', 'generated-reel-visuals', `${ready.fingerprint}.json`), { force: true }));
+  assert.equal(provider.mock.callCount(), 2);
+  assert.equal(ready.shots[0][0].kind, 'motion');
+  assert.equal(ready.shots[1][0].kind, 'cta');
+  assert.equal(ready.shots[1][0].headline, closing);
+  assert.equal(board.scenes[0].narration, opener);
+  assert.equal(board.scenes[1].narration, closing);
+});
+
+test('an empty code shot uses a motion-only repair while spoken commands stay intact', async (t) => {
+  const opener = 'A shopper holds up their phone. The reservation appears.';
+  const command = 'SELECT status FROM reservations';
+  const draft = storyboardFor(opener, `Reservation walkthrough ${randomUUID()}`);
+  const board = StoryboardSchema.parse({
+    ...draft, scenes: [...draft.scenes, {
+      ...draft.scenes[0], id: 'command', sceneIndex: 1, type: 'code',
+      narration: `Run ${command} to read the result.`, visualProps: { code: command },
+    }],
+  });
+  const timeline = buildVideoTimeline(board);
+  const keys = ['LLM_PROVIDER', 'GROQ_API_KEYS', 'REEL_DIRECTOR_PROVIDER', 'REEL_DIRECTOR_MODEL', 'REEL_IMAGE_PROVIDER'];
+  const vars = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  Object.assign(process.env, {
+    LLM_PROVIDER: 'groq', GROQ_API_KEYS: 'test-key',
+    REEL_DIRECTOR_PROVIDER: 'groq', REEL_DIRECTOR_MODEL: 'qwen/qwen3.8-27b', REEL_IMAGE_PROVIDER: 'gemini',
+  });
+  t.after(() => {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const provider = t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    const schema = body.response_format.json_schema.schema;
+    const prompt = JSON.parse(body.messages[1].content);
+    if (schema.properties.updates) {
+      assert.deepEqual(schema.required, ['headline', 'actors', 'updates']);
+      assert.deepEqual(schema.properties.updates.items.properties.cue.enum, ['@1', '@2']);
+      assert.equal(schema.properties.updates.items.properties.effect, undefined);
+      assert.equal(prompt.narration, opener);
+      assert.equal(prompt.scenes, undefined);
+      const motion = {
+        headline: 'The booking appears',
+        actors: [{ entity: 'phone', label: 'Shopper phone', icon: 'phone' }],
+        updates: [{ entity: 'phone', cue: '@2', value: 'Reservation visible', tone: 'success', effect: 'change' }],
+      };
+      return Response.json({ choices: [{ message: { content: JSON.stringify(motion) } }] });
+    }
+    const variants = schema.properties.scenes.items.properties.shots.items.anyOf;
+    assert.ok(variants.some((item: { properties: { kind: { enum: string[] } } }) => item.properties.kind.enum.includes('code')));
+    assert.deepEqual(prompt.scenes.map((scene: { sceneIndex: number; allowCode: boolean }) => [scene.sceneIndex, scene.allowCode]),
+      [[0, false], [1, true]]);
+    const scenes = [
+      { sceneIndex: 0, shots: [{ kind: 'code', headline: 'The reservation', evidence: '@1', code: '  ' }] },
+      { sceneIndex: 1, shots: [{ kind: 'code', headline: 'Read the status', evidence: '@1', code: command }] },
+    ];
+    return Response.json({ error: { code: 'json_validate_failed', failed_generation: JSON.stringify({ scenes }) } }, { status: 400 });
+  });
+  const ready = await prepareReelVisuals(board, timeline);
+  t.after(() => fs.rmSync(path.join('media', 'generated-reel-visuals', `${ready.fingerprint}.json`), { force: true }));
+  assert.equal(provider.mock.callCount(), 2);
+  assert.equal(ready.shots[0][0].kind, 'motion');
+  assert.ok(ready.shots[0][0].eventFrames?.[0]! > 0);
+  assert.deepEqual(ready.shots[0][0].events, [{ kind: 'update', entity: 'phone', cue: '@2', value: 'Reservation visible' }]);
+  const code = ready.shots[1][0];
+  assert.equal(code.kind, 'code');
+  assert.equal(code.code, command);
+  assert.equal(board.scenes[0].narration, opener);
+});
+
 test('narration anchors keep a negative value tied to its spoken frame', () => {
   const board = storyboardFor('Both requests decrement stock. Stock falls to -1.');
   const timeline = buildVideoTimeline(board);
@@ -252,6 +395,35 @@ test('narration anchors keep a negative value tied to its spoken frame', () => {
   assert.deepEqual(compileVisualPlan(plan, board, timeline)[0][0].reveals, [0, 100]);
   entry.actors[1].value = '1';
   assert.throws(() => compileVisualPlan(plan, board, timeline), /number absent from the approved script/);
+});
+
+test('planner annotations distinguish identifiers from quantities and time approved numeric labels', () => {
+  const board = storyboardFor('The request contains seat_id_123. The fee rises to ₹90.');
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = [0, 8, 16, 22, 80, 87, 94, 101, 111];
+  const entry = {
+    kind: 'state', headline: 'Check seat_id_123', evidence: '@1',
+    actors: [
+      { entity: 'request', label: 'Request' },
+      { entity: 'fee', label: 'Fee', value: '₹90', cue: '@2' },
+    ],
+  };
+  const plan = { scenes: [{ sceneIndex: 0, shots: [entry] }] };
+  assert.equal(compileVisualPlan(plan, board, timeline)[0][0].headline, 'Check seat_id_123');
+  const compile = () => compileVisualPlan(plan, board, timeline, 0, 1, { repairAnnotations: true })[0][0];
+  entry.actors[0].label = 'Seat 123';
+  entry.headline = 'New fee ₹90';
+  entry.actors[1].cue = '@1';
+  const revised = compile();
+  assert.equal(revised.headline, '');
+  assert.equal(revised.takeaway, 'New fee ₹90');
+  assert.equal(revised.takeawayFrame, 80);
+  assert.deepEqual(revised.reveals, [0, 80]);
+  assert.equal(revised.kind, 'state');
+  assert.equal(revised.actors[0].label, 'Seat');
+  entry.headline = 'Check seat_id_456 for ₹500';
+  assert.equal(compile().headline, '');
+  assert.equal(compile().takeaway, undefined);
 });
 
 test('shot plans use narration timestamps and reject invented or mistimed values', () => {
@@ -342,6 +514,75 @@ test('competing requests and the final outcome have distinct narration anchors',
   assert.ok(shot.movements[1] > shot.movements[0]);
   assert.ok(shot.reveals[2] > shot.movements[1]);
   assert.ok(shot.reveals[0] > shot.reveals[2]);
+});
+
+test('motion carries positions and state across cuts and anchors results to the approved voiceover', () => {
+  const board = storyboardFor('The retry window starts. The dispatcher makes a request.', 'Warehouse relay');
+  board.scenes.push({
+    ...board.scenes[0], id: 'recovery', sceneIndex: 1,
+    narration: 'Ten seconds pass. The retry window expires. The dispatcher requests access again.',
+  });
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = [0, 5, 15, 29, 60, 66, 77, 91, 104];
+  timeline.segments[1].wordFrames = [0, 8, 15, 45, 50, 55, 74, 102, 112, 121, 132, 144];
+  const gate = { entity: 'window', label: 'Retry window', icon: 'service' };
+  const dispatcher = { entity: 'dispatcher', label: 'Dispatcher', icon: 'server' };
+  const plan = { scenes: [
+    { sceneIndex: 0, shots: [{
+      kind: 'motion', headline: 'The retry window starts', evidence: '@1', actors: [gate, dispatcher],
+      events: [
+        { kind: 'update', entity: 'window', cue: '@1', value: 'Active', effect: 'countdown' },
+        { kind: 'send', source: 'dispatcher', target: 'window', cue: '@2', outcome: 'blocked' },
+      ],
+    }] },
+    { sceneIndex: 1, shots: [{
+      kind: 'motion', headline: 'The retry opens', evidence: '@2', actors: [dispatcher, gate],
+      events: [
+        { kind: 'update', entity: 'window', cue: '@2', value: 'Expired', effect: 'expire' },
+        { kind: 'send', source: 'dispatcher', target: 'window', cue: '@3', outcome: 'arrive' },
+      ],
+    }] },
+  ] };
+  const shots = compileVisualPlan(plan, board, timeline);
+  assert.deepEqual(shots.map(([shot]) => shot.eventFrames), [[0, 60], [45, 102]]);
+  const stages = buildMotionStages(shots, timeline);
+  const first = stages.get('1-1')!;
+  const second = stages.get('2-1')!;
+  const window = second.nodes.find(node => node.entity === 'window')!;
+  assert.equal(window.slot, first.nodes[0].slot);
+  assert.equal(window.previous?.value, 'Active');
+  assert.equal(window.previous?.until, timeline.segments[1].startFrame + 45);
+  assert.equal(first.packets[0].blocked, true);
+  assert.equal(second.packets.at(-1)?.blocked, false);
+  assert.throws(() => compileVisualPlan({
+    scenes: [plan.scenes[0], { sceneIndex: 1, shots: [{ ...plan.scenes[1].shots[0], actors: [gate, { ...dispatcher, brand: 'Invented Brand' }] }] }],
+  }, board, timeline), /brand absent/);
+  plan.scenes[0].shots[0].events[0].value = '15 seconds';
+  assert.throws(() => compileVisualPlan(plan, board, timeline), /number absent/);
+});
+
+test('a phone scan starts on the spoken QR cue and gives way to the result', () => {
+  const board = storyboardFor('The customer scans the QR. The order appears.', 'At the shop');
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = [0, 10, 18, 26, 34, 83, 90, 102];
+  const device = {
+    kind: 'device', headline: 'Scan the counter code', evidence: '@1', scanCue: 'QR',
+    actors: [
+      { entity: 'scan', label: 'Scan', cue: '@1' },
+      { entity: 'order', label: 'Order', value: 'Received', cue: '@2' },
+    ],
+  };
+  const plan = { scenes: [{ sceneIndex: 0, shots: [device] }] };
+  const [[shot]] = compileVisualPlan(plan, board, timeline);
+  assert.equal(shot.scanFrame, 34);
+  assert.deepEqual(shot.reveals, [0, 83]);
+  for (const scanCue of ['', '  ', null, '@2', '@99']) {
+    const optionalPlan = { scenes: [{ sceneIndex: 0, shots: [{ ...device, scanCue }] }] };
+    const [[normalPhone]] = compileVisualPlan(optionalPlan, board, timeline);
+    assert.equal(normalPhone.kind, 'device');
+    assert.equal(normalPhone.scanFrame, undefined);
+    assert.deepEqual(normalPhone.reveals, [0, 83]);
+  }
 });
 
 test('speech preparation preserves a decimal and expands technical notation before stripping markup', () => {

@@ -123,28 +123,33 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
       return current?.storyboard === storyboard && current.timeline === timeline;
     };
 
-    // 4. Stills Previews Stage
-    if (!session.visualAssets?.shots || !session.stillPreviews?.length) {
+    const needsRender = session.renderState?.status !== 'completed' || !session.renderState?.mediaUrl;
+    // Validate the visual revision before resuming an unfinished export.
+    if (needsRender || !session.visualAssets?.shots || !session.stillPreviews?.length) {
       updateJob('stills', 60, 'Creating scene artwork and rendering previews...');
-      const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets);
-      const previewDir = path.resolve('remotion/public/previews', session.id);
-      fs.mkdirSync(previewDir, { recursive: true });
+      const previous = session.visualAssets;
+      const visuals = await prepareReelVisuals(storyboard, timeline, previous);
+      if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while preparing visuals. Start the reel again.');
+      if (visuals !== previous || !session.stillPreviews?.length) {
+        const previewRun = randomUUID();
+        const previewDir = path.resolve('remotion/public/previews', session.id, previewRun);
 
-      const stills = await renderStillPreviews(
-        storyboard,
-        timeline,
-        previewDir,
-        `/previews/${session.id}`,
-        visuals.shots,
-      );
-      if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while preparing previews. Start the reel again.');
-      session.visualAssets = visuals;
-      session.stillPreviews = stills;
-      masterScriptService.updateSession(session);
+        const stills = await renderStillPreviews(
+          storyboard,
+          timeline,
+          previewDir,
+          `/previews/${session.id}/${previewRun}`,
+          visuals.shots,
+        );
+        if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while preparing previews. Start the reel again.');
+        session.visualAssets = visuals;
+        session.stillPreviews = stills;
+        masterScriptService.updateSession(session);
+      }
     }
 
     // 5. Video Rendering Stage (1080x1920 MP4)
-    if (session.renderState?.status !== 'completed' || !session.renderState?.mediaUrl) {
+    if (needsRender) {
       updateJob('rendering', 70, 'Starting Remotion 1080x1920 MP4 Video render...');
 
       const renderFilename = `final-${randomUUID()}.mp4`;

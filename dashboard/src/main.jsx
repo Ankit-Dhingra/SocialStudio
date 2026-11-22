@@ -280,6 +280,7 @@ function App() {
   const [generatingStills, setGeneratingStills] = useState(false);
   const [visualPreviewError, setVisualPreviewError] = useState(null);
   const [selectedStill, setSelectedStill] = useState(null);
+  const [selectedMotionFrame, setSelectedMotionFrame] = useState(null);
   const [renderProgress, setRenderProgress] = useState(0);
   const [rendering, setRendering] = useState(false);
   const [renderedMediaUrl, setRenderedMediaUrl] = useState('');
@@ -2333,17 +2334,20 @@ function App() {
                       {stills && stills.length > 0 ? (
                         <div className="stills-gallery-grid" style={{ marginTop: 24 }}>
                           {stills.map((still, idx) => {
-                            const scene = session?.storyboard?.scenes?.[idx];
+                            const scene = session?.storyboard?.scenes?.[still.sceneIndex ?? idx];
                             return (
                               <div
                                 key={idx}
                                 className="still-card-wrapper"
-                                onClick={() => setSelectedStill(still)}
+                                onClick={() => {
+                                  setSelectedStill(still);
+                                  setSelectedMotionFrame(null);
+                                }}
                               >
                                 <div className="still-thumbnail-box">
                                   <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
                                   <span className="still-thumbnail-badge">{still.shotId ? `SHOT ${still.shotId}` : `CUT ${String(idx + 1).padStart(2, '0')}`}</span>
-                                  <span className="still-thumbnail-frame">{still.type || scene?.type || 'SCENE'}</span>
+                                  <span className="still-thumbnail-frame">{still.motionFrames?.length ? 'Motion' : still.type || scene?.type || 'SCENE'}</span>
                                 </div>
                                 <div className="still-card-meta">
                                   <span className="still-card-title">{still.label || scene?.onScreenText || `Cut ${idx + 1}`}</span>
@@ -2570,7 +2574,7 @@ function App() {
           onClick={() => setSelectedStill(null)}
           style={{ zIndex: 100 }}
         >
-          <div className="still-lightbox-card" onClick={(e) => e.stopPropagation()}>
+          <div className="still-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <div className="still-lightbox-header">
               <span style={{ fontSize: 13, fontWeight: 700 }}>
                 {selectedStill.label || 'Still Preview (1080×1920)'}
@@ -2583,8 +2587,23 @@ function App() {
                 <X size={14} />
               </button>
             </div>
+            {selectedStill.motionFrames?.length > 0 && (
+              <div className="still-motion-controls" role="group" aria-label="Motion keyframes">
+                {selectedStill.motionFrames.map((beat) => (
+                  <button
+                    key={beat.label}
+                    type="button"
+                    className={`btn btn-sm ${(selectedMotionFrame?.label || 'After') === beat.label ? 'btn-primary' : 'btn-ghost'}`}
+                    aria-pressed={(selectedMotionFrame?.label || 'After') === beat.label}
+                    onClick={() => setSelectedMotionFrame(beat)}
+                  >
+                    {beat.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="still-lightbox-body">
-              <img src={toApiUrl(selectedStill.url)} alt="Still Fullscreen" />
+              <img src={toApiUrl(selectedMotionFrame?.url || selectedStill.url)} alt={selectedStill.label || 'Reel preview'} />
             </div>
           </div>
         </div>
