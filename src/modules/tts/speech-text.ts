@@ -9,21 +9,27 @@ const terms: Array<[RegExp, string, string]> = [
   [/\bsame\b/gi, 'same', 'सेम'],
   [/\bZomato\b/gi, 'Zomato', 'जोमैटो'],
   [/\bGPS\b/gi, 'G P S', 'जीपीएस'],
-  [/\bAPIs?\b/gi, 'A P I', 'एपीआई'],
+  [/\bAPI\b/gi, 'A P I', 'एपीआई'],
+  [/\bAPIs\b/gi, 'A P Is', 'एपीआईज़'],
   [/\bSpatial\b/gi, 'Spatial', 'स्पेशल'],
   [/\bIndexing\b/gi, 'Indexing', 'इंडेक्सिंग'],
   [/\bPricing Engine\b/gi, 'Pricing Engine', 'प्राइसिंग इंजन'],
-  [/\bBehind The Tech\b/gi, 'Behind The Tech', 'बिहाइंड द स्टैक'],
+  [/\bBehind The Tech\b/gi, 'Behind The Tech', 'बिहाइंड द टेक'],
   [/\bheartbeat\b/gi, 'heartbeat', 'हार्टबीट'],
-  [/\btimestamps?\b/gi, 'timestamp', 'टाइमस्टैम्प'],
+  [/\btimestamp\b/gi, 'timestamp', 'टाइमस्टैम्प'],
+  [/\btimestamps\b/gi, 'timestamps', 'टाइमस्टैम्प्स'],
   [/\boffline\b/gi, 'offline', 'ऑफलाइन'],
   [/\bonline\b/gi, 'online', 'ऑनलाइन'],
   [/\bcache\b/gi, 'cache', 'कैश'],
-  [/\bdatabases?\b/gi, 'database', 'डेटाबेस'],
-  [/\bservers?\b/gi, 'server', 'सर्वर'],
+  [/\bdatabase\b/gi, 'database', 'डेटाबेस'],
+  [/\bdatabases\b/gi, 'databases', 'डेटाबेसेज़'],
+  [/\bserver\b/gi, 'server', 'सर्वर'],
+  [/\bservers\b/gi, 'servers', 'सर्वर्स'],
   [/\bstatus\b/gi, 'status', 'स्टेटस'],
-  [/\borders?\b/gi, 'orders', 'ऑर्डर्स'],
-  [/\briders?\b/gi, 'riders', 'राइडर्स'],
+  [/\border\b/gi, 'order', 'ऑर्डर'],
+  [/\borders\b/gi, 'orders', 'ऑर्डर्स'],
+  [/\brider\b/gi, 'rider', 'राइडर'],
+  [/\briders\b/gi, 'riders', 'राइडर्स'],
   [/\bexpensive\b/gi, 'expensive', 'एक्सपेंसिव'],
   [/\blatency\b/gi, 'latency', 'लेटेंसी'],
   [/\bthroughput\b/gi, 'throughput', 'थ्रूपुट'],
@@ -46,7 +52,8 @@ export function prepareSpeech(text: string, hindi: boolean): string {
     .replace(/<\/(?:s|p)>/gi, '. ')
     .replace(/<\/?[a-z][^>]*>/gi, ' ')
     // Remove markdown code fences and backticks
-    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^```(?:[\w-]+)?[^\S\r\n]*$/gm, '')
+    .replace(/```/g, '')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/`/g, '')
     // Remove markdown formatting: bold, italic, headings

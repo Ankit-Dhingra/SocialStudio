@@ -128,7 +128,7 @@ export const worker = new Worker<VideoJobData>(
       const renderResult = await renderStudioShort({
         storyboard,
         timeline,
-        plates: visuals.plates,
+        visualPlan: visuals.shots,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
           const overallProgress = 45 + Math.round(p.percent * 0.45); // 45% -> 90%

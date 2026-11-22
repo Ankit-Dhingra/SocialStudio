@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { parseCustomScriptToStoryboard } from '../src/modules/ai-script/custom-script-parser.js';
 import { renderStillPreviews } from '../src/modules/render/video-renderer.js';
+import { prepareReelVisuals } from '../src/modules/render/reel-visual-assets.js';
 import { buildVideoTimeline } from '../src/modules/video/timeline.js';
 
 const creatorScript = {
@@ -20,7 +21,8 @@ async function main() {
   const input = scriptPath ? await readFile(scriptPath, 'utf8') : creatorScript;
   const storyboard = await parseCustomScriptToStoryboard(input);
   const timeline = buildVideoTimeline(storyboard);
-  const stills = await renderStillPreviews(storyboard, timeline, path.resolve(outputPath), '/previews', true);
+  const visuals = await prepareReelVisuals(storyboard, timeline);
+  const stills = await renderStillPreviews(storyboard, timeline, path.resolve(outputPath), '/previews', visuals.shots);
   for (const still of stills) console.log(`Frame ${still.frame}: ${still.filePath}`);
 }
 

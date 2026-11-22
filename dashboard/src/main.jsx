@@ -135,12 +135,12 @@ function extractSevenKeyScript(session, customText) {
   }
   return {
     title: session?.topic || '',
-    hook: session?.sections?.hookOptions || '',
+    hook: '',
     problem: '',
     solution: '',
-    tech_explained: session?.sections?.voiceoverScript || '',
+    tech_explained: session?.storyboard?.scenes?.map(scene => scene.narration).join('\n\n') || '',
     conclusion: '',
-    cta: 'ऐसी ही interesting tech stories के पीछे की engineering समझने के लिए Behind The Tech को अभी follow करो।',
+    cta: '',
   };
 }
 
@@ -276,9 +276,9 @@ function App() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [audioSynthesizing, setAudioSynthesizing] = useState(false);
   const [audioResult, setAudioResult] = useState(null);
-  const [voiceEdits, setVoiceEdits] = useState({});
   const [stills, setStills] = useState([]);
   const [generatingStills, setGeneratingStills] = useState(false);
+  const [visualPreviewError, setVisualPreviewError] = useState(null);
   const [selectedStill, setSelectedStill] = useState(null);
   const [renderProgress, setRenderProgress] = useState(0);
   const [rendering, setRendering] = useState(false);
@@ -346,7 +346,9 @@ function App() {
             }
 
             const savedStage = parseInt(localStorage.getItem('socialstudio_active_stage') || '1', 10);
-            if (savedStage >= 1 && savedStage <= 4) {
+            if (fullSession.voiceoverNeedsRefresh) {
+              setStage(2);
+            } else if (savedStage >= 1 && savedStage <= 4) {
               setStage(savedStage);
             }
           }
@@ -448,6 +450,8 @@ function App() {
       let s = 1;
       if (targetStage) {
         s = targetStage;
+      } else if (fullSession.voiceoverNeedsRefresh) {
+        s = 2;
       } else if (mediaUrl) {
         s = 4;
       } else if (fullStills && fullStills.length > 0) {
@@ -639,6 +643,8 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update script');
       setSession(data);
+      setAudioResult(null);
+      clearRenderPreview();
       setIsEditingScript(false);
       loadSessions();
     } catch (err) {
@@ -661,6 +667,8 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Refinement failed');
       setSession(data);
+      setAudioResult(null);
+      clearRenderPreview();
       const updatedScript = extractSevenKeyScript(data);
       setEditForm(updatedScript);
       setAiRefinePrompt('');
@@ -687,7 +695,6 @@ function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Refinement failed');
       setSession(data);
-      setVoiceEdits((edits) => ({ ...edits, [data.id]: {} }));
       setAudioResult(null);
       clearRenderPreview();
     } catch (err) {
@@ -726,12 +733,7 @@ function App() {
       const res = await fetch(toApiUrl('/api/pipeline/audio/synthesize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: session.id,
-          spokenNarration: session.storyboard.scenes.map(
-            (scene) => voiceEdits[session.id]?.[scene.id] ?? scene.spokenNarration ?? ''
-          ),
-        }),
+        body: JSON.stringify({ sessionId: session.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Audio synthesis failed');
@@ -750,6 +752,7 @@ function App() {
   async function handleGenerateStills() {
     if (!session?.id) return;
     setGeneratingStills(true);
+    setVisualPreviewError(null);
     try {
       const res = await fetch(toApiUrl('/api/pipeline/stills'), {
         method: 'POST',
@@ -761,7 +764,7 @@ function App() {
       setStills(data.stills || []);
       setSession(current => current?.id === session.id ? { ...current, visualAssets: data.visuals } : current);
     } catch (err) {
-      alert(`Screenshot Generation Error: ${err.message}`);
+      setVisualPreviewError({ sessionId: session.id, message: err.message });
     } finally {
       setGeneratingStills(false);
     }
@@ -2058,7 +2061,9 @@ function App() {
                           <div className="voiceover-status-sub">
                             {activeAudio
                               ? `Master track duration: ~${Math.round(activeAudio.totalDurationSec || 0)}s • ${scenes.length} cuts synchronized`
-                              : `Estimated duration: ~${totalTargetSec}s • ${scenes.length} storyboard scenes`}
+                              : session?.voiceoverNeedsRefresh
+                                ? 'Original narration restored. Generate a new voiceover to update the reel.'
+                                : `Estimated duration: ~${totalTargetSec}s • ${scenes.length} storyboard scenes`}
                           </div>
                         </div>
                       </div>
@@ -2151,7 +2156,7 @@ function App() {
                         Storyboard Cuts & Narration Flow ({scenes.length} Scenes)
                       </span>
                       <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                        Target Total: ~{totalTargetSec}s
+                        {activeAudio ? `Recorded: ${Number(activeAudio.totalDurationSec).toFixed(1)}s` : `Estimate: ~${totalTargetSec}s`}
                       </span>
                     </div>
 
@@ -2195,10 +2200,10 @@ function App() {
                               </div>
 
                               <div className="scene-header-right">
-                                <span className="scene-stat-pill">
+                                {!clip && <span className="scene-stat-pill">
                                   <Clock size={11} />
-                                  <span>~{scene.durationTargetSec || 8}s target</span>
-                                </span>
+                                  <span>~{scene.durationTargetSec || 8}s estimate</span>
+                                </span>}
                                 <span className="scene-stat-pill">
                                   <span>{wordCount} words</span>
                                 </span>
@@ -2269,7 +2274,7 @@ function App() {
                       <div className="stills-header" style={{ marginBottom: 24 }}>
                         <div>
                           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
-                            Stage 3: Visual Stills Review ({session?.storyboard?.scenes?.length || 'Dynamic'} Cuts)
+                            Stage 3: Visual Shot Review
                           </h3>
                           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
                             Generate artwork from the finalized script and inspect the 1080×1920 scenes before export.
@@ -2315,13 +2320,13 @@ function App() {
                         </div>
                       </div>
 
-                      {session?.visualAssets?.warning && (
-                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                          {session.visualAssets.warning} The preview uses built-in visuals where artwork is unavailable.
+                      {visualPreviewError && visualPreviewError.sessionId === session?.id && (
+                        <p role="alert" style={{ color: '#f87171', fontSize: 13 }}>
+                          {visualPreviewError.message}
                         </p>
                       )}
-                      {session?.visualAssets?.status === 'generated' && (
-                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>Scene artwork generated for this reel.</p>
+                      {session?.visualAssets?.status === 'ready' && (
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{stills.length} visual shots ready.</p>
                       )}
 
                       {/* STILLS GRID */}
@@ -2337,12 +2342,12 @@ function App() {
                               >
                                 <div className="still-thumbnail-box">
                                   <img src={toApiUrl(still.url)} alt={still.label || `Cut ${idx + 1}`} />
-                                  <span className="still-thumbnail-badge">CUT {String(idx + 1).padStart(2, '0')}</span>
+                                  <span className="still-thumbnail-badge">{still.shotId ? `SHOT ${still.shotId}` : `CUT ${String(idx + 1).padStart(2, '0')}`}</span>
                                   <span className="still-thumbnail-frame">{still.type || scene?.type || 'SCENE'}</span>
                                 </div>
                                 <div className="still-card-meta">
-                                  <span className="still-card-title">{scene?.onScreenText || still.label || `Cut ${idx + 1}`}</span>
-                                  <span className="still-card-sub">{scene?.technicalKeyPoint || 'Visual Keyframe'}</span>
+                                  <span className="still-card-title">{still.label || scene?.onScreenText || `Cut ${idx + 1}`}</span>
+                                  <span className="still-card-sub">{still.evidence || scene?.technicalKeyPoint || 'Visual Keyframe'}</span>
                                 </div>
                               </div>
                             );
@@ -2402,12 +2407,6 @@ function App() {
                         <span style={{ fontWeight: 600, color: '#fafafa' }}>{renderProgress}%</span>
                       </div>
                     </div>
-                  )}
-
-                  {session?.visualAssets?.warning && (
-                    <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                      {session.visualAssets.warning} Built-in visuals cover any unavailable artwork.
-                    </p>
                   )}
 
                   {/* ERROR BANNER */}

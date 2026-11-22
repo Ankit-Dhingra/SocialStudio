@@ -64,7 +64,7 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
     };
 
     // 1. Scripting Stage (Generate Initial Draft if missing)
-    if (!session.currentMarkdown || session.currentMarkdown.length < 50) {
+    if (!session.finalized && !session.currentMarkdown?.trim()) {
       updateJob('scripting', 10, 'Generating Master Script via AI...');
       const full = await masterScriptService.startScriptSession(session.topic, session.angle, session.id);
       session = masterScriptService.getSession(sessionId)!;
@@ -82,52 +82,22 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
       session = await masterScriptService.finalizeScript(session.id);
     }
 
-    const needsAudio = !session.audioResult?.clips?.length || !session.timeline;
-
-    // Apply the scripting budget only when this job still needs to create narration.
-    if (needsAudio && (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16)) {
-      session = masterScriptService.finalizeScript(session.id);
-    }
-    if (needsAudio && (!session.storyboard?.scenes || session.storyboard.scenes.length < 12 || session.storyboard.scenes.length > 16)) {
-      throw new Error(`[Pipeline Gate REJECTED] Storyboard has ${session.storyboard?.scenes?.length || 0} scenes. Exactly 12–16 valid typed scenes are required before TTS.`);
-    }
-
     // 3. Audio Synthesis Stage
-    if (needsAudio) {
-      updateJob('synthesizing', 40, 'Synthesizing voiceover narration (enforcing 90–120s budget at natural tempo)...');
+    if (!session.audioResult?.clips?.length || !session.timeline) {
+      updateJob('synthesizing', 40, 'Synthesizing the finalized narration...');
       const audioRun = randomUUID();
       const audioDir = path.resolve('remotion/public/audio/runs', session.id, audioRun);
       fs.mkdirSync(audioDir, { recursive: true });
 
-      const ttsProvider = getTTSProvider();
-      const audioResult = await synthesizeStoryboardNarration(
-        session.storyboard,
-        audioDir,
-        ttsProvider,
-        {
-          durationPolicy: 'deep-dive-reel',
-          minDurationSec: 90.0,
-          maxDurationSec: 120.0,
-          targetDurationSec: 105.0,
-          maxRetries: 2,
-          onStoryboardRevised: async (revisedStoryboard) => {
-            const currentSession = masterScriptService.getSession(sessionId);
-            if (currentSession) {
-              currentSession.storyboard = revisedStoryboard;
-              masterScriptService.updateSession(currentSession);
-            }
-          },
-        }
-      );
-
-      const timeline = buildVideoTimeline(session.storyboard, audioResult.clips, {
+      const storyboard = session.storyboard;
+      const audioResult = await synthesizeStoryboardNarration(storyboard, audioDir, getTTSProvider());
+      if (masterScriptService.getSession(sessionId)?.storyboard !== storyboard) {
+        throw new Error('The finalized script changed while generating voiceover. Start the reel again.');
+      }
+      const timeline = buildVideoTimeline(storyboard, audioResult.clips, {
         fps: 30,
         audioSrcPrefix: `audio/runs/${session.id}/${audioRun}`,
       });
-
-      if (timeline.totalDurationSec < 90.0 || timeline.totalDurationSec > 120.0) {
-        throw new Error(`[Pipeline Gate REJECTED] Final timeline duration ${timeline.totalDurationSec}s is outside specification [90.0–120.0s]`);
-      }
 
       const sId = session.id;
       session.audioResult = {
@@ -139,24 +109,36 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
         })),
       };
       session.timeline = timeline;
+      delete session.voiceoverNeedsRefresh;
+      delete session.stillPreviews;
+      delete session.visualAssets;
+      session.renderState = { status: 'idle', progress: 0 };
       masterScriptService.updateSession(session);
     }
 
+    const storyboard = session.storyboard;
+    const timeline = session.timeline;
+    const isCurrentRevision = () => {
+      const current = masterScriptService.getSession(sessionId);
+      return current?.storyboard === storyboard && current.timeline === timeline;
+    };
+
     // 4. Stills Previews Stage
-    if (!session.visualAssets || !session.stillPreviews?.length) {
+    if (!session.visualAssets?.shots || !session.stillPreviews?.length) {
       updateJob('stills', 60, 'Creating scene artwork and rendering previews...');
-      session.visualAssets = await prepareReelVisuals(session.storyboard, session.timeline, session.visualAssets);
+      const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets);
       const previewDir = path.resolve('remotion/public/previews', session.id);
       fs.mkdirSync(previewDir, { recursive: true });
 
       const stills = await renderStillPreviews(
-        session.storyboard,
-        session.timeline,
+        storyboard,
+        timeline,
         previewDir,
         `/previews/${session.id}`,
-        false,
-        session.visualAssets.plates,
+        visuals.shots,
       );
+      if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while preparing previews. Start the reel again.');
+      session.visualAssets = visuals;
       session.stillPreviews = stills;
       masterScriptService.updateSession(session);
     }
@@ -169,8 +151,6 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
       const targetMp4Path = path.resolve('media/runs', session.id, renderFilename);
       fs.mkdirSync(path.dirname(targetMp4Path), { recursive: true });
 
-      const renderTimeline = session.timeline;
-
       session.renderState = {
         status: 'rendering',
         progress: 5,
@@ -178,11 +158,12 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
       masterScriptService.updateSession(session);
 
       const renderResult = await renderStudioShort({
-        storyboard: session.storyboard,
-        timeline: renderTimeline,
-        plates: session.visualAssets?.plates,
+        storyboard,
+        timeline,
+        visualPlan: session.visualAssets?.shots,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
+          if (!isCurrentRevision()) return;
           const percent = Math.min(99, Math.max(1, Math.round(p.percent)));
           session = masterScriptService.getSession(sessionId)!;
           session.renderState = {
@@ -201,8 +182,9 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
         },
       });
 
+      if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while rendering. Start the reel again.');
       console.log(`[Server Orchestrator] Video render finished for ${sessionId}. Running Media QA...`);
-      const qaReport = performMediaQA(renderResult, renderTimeline);
+      const qaReport = performMediaQA(renderResult, timeline);
       if (!qaReport.passed) {
         throw new Error(`Media QA validation failed: ${qaReport.errors.join('. ')}`);
       }

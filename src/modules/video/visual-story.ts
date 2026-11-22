@@ -1,116 +1,210 @@
+import { z } from 'zod';
 import type { Storyboard } from '../contracts/storyboard.js';
-import type { SceneTimelineSegment } from './timeline.js';
+import type { VideoTimeline } from './timeline.js';
 
-export type ShotKind =
-  | 'street' | 'quote' | 'shortage' | 'location' | 'cells' | 'index' | 'cache' | 'engine' | 'pricing'
-  | 'heartbeat' | 'recap' | 'pickup' | 'payment' | 'kafka' | 'lock' | 'end' | 'scene';
+const label = z.string().trim().min(1).max(72);
+const actor = z.object({
+  entity: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
+  label: z.string().trim().min(1).max(36),
+  value: z.string().trim().max(40).optional(),
+  cue: z.string().trim().max(140).optional(),
+  tone: z.enum(['neutral', 'success', 'warning']).optional(),
+});
+const transfer = z.object({
+  source: z.string(),
+  target: z.string(),
+  cue: z.string().trim().min(1).max(140),
+});
+const start = z.object({
+  cue: z.string().trim().max(140).default(''),
+  headline: label,
+  evidence: z.string().trim().min(1).max(180),
+  takeaway: z.string().trim().max(108).optional(),
+  takeawayCue: z.string().trim().max(140).optional(),
+});
+const shot = z.discriminatedUnion('kind', [
+  start.extend({ kind: z.literal('image'), brief: z.string().trim().min(12).max(500), continuity: z.string().trim().min(1).max(70) }),
+  start.extend({ kind: z.literal('flow'), actors: z.array(actor).min(2).max(4), transfers: z.array(transfer).min(1).max(4) }),
+  start.extend({ kind: z.literal('state'), actors: z.array(actor).min(2).max(4), transfers: z.array(transfer).max(4).default([]) }),
+  start.extend({ kind: z.literal('comparison'), actors: z.array(actor).min(2).max(3) }),
+  start.extend({ kind: z.literal('device'), actors: z.array(actor).min(1).max(4) }),
+  start.extend({ kind: z.literal('code'), code: z.string().trim().min(1).max(300) }),
+  start.extend({ kind: z.enum(['focus', 'cta']) }),
+]);
+export const visualSceneSchema = z.object({
+  sceneIndex: z.number().int().nonnegative(),
+  shots: z.array(shot).min(1).max(3),
+});
+export const visualStorySchema = z.object({ scenes: z.array(visualSceneSchema).min(1) });
 
-export interface StoryShot {
-  kind: ShotKind;
+export type VisualStory = z.infer<typeof visualStorySchema>;
+export type TimedShot = z.infer<typeof shot> & {
+  id: string;
   from: number;
   duration: number;
-}
-
-export type PlateRole = 'street' | 'pickup' | 'payment' | 'opening';
-export type ReelPlates = Partial<Record<PlateRole, string>>;
-
-const feePattern = /[₹$€£]\s*\d[\d,]*(?:\.\d+)?/g;
-const rainPattern = /\brain(?:y|fall|ing)?\b|बारिश/i;
-const deliveryPattern = /\b(?:delivery|riders?|orders?)\b|डिलीवरी|राइडर/i;
-const numericMetric = (text: string, label: string) => {
-  const match = text.match(new RegExp(`(\\d[\\d,]*)\\s+(?:${label})\\b`, 'i'));
-  return match ? Number(match[1].replace(/,/g, '')) : undefined;
+  asset?: string;
+  reveals: number[];
+  movements: number[];
+  takeawayFrame: number;
+  focus?: { beats: Array<{ text: string; from: number }>; code?: string };
 };
+export type VisualPlan = TimedShot[][];
 
-export function readVisualContext(storyboard: Storyboard) {
-  const narration = storyboard.scenes.map(scene => scene.narration).join(' ');
-  const text = `${storyboard.title} ${narration}`;
-  const fees = [...new Set([...narration.matchAll(feePattern)].map(match => match[0].replace(/\s+/g, '')))];
-  const feeChange = narration.match(/([₹$€£]\s*\d[\d,]*(?:\.\d+)?)\s*(?:से|to|→|->)\s*(?:अचानक\s*)?([₹$€£]\s*\d[\d,]*(?:\.\d+)?)/iu);
-  const brandedApp = text.match(/\b(?:Zomato|Uber Eats|Uber|Swiggy|DoorDash|Deliveroo|Blinkit|Zepto)\b/i)?.[0];
-  const cta = storyboard.scenes.find(scene => scene.type === 'tradeoffHUD');
-  const channel = cta?.narration.match(/\bBehind The Tech\b/i)?.[0] ?? cta?.visualProps.channelName;
-  const orders = numericMetric(narration, '(?:pending\\s+)?orders?');
-  const riders = numericMetric(narration, '(?:available\\s+)?riders?');
-  return {
-    delivery: deliveryPattern.test(text) && /\bsurge\b|pricing|delivery (?:fee|charge)|dynamic pric/i.test(text),
-    rain: rainPattern.test(text),
-    eta: /\bETA\b|estimated delivery time/i.test(text),
-    rules: /pricing rules|configured rules/i.test(text),
-    midnight: /\bmidnight\b|\b12\s*(?:am|a\.m\.)|रात\s+के\s+12\s+बजे/i.test(text),
-    chaiShop: /\bchai\b|चाय/i.test(text) && /\b(?:shop|stall|counter)\b|दुकान/i.test(text),
-    kafka: /\bKafka\b/i.test(text),
-    channel: channel && cta?.narration.toLowerCase().includes(channel.toLowerCase()) ? channel : undefined,
-    app: brandedApp,
-    orders,
-    riders,
-    ratio: orders !== undefined && riders && Number.isFinite(orders / riders)
-      ? new Intl.NumberFormat('en', { maximumFractionDigits: 1 }).format(orders / riders)
-      : undefined,
-    baseFee: feeChange?.[1].replace(/\s+/g, '') ?? narration.match(/\bbase(?: delivery)? (?:fee|charge)\s*([₹$€£]\s*\d[\d,.]*)/i)?.[1].replace(/\s+/g, ''),
-    finalFee: feeChange?.[2].replace(/\s+/g, ''),
-    extraFee: narration.match(/([₹$€£]\s*\d[\d,.]*)\s+(?:additional|extra)|(?:additional|extra)\s*([₹$€£]\s*\d[\d,.]*)/i)?.slice(1).find(Boolean)?.replace(/\s+/g, ''),
-    fees,
-    h3: /\bH3\b/i.test(text),
-    redis: /\bRedis\b/i.test(text),
-  };
+export function cleanNarration(text: string): string {
+  return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-export type VisualContext = ReturnType<typeof readVisualContext>;
-
-function resolveShot(phrase: string, context: VisualContext, isRecap: boolean, isOpening: boolean): ShotKind {
-  if (/\bdark[ -]store\b/i.test(phrase)) return 'pickup';
-  if (/\bQR(?: code)?\b|क्यू\s*आर/i.test(phrase) && /\b(?:scan\w*|UPI|payment|pay)\b|पेमेंट|स्कैन/i.test(phrase)) return 'payment';
-  if (context.delivery) {
-    if (isRecap && /distance|(?:local|current) demand|availability|supply.demand|delivery conditions/i.test(phrase)) return 'recap';
-    if (/heartbeat|timestamp|offline|stale|पुरानी GPS|active delivery status/i.test(phrase)) return 'heartbeat';
-    if (/\b(?:Redis|cache)\b/i.test(phrase)) return 'cache';
-    if (/\bH3\b|spatial index/i.test(phrase)) return 'index';
-    if (/geographical cells?|\bcell\b/i.test(phrase) && !/pricing engine/i.test(phrase)) return 'cells';
-    if (/\bGPS\b|telemetry|location and availability/i.test(phrase)) return 'location';
-    if (/base delivery fee|additional charge|app.{0,24}[₹$€£]/i.test(phrase)) return 'pricing';
-    if (/pricing engine|estimated delivery time|pricing rules/i.test(phrase)) return 'engine';
-    if (/\b\d[\d,]*\s+(?:pending\s+)?orders?\b|\b\d[\d,]*\s+(?:available\s+)?riders?\b|shortage|supply.demand|city.{0,10}search/i.test(phrase)) return 'shortage';
-    if (/delivery (?:fee|charge)|extra\s*[₹$€£]|restaurant|distance/i.test(phrase) && context.fees.length) return 'quote';
-    if (context.rain && (isOpening || rainPattern.test(phrase))) return 'street';
-    if (/local conditions|geographical areas|location.based/i.test(phrase)) return 'cells';
-  }
-  if (context.kafka && /\b(?:Kafka|partitions?|offsets?|consumer lag)\b/i.test(phrase) && /\b(?:publish\w*|producer\w*|consumer\w*|event\w*|topic\w*|partition\w*)\b/i.test(phrase)) return 'kafka';
-  if (/\bSET\s*NX\b/i.test(phrase) && /lock|book|atomic|mutex/i.test(phrase)) return 'lock';
-  return 'scene';
-}
-
-export function planSceneShots(
-  scene: Storyboard['scenes'][number],
-  segment: SceneTimelineSegment,
-  context: VisualContext,
-  fps: number,
-): StoryShot[] {
-  const narration = scene.narration.replace(/<[^>]+>/g, ' ').trim();
-  // Sentence boundaries keep the visual beat on the same words as the caption clock.
-  const clauses = narration.split(/(?<=[!?।.]|,)\s+/).filter(Boolean);
-  const countWords = (text: string) => text.split(/\s+/).filter(Boolean).length;
-  const totalWords = Math.max(1, countWords(narration));
-  const starts: Array<{ kind: ShotKind; from: number }> = [];
-  let wordIndex = 0;
-  const isRecap = scene.type === 'summary' || /takeaway|recap/i.test(scene.onScreenText);
-  const isCallToAction = scene.type === 'tradeoffHUD'
-    && /\b(?:follow|subscribe)\b|फॉलो|सब्सक्राइब/i.test(narration);
-  const minimumShotFrames = Math.round(fps * 0.8);
-  for (const clause of clauses) {
-    const last = starts.at(-1);
-    const kind = isCallToAction ? 'end' : resolveShot(clause, context, isRecap, scene.sceneIndex === 0 && wordIndex === 0);
-    const frame = segment.wordFrames?.[wordIndex] ?? Math.round(wordIndex / totalWords * segment.durationInFrames);
-    wordIndex += countWords(clause);
-    if (!last) {
-      starts.push({ kind, from: 0 });
-    } else if (kind !== 'scene' && kind !== last.kind && frame - last.from >= minimumShotFrames && segment.durationInFrames - frame >= minimumShotFrames) {
-      starts.push({ kind, from: frame });
+export function narrationAnchors(narration: string, maxWords = 9): Array<{ id: string; text: string; start: number; end: number }> {
+  const words = cleanNarration(narration).split(' ').filter(Boolean);
+  const anchors = [];
+  let start = 0;
+  for (const [index, word] of words.entries()) {
+    if (index - start >= maxWords - 1 || /[.!?।,;:]["'’”]?$/.test(word) || index === words.length - 1) {
+      anchors.push({ id: `@${anchors.length + 1}`, text: words.slice(start, index + 1).join(' '), start, end: index + 1 });
+      start = index + 1;
     }
   }
-  if (!starts.length) starts.push({ kind: 'scene', from: 0 });
-  return starts.map((shot, index) => ({
-    ...shot,
-    duration: (starts[index + 1]?.from ?? segment.durationInFrames) - shot.from,
-  }));
+  return anchors;
+}
+
+const token = (word: string) => word.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}₹$€£]/gu, '');
+function findCue(words: string[], phrase: string, from: number, end = words.length): number {
+  const cue = cleanNarration(phrase).split(' ').map(token).filter(Boolean);
+  if (!cue.length) return -1;
+  return words.findIndex((_, i) => i >= from && i + cue.length <= end && cue.every((word, j) => word === words[i + j]));
+}
+
+// Preserve exact digits while treating comma-separated numbers as a single value.
+export function numericFacts(text: string): string[] {
+  return text.normalize('NFKC').replace(/−/g, '-').match(/(?<![\p{L}\p{Nd}])[+-]?\p{Nd}+(?:[,.]\p{Nd}+)*/gu)
+    ?.map(value => value.replace(/,/g, '').replace(/^\+/, '')) ?? [];
+}
+
+export function compileVisualPlan(
+  raw: unknown,
+  storyboard: Storyboard,
+  timeline: VideoTimeline,
+  startIndex = 0,
+  endIndex = storyboard.scenes.length,
+): VisualPlan {
+  const { scenes } = visualStorySchema.parse(raw);
+  if (scenes.length !== endIndex - startIndex || timeline.segments.length !== storyboard.scenes.length) {
+    throw new Error('The visual plan must cover every narration scene exactly once.');
+  }
+  const scriptFacts = new Set(numericFacts([storyboard.title, ...storyboard.scenes.map(s => cleanNarration(s.narration))].join(' ')));
+  return scenes.map(({ sceneIndex, shots }, batchIndex) => {
+    const index = startIndex + batchIndex;
+    const scene = storyboard.scenes[index];
+    const segment = timeline.segments[index];
+    const sceneLabel = `Scene ${index + 1}`;
+    if (sceneIndex !== index || segment.sceneId !== scene.id || segment.durationInFrames <= 0) {
+      throw new Error(`${sceneLabel} does not match the locked narration timeline.`);
+    }
+    const narration = cleanNarration(scene.narration);
+    const narrationWords = narration.split(' ');
+    const words = narrationWords.map(token);
+    const anchors = new Map(narrationAnchors(narration).map(anchor => [anchor.id, anchor]));
+    const cueText = (phrase = '') => anchors.get(phrase)?.text ?? phrase;
+    const findSceneCue = (phrase: string, from: number, end = words.length) => {
+      const anchor = anchors.get(phrase);
+      if (anchor) return anchor.start >= from && anchor.end <= end ? anchor.start : -1;
+      if (/^@\d+$/.test(phrase)) return -1;
+      return findCue(words, phrase, from, end);
+    };
+    const frameAt = (word: number) => segment.wordFrames?.[word] ??
+      Math.round(word / Math.max(1, words.length) * segment.audioDurationMs * timeline.fps / 1000);
+    let lastWord = -1;
+    const starts = shots.map((entry, i) => {
+      const word = i === 0 ? 0 : findSceneCue(entry.cue, lastWord + 1);
+      if (word < 0 || (i === 0 && word !== 0)) {
+        throw new Error(`${sceneLabel}, shot ${i + 1} needs an exact cue in narration order.`);
+      }
+      lastWord = word;
+      return { word, frame: i === 0 ? 0 : frameAt(word) };
+    });
+    return shots.map((entry, i) => {
+      const startAt = starts[i];
+      const next = starts[i + 1];
+      const duration = (next?.frame ?? segment.durationInFrames) - startAt.frame;
+      if (duration < Math.min(Math.round(timeline.fps * 0.6), segment.durationInFrames)) {
+        throw new Error(`${sceneLabel}, shot ${i + 1} has too little time before the next cue.`);
+      }
+      const endWord = next?.word ?? words.length;
+      const localCue = (phrase: string) => findSceneCue(phrase, startAt.word, endWord);
+      if (localCue(entry.evidence) < 0) throw new Error(`${sceneLabel}, shot ${i + 1} needs an exact supporting phrase from its narration.`);
+      const missingFacts = (value: string, cue = '') => numericFacts(value).some(fact => !numericFacts(cueText(cue)).includes(fact));
+      if (missingFacts(entry.headline, i === 0 ? '' : entry.cue)) {
+        throw new Error(`${sceneLabel}, shot ${i + 1} needs to reveal its numbers through a timed value or takeaway.`);
+      }
+      if (entry.kind === 'cta' && findCue(words, entry.headline, startAt.word, endWord) < 0) {
+        throw new Error(`${sceneLabel} CTA must use the approved narration verbatim.`);
+      }
+      const takeawayWord = entry.takeawayCue ? localCue(entry.takeawayCue) : startAt.word;
+      const takeawayFrame = entry.takeawayCue && takeawayWord >= 0 ? Math.max(0, frameAt(takeawayWord) - startAt.frame) : 0;
+      const takeaway = takeawayWord >= 0 && takeawayFrame < duration && !missingFacts(entry.takeaway ?? '', entry.takeawayCue)
+        ? entry.takeaway : undefined;
+      const displayed = [{ field: 'headline', value: entry.headline }, { field: 'takeaway', value: takeaway ?? '' }];
+      if (entry.kind === 'code') {
+        if (!narration.includes(cleanNarration(entry.code))) throw new Error(`${sceneLabel} contains code absent from its narration.`);
+        displayed.push({ field: 'code', value: entry.code });
+      }
+      if ('actors' in entry) {
+        if (new Set(entry.actors.map(a => a.entity)).size !== entry.actors.length) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} repeats an entity ID.`);
+        }
+        displayed.push(...entry.actors.flatMap((actor, actorIndex) => [
+          { field: `actor ${actorIndex + 1} label`, value: actor.label },
+          { field: `actor ${actorIndex + 1} value`, value: actor.value ?? '' },
+        ]));
+      }
+      for (const { field, value } of displayed) {
+        const unsupported = numericFacts(value).find(number => !scriptFacts.has(number));
+        if (unsupported) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} introduces a number absent from the approved script (${unsupported.slice(0, 32)} in ${field}).`);
+        }
+      }
+      const reveals = 'actors' in entry ? entry.actors.map((item, actorIndex) => {
+        if (missingFacts(item.value ?? '', item.cue)) {
+          throw new Error(`${sceneLabel}, shot ${i + 1}, item ${actorIndex + 1} needs the exact phrase containing its number.`);
+        }
+        if (!item.cue) return 0;
+        const word = localCue(item.cue);
+        if (word < 0) throw new Error(`${sceneLabel}, shot ${i + 1}, item ${actorIndex + 1} has an unmatched reveal cue.`);
+        return Math.max(0, frameAt(word) - startAt.frame);
+      }) : entry.kind === 'code' ? [Math.max(0, frameAt(localCue(entry.code)) - startAt.frame)] : [];
+      if (entry.kind === 'code' && localCue(entry.code) < 0) throw new Error(`${sceneLabel} contains code outside the shot narration.`);
+      if (reveals.some((frame, actorIndex) => frame >= duration || ((entry.kind === 'flow' || entry.kind === 'device') && actorIndex > 0 && frame < reveals[actorIndex - 1]))) {
+        throw new Error(`${sceneLabel}, shot ${i + 1} has a reveal outside its shot or an out-of-order flow.`);
+      }
+      const movements = 'transfers' in entry ? entry.transfers.map(transfer => {
+        const source = entry.actors.findIndex(a => a.entity === transfer.source);
+        const target = entry.actors.findIndex(a => a.entity === transfer.target);
+        const word = localCue(transfer.cue);
+        if (source < 0 || target < 0 || source === target || word < 0) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} has an ungrounded transfer.`);
+        }
+        const frame = Math.max(0, frameAt(word) - startAt.frame);
+        if (frame >= duration) throw new Error(`${sceneLabel}, shot ${i + 1} has a transfer outside its shot.`);
+        return frame;
+      }) : [];
+      let focus: TimedShot['focus'];
+      if (entry.kind === 'focus' && duration > timeline.fps * 6) {
+        const beatStarts = [startAt.word, ...narrationAnchors(narration, 16).map(anchor => anchor.start).filter(word =>
+          word > startAt.word && word < endWord && frameAt(word) < startAt.frame + duration)];
+        const preceding = shots[i - 1];
+        focus = {
+          beats: beatStarts.map((word, beatIndex) => ({
+            text: narrationWords.slice(word, beatStarts[beatIndex + 1] ?? endWord).join(' '),
+            from: beatIndex === 0 ? 0 : Math.max(0, frameAt(word) - startAt.frame),
+          })),
+          code: preceding?.kind === 'code' ? preceding.code : undefined,
+        };
+      }
+      return {
+        ...entry, cue: i === 0 ? '' : entry.cue, id: `${index + 1}-${i + 1}`, from: startAt.frame,
+        duration, reveals, movements, focus, takeaway, takeawayCue: takeaway ? entry.takeawayCue : undefined,
+        takeawayFrame: takeaway ? takeawayFrame : 0,
+      };
+    });
+  });
 }

@@ -5,6 +5,7 @@ import { generateHinglishScript } from '../src/modules/ai-script/script-generato
 import { synthesizeStoryboardNarration } from '../src/modules/tts/tts-service.js';
 import { buildVideoTimeline } from '../src/modules/video/timeline.js';
 import { renderStudioShort } from '../src/modules/render/video-renderer.js';
+import { prepareReelVisuals } from '../src/modules/render/reel-visual-assets.js';
 import { performMediaQA } from '../src/modules/qa/media-qa.js';
 
 const topic = process.argv[2];
@@ -21,7 +22,8 @@ const publicDir = path.resolve('remotion/public/audio/runs', id);
 fs.mkdirSync(publicDir, {recursive: true});
 for (const clip of audio.clips) fs.copyFileSync(clip.filePath, path.join(publicDir, path.basename(clip.filePath)));
 const timeline = buildVideoTimeline(storyboard, audio.clips, {audioSrcPrefix: 'audio/runs/' + id});
-const result = await renderStudioShort({storyboard, timeline, outputFilePath: path.join(dir, 'final-short.mp4')});
+const visuals = await prepareReelVisuals(storyboard, timeline);
+const result = await renderStudioShort({storyboard, timeline, visualPlan: visuals.shots, outputFilePath: path.join(dir, 'final-short.mp4')});
 const qa = performMediaQA(result, timeline);
 fs.writeFileSync(path.join(dir, 'qa.json'), JSON.stringify(qa, null, 2));
 if (!qa.passed) throw new Error(qa.errors.join(', '));

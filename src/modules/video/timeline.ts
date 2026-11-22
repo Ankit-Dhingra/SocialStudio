@@ -108,10 +108,17 @@ export function buildVideoTimeline(
 
   let currentFrame = 0;
   const segments: SceneTimelineSegment[] = [];
+  const clipsByIndex = new Map(clips.map(clip => [clip.sceneIndex, clip]));
+  if (clips.length && clips.length !== storyboard.scenes.length) {
+    throw new Error('Generate voiceover for all scenes in the finalized script.');
+  }
 
   for (let i = 0; i < storyboard.scenes.length; i++) {
     const scene = storyboard.scenes[i];
-    const clip = clips.find((c) => c.sceneIndex === i) || clips[i];
+    const clip = clipsByIndex.get(i);
+    if (clips.length && (!clip || clip.sceneId !== scene.id || !Number.isFinite(clip.durationMs) || clip.durationMs <= 0)) {
+      throw new Error(`Voiceover for scene ${i + 1} does not match the finalized script. Generate it again.`);
+    }
 
     const audioDurationMs = clip ? clip.durationMs : scene.durationTargetSec * 1000;
     const audioFrames = Math.ceil((audioDurationMs * fps) / 1000);

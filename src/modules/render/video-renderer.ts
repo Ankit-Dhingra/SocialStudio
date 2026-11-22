@@ -8,14 +8,14 @@ import { bundle } from '@remotion/bundler';
 import { openBrowser, renderMedia, renderStill, selectComposition } from '@remotion/renderer';
 import { Storyboard } from '../contracts/storyboard.js';
 import { VideoTimeline } from '../video/timeline.js';
-import { planSceneShots, readVisualContext, type ReelPlates, type ShotKind } from '../video/visual-story.js';
+import type { VisualPlan } from '../video/visual-story.js';
 import { stageReelVisuals } from './reel-visual-assets.js';
 
 export interface RenderShortOptions {
   storyboard: Storyboard;
   timeline: VideoTimeline;
   outputFilePath: string;
-  plates?: ReelPlates;
+  visualPlan?: VisualPlan;
   onProgress?: (progress: { percent: number; renderedFrames: number; totalFrames: number }) => void;
 }
 
@@ -121,7 +121,7 @@ export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string
 }
 
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
-  const { storyboard, timeline, outputFilePath, plates, onProgress } = options;
+  const { storyboard, timeline, outputFilePath, visualPlan, onProgress } = options;
 
   const outputDir = path.dirname(outputFilePath);
   if (!fs.existsSync(outputDir)) {
@@ -130,8 +130,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
 
   const startTime = Date.now();
   const bundleLocation = await getOrCreateBundle(timeline);
-  await stageReelVisuals(bundleLocation, plates);
-  const inputProps = { storyboard, timeline, plates };
+  await stageReelVisuals(bundleLocation, visualPlan);
+  const inputProps = { storyboard, timeline, visualPlan };
   const { concurrency, ffmpegThreads, gl, browserExecutable } = getRenderingConfig();
 
   console.log(`[Renderer] Optimizing render pipeline: concurrency=${concurrency}, ffmpegThreads=${ffmpegThreads}, gl=${gl}, browser=${browserExecutable || 'remotion-default'}`);
@@ -236,52 +236,44 @@ export interface StillPreviewResult {
   frame: number;
   url: string;
   filePath: string;
+  label?: string;
+  shotId?: string;
+  evidence?: string;
 }
+type PreviewTarget = Omit<StillPreviewResult, 'url' | 'filePath'> & { filename: string };
 
 export async function renderStillPreviews(
   storyboard: Storyboard,
   timeline: VideoTimeline,
   outputDir: string,
   urlPrefix = '/previews',
-  distinctShots = false,
-  plates?: ReelPlates,
+  visualPlan?: VisualPlan,
 ): Promise<StillPreviewResult[]> {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const context = readVisualContext(storyboard);
-  const seen = new Set<ShotKind>();
-  const targets = storyboard.scenes.flatMap((scene, idx) => {
+  const targets = storyboard.scenes.flatMap<PreviewTarget>((scene, idx) => {
     const seg = timeline.segments[idx];
     if (!seg) return [];
-    const shots = planSceneShots(scene, seg, context, timeline.fps);
-    if (distinctShots) {
-      return shots.filter(shot => {
-        if (shot.kind === 'scene' || seen.has(shot.kind)) return false;
-        seen.add(shot.kind);
-        return true;
-      }).map(shot => ({
-        scene, idx, filename: `${shot.kind}.jpg`,
-        frame: seg.startFrame + shot.from + Math.min(shot.duration - 1, Math.max(Math.round(timeline.fps * 1.25), Math.floor(shot.duration * 0.6))),
-      }));
-    }
-    const shot = shots.filter(shot => shot.kind !== 'scene').sort((a, b) => b.duration - a.duration)[0];
-    return [{
-      scene, idx, filename: `scene-${idx}-${scene.type}.jpg`,
-      frame: seg.startFrame + (shot
-        ? shot.from + Math.min(shot.duration - 1, Math.max(Math.round(timeline.fps * 1.25), Math.floor(shot.duration * 0.6)))
-        : Math.min(120, Math.floor(seg.durationInFrames * 0.4))),
+    const metadata = { sceneIndex: idx, sceneId: scene.id, type: scene.type };
+    return visualPlan ? visualPlan[idx].map(shot => ({
+      ...metadata, label: shot.headline, shotId: shot.id, evidence: shot.evidence, filename: `shot-${shot.id}.jpg`,
+      frame: seg.startFrame + shot.from + Math.min(shot.duration - 1, Math.max(
+        Math.floor(shot.duration * 0.6), Math.max(shot.takeawayFrame, ...shot.reveals, ...shot.movements, ...(shot.focus?.beats.map(beat => beat.from) ?? [])) + Math.round(timeline.fps * 0.23),
+      )),
+    })) : [{
+      ...metadata,
+      filename: `scene-${idx}-${scene.type}.jpg`, frame: seg.startFrame + Math.min(120, Math.floor(seg.durationInFrames * 0.4)),
     }];
   });
-  if (distinctShots && !targets.length) return renderStillPreviews(storyboard, timeline, outputDir, urlPrefix, false, plates);
 
   const bundleLocation = await getOrCreateBundle(timeline);
-  await stageReelVisuals(bundleLocation, plates);
+  await stageReelVisuals(bundleLocation, visualPlan);
   const { gl, browserExecutable } = getRenderingConfig();
   const chromiumOptions = { gl, enableMultiProcessOnLinux: true, disableWebSecurity: true };
   const puppeteerInstance = await openBrowser('chrome', { browserExecutable, chromiumOptions });
-  const inputProps = { storyboard, timeline, plates };
+  const inputProps = { storyboard, timeline, visualPlan };
   try {
     const composition = await selectComposition({
       serveUrl: bundleLocation,
@@ -291,13 +283,13 @@ export async function renderStillPreviews(
       inputProps,
     });
     const results: StillPreviewResult[] = [];
-    for (const { scene, idx, frame, filename } of targets) {
+    for (const { filename, ...target } of targets) {
       const targetPath = path.join(outputDir, filename);
 
       await renderStill({
         composition,
         serveUrl: bundleLocation,
-        frame,
+        frame: target.frame,
         output: targetPath,
         imageFormat: 'jpeg',
         jpegQuality: 93,
@@ -307,10 +299,7 @@ export async function renderStillPreviews(
       });
 
       results.push({
-        sceneIndex: idx,
-        sceneId: scene.id,
-        type: scene.type,
-        frame,
+        ...target,
         url: `${urlPrefix}/${filename}?t=${Date.now()}`,
         filePath: targetPath,
       });

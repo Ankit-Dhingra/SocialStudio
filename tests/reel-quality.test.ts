@@ -7,102 +7,308 @@ import { spawnSync } from 'node:child_process';
 import { prepareSpeech, speechChunks } from '../src/modules/tts/speech-text.js';
 import { buildVideoTimeline } from '../src/modules/video/timeline.js';
 import { musicVolumeAtFrame } from '../src/modules/video/StudioShortComposition.js';
-import { buildStoryboardFromParsed, parseTolerantJson, parseSectionsFromMarkdown } from '../src/modules/ai-script/master-script-service.js';
+import { buildStoryboardFromParsed, parseTolerantJson } from '../src/modules/ai-script/master-script-service.js';
 import { StoryboardSchema } from '../src/modules/contracts/storyboard.js';
 import { findFfmpeg } from '../src/modules/tts/sarvam-provider.js';
 import { parseCustomScriptToStoryboard } from '../src/modules/ai-script/custom-script-parser.js';
-import { planSceneShots, readVisualContext } from '../src/modules/video/visual-story.js';
+import { compileVisualPlan } from '../src/modules/video/visual-story.js';
 import { prepareReelVisuals, stageReelVisuals } from '../src/modules/render/reel-visual-assets.js';
 import { randomUUID } from 'node:crypto';
 
-test('the visual pipeline generates and reuses a script-specific image across preview and export', async (t) => {
-  const board = await parseCustomScriptToStoryboard({
-    title: `Rain delivery ${randomUUID()}`,
-    hook: 'A delivery rider waits in midnight rain. The delivery fee jumps from ₹30 to ₹90.',
-    problem: 'There are 100 orders but just 20 riders available.',
-    solution: 'The pricing engine measures local conditions.',
+function storyboardFor(narration: string, title = 'Warehouse relay'): ReturnType<typeof StoryboardSchema.parse> {
+  return StoryboardSchema.parse({
+    title, topic: title, hook: narration, learningObjective: 'Understand the action and its outcome.',
+    scenes: [{
+      id: 'hook', sceneIndex: 0, type: 'hook', narration,
+      onScreenText: title, technicalKeyPoint: 'System behavior', durationTargetSec: 8,
+    }],
   });
+}
+
+test('the director retries only missing artwork and preserves continuity across shots', async (t) => {
+  const board = storyboardFor('The worker enters the warehouse. The worker scans the bin.', `Warehouse relay ${randomUUID()}`);
   const timeline = buildVideoTimeline(board);
-  const builtIn = fs.readFileSync('remotion/public/visuals/rain-delivery.png');
-  const environment = { GEMINI_API_KEY: process.env.GEMINI_API_KEY, REEL_IMAGE_GENERATION: process.env.REEL_IMAGE_GENERATION, DEMO_MODE: process.env.DEMO_MODE };
-  Object.assign(process.env, { GEMINI_API_KEY: 'test-key', REEL_IMAGE_GENERATION: 'on', DEMO_MODE: 'false' });
+  const image = fs.readFileSync('remotion/public/visuals/demo-qr.png');
+  const director = { scenes: [{ sceneIndex: 0, shots: [
+    { cue: '', kind: 'image', headline: 'Enter the warehouse', evidence: 'The worker enters the warehouse', brief: 'A worker enters the warehouse through its front door', continuity: 'warehouse team' },
+    { cue: 'The worker scans the bin', kind: 'image', headline: 'Scan the bin', evidence: 'The worker scans the bin', brief: 'The same worker holds a scanner beside a bin', continuity: 'warehouse team' },
+  ] }] };
+  const state = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY, REEL_IMAGE_GENERATION: process.env.REEL_IMAGE_GENERATION, REEL_IMAGE_MODEL: process.env.REEL_IMAGE_MODEL };
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key', REEL_IMAGE_GENERATION: 'on', REEL_IMAGE_MODEL: 'test-image-model' });
   t.after(() => {
-    for (const [name, value] of Object.entries(environment)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
+    for (const [name, value] of Object.entries(state)) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
   });
-  const request = t.mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.match(String(url), /generativelanguage\.googleapis\.com.*:generateContent$/);
+  let plans = 0;
+  const images: string[] = [];
+  let failSecond = true;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
     const body = JSON.parse(String(options?.body));
+    if (!String(url).includes('/test-image-model:')) {
+      plans++;
+      assert.match(body.contents[0].parts[0].text, /The worker scans the bin/);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(director) }] } }] });
+    }
     assert.equal(body.generationConfig.imageConfig.aspectRatio, '9:16');
-    assert.match(body.contents[0].parts[0].text, /delivery rider waits in midnight rain/);
-    return Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: builtIn.toString('base64') } }] } }] });
+    const parts = body.contents[0].parts;
+    const brief = parts[0].text;
+    images.push(brief);
+    if (brief.includes('holds a scanner')) {
+      assert.equal(parts[1].inlineData.data, image.toString('base64'));
+      if (failSecond) return new Response('{}', { status: 429 });
+    }
+    return Response.json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: image.toString('base64') } }] } }] });
   });
-  const [preview, overlappingRender] = await Promise.all([prepareReelVisuals(board, timeline), prepareReelVisuals(board, timeline)]);
-  assert.equal(preview.status, 'generated');
-  assert.ok(preview.plates.street);
-  t.after(() => fs.rmSync(path.join('media', preview.plates.street!), { force: true }));
-  assert.deepEqual(overlappingRender, preview);
-  const restored = await prepareReelVisuals(board, timeline);
-  assert.deepEqual(restored, preview);
-  assert.equal(request.mock.callCount(), 1);
+  await assert.rejects(prepareReelVisuals(board, timeline), /Shot 1-2: Gemini returned HTTP 429.*quota or rate limit/);
+  failSecond = false;
+  const [preview, exportPlan] = await Promise.all([prepareReelVisuals(board, timeline), prepareReelVisuals(board, timeline)]);
+  assert.equal(preview.status, 'ready');
+  assert.deepEqual(preview, exportPlan);
+  assert.equal(plans, 1);
+  assert.equal(images.length, 3);
+  assert.equal(images.filter(brief => brief.includes('front door')).length, 1);
+  const paths = preview.shots.flat().map(shot => shot.asset!);
+  t.after(() => {
+    for (const file of paths) fs.rmSync(path.join('media', file), { force: true });
+    fs.rmSync(path.join('media', 'generated-reel-visuals', `${preview.fingerprint}.json`), { force: true });
+  });
   const bundlePath = fs.mkdtempSync(path.join(os.tmpdir(), 'reel-asset-test-'));
   t.after(() => fs.rmSync(bundlePath, { recursive: true, force: true }));
-  await stageReelVisuals(bundlePath, restored.plates);
-  assert.deepEqual(fs.readFileSync(path.join(bundlePath, 'public', preview.plates.street)), builtIn);
+  await stageReelVisuals(bundlePath, preview.shots);
+  for (const file of paths) assert.deepEqual(fs.readFileSync(path.join(bundlePath, 'public', file)), image);
 });
 
-test('cinematic shots follow pasted narration and derive its own figures', async () => {
-  const script = {
-    title: 'Why rain changes a delivery quote',
-    hook: 'बारिश हो रही है। Delivery charge ₹42 से अचानक ₹84 हो गया।',
-    problem: 'There are 350 orders and 70 riders available.',
-    solution: 'Use geographical cells to isolate local demand.',
-    tech_explained: 'A rider sends GPS location. H3 maps the location. Redis stores the counts. A stale heartbeat marks the rider offline.',
-    conclusion: 'Distance is the same. Local demand is higher.',
-    cta: 'For more interesting tech stories, follow Behind The Tech.',
-  };
-  const encoded = JSON.stringify(script, null, 2).split('\n').map((line, index) =>
-    (index > 0 && line.startsWith('  ') ? `&#x20; ${line.trimStart()}` : line)
-  ).join('\\\n');
-  const board = await parseCustomScriptToStoryboard(encoded);
-  const context = readVisualContext(board);
-  assert.deepEqual([context.baseFee, context.finalFee, context.orders, context.riders, context.ratio], ['₹42', '₹84', 350, 70, '5']);
-  assert.equal(context.channel, 'Behind The Tech');
-
+test('long visual plans resume at the failed batch and retry a brief Gemini outage', async (t) => {
+  const board = storyboardFor('A worker scans the bin.', `Long warehouse reel ${randomUUID()}`);
+  board.scenes = Array.from({ length: 7 }, (_, sceneIndex) => ({
+    ...board.scenes[0], id: `cut-${sceneIndex}`, sceneIndex, durationTargetSec: 4,
+  }));
   const timeline = buildVideoTimeline(board);
-  const shots = board.scenes.flatMap((scene, index) => {
-    const segment = timeline.segments[index];
-    const result = planSceneShots(scene, segment, context, 30);
-    assert.equal(result[0].from, 0);
-    assert.equal(result.reduce((frames, shot) => frames + shot.duration, 0), segment.durationInFrames);
-    assert.ok(result.every(shot => shot.duration > 0));
-    return result.map(shot => shot.kind);
+  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key' });
+  t.after(() => {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
   });
-  for (const shot of ['street', 'quote', 'shortage', 'cells', 'location', 'cache', 'heartbeat', 'recap'] as const) {
-    assert.ok(shots.includes(shot), `Expected shot ${shot}`);
-  }
+  const requests: number[][] = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.doesNotMatch(String(url), /test-key/);
+    const prompt = JSON.parse(JSON.parse(String(options?.body)).contents[0].parts[0].text);
+    const indices = prompt.scenes.map((scene: {sceneIndex: number}) => scene.sceneIndex);
+    requests.push(indices);
+    if (indices[0] === 5) {
+      assert.equal(prompt.establishedEntities.actors.worker, 'Worker');
+      assert.equal(prompt.storyContext.length, 5);
+      if (requests.length === 2) {
+        return Response.json({ error: { message: 'private provider detail' } }, { status: 429, headers: { 'Retry-After': '30' } });
+      }
+      if (requests.length <= 4) return new Response(null, { status: 503, headers: { 'Retry-After': '0' } });
+    }
+    const plan = { scenes: indices.map((sceneIndex: number) => ({ sceneIndex, shots: [{
+      kind: 'state', cue: '', evidence: 'A worker scans the bin', headline: 'Scan the bin', transfers: [],
+      actors: [{ entity: 'worker', label: 'Worker' }, { entity: 'bin', label: 'Bin' }],
+    }] })) };
+    const json = JSON.stringify(plan);
+    return Response.json({ candidates: [{ content: { parts: [
+      { thought: true, text: 'Provider thought summary' }, { text: json.slice(0, 14) }, { text: json.slice(14) },
+    ] } }] });
+  });
+  await assert.rejects(prepareReelVisuals(board, timeline), (error: Error) => {
+    assert.match(error.message, /scenes 6–7.*HTTP 429.*Retry after 30 seconds/);
+    assert.match(error.message, /5 validated scenes are saved.*resume at scene 6/);
+    assert.doesNotMatch(error.message, /private provider detail/);
+    return true;
+  });
+  const ready = await prepareReelVisuals(board, timeline);
+  t.after(() => fs.rmSync(path.join('media', 'generated-reel-visuals', `${ready.fingerprint}.json`), { force: true }));
+  assert.deepEqual(requests, [[0, 1, 2, 3, 4], [5, 6], [5, 6], [5, 6], [5, 6]]);
+  assert.deepEqual(ready.shots.flat().map(shot => shot.id), ['1-1', '2-1', '3-1', '4-1', '5-1', '6-1', '7-1']);
 });
 
-test('a narration clock can cut from a demo QR to Kafka without delivery graphics', async () => {
-  const board = await parseCustomScriptToStoryboard({
-    title: 'Chai shop payments with Kafka',
-    hook: 'The customer scans a QR code to pay. The payment event is published to Kafka.',
-    problem: 'Consumers need to know when a payment succeeds.',
-    solution: 'The producer publishes a payment event to a Kafka topic.',
+test('a malformed shot retries only its scene and reports the exact rejected anchor', async (t) => {
+  const board = storyboardFor('Do requests ek saath aati hain. Dono ko last seat available dikhti hai.', `Concurrent booking ${randomUUID()}`);
+  board.scenes = Array.from({ length: 5 }, (_, sceneIndex) => ({
+    ...board.scenes[0], id: `cut-${sceneIndex}`, sceneIndex,
+  }));
+  const timeline = buildVideoTimeline(board);
+  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key' });
+  t.after(() => {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
   });
-  const context = readVisualContext(board);
-  const segment = buildVideoTimeline(board).segments[0];
-  const shots = planSceneShots(board.scenes[0], {
-    ...segment,
-    wordFrames: [0, 5, 10, 15, 20, 25, 30, 35, 44, 50, 58, 65, 70, 76, 83, 88],
-  }, context, 30);
-  assert.deepEqual(shots.map(({ kind, from }) => ({ kind, from })), [
-    { kind: 'payment', from: 0 }, { kind: 'kafka', from: 44 },
-  ]);
-  assert.equal(context.delivery, false);
-  assert.equal(context.chaiShop, true);
+  const requests: number[][] = [];
+  let repairPasses = false;
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    assert.deepEqual(body.generationConfig.responseJsonSchema.required, ['scenes']);
+    const prompt = JSON.parse(body.contents[0].parts[0].text);
+    const indices: number[] = prompt.scenes.map((scene: { sceneIndex: number }) => scene.sceneIndex);
+    requests.push(indices);
+    const repair = Boolean(prompt.validationFeedback);
+    assert.equal(prompt.scenes[0].anchors[1].text, 'Dono ko last seat available dikhti hai.');
+    if (repair) assert.match(prompt.validationFeedback, /Scene 3, shot 1.*supporting phrase/);
+    const plan = { scenes: indices.map((sceneIndex) => ({ sceneIndex, shots: [{
+      kind: 'state', evidence: sceneIndex === 2 && !repairPasses ? '@99' : '@1', headline: 'Competing requests',
+      actors: [{ entity: 'request-a', label: 'Request A' }, { entity: 'request-b', label: 'Request B', cue: '@2' }],
+    }] })) };
+    return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(plan) }] } }] });
+  });
+  await assert.rejects(prepareReelVisuals(board, timeline), /Scene 3, shot 1 needs an exact supporting phrase.*4 validated scenes are saved.*resume at scene 3/);
+  repairPasses = true;
+  const ready = await prepareReelVisuals(board, timeline);
+  t.after(() => fs.rmSync(path.join('media', 'generated-reel-visuals', `${ready.fingerprint}.json`), { force: true }));
+  assert.deepEqual(requests, [[0, 1, 2, 3, 4], [2], [2]]);
+  assert.deepEqual(ready.shots.flat().map(shot => shot.id), ['1-1', '2-1', '3-1', '4-1', '5-1']);
+  assert.ok(ready.shots[2][0].reveals[1] > 0);
+});
+
+test('the planner drops unsupported numeric annotations without dropping timed approved values', async (t) => {
+  const board = storyboardFor('The server decrements the seat count. It confirms the booking.', `Booking update ${randomUUID()}`);
+  board.scenes.push({ ...board.scenes[0], id: 'other-cut', sceneIndex: 1, narration: 'After 10 seconds the lock expires.' });
+  const timeline = buildVideoTimeline(board);
+  const vars = { LLM_PROVIDER: process.env.LLM_PROVIDER, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
+  Object.assign(process.env, { LLM_PROVIDER: 'gemini', GEMINI_API_KEY: 'test-key' });
+  t.after(() => {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  });
+  const provider = t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    assert.equal(body.generationConfig.responseJsonSchema.properties.scenes.items.properties.shots.items.properties.actors.maxItems, 4);
+    const prompt = JSON.parse(body.contents[0].parts[0].text);
+    assert.deepEqual(prompt.scenes.map((scene: { spokenNumbers: string[] }) => scene.spokenNumbers), [[], ['10']]);
+    const plan = { scenes: [
+      { sceneIndex: 0, shots: [{ kind: 'state', headline: 'Confirm the booking', evidence: '@1', takeaway: 'Only 1 seat was left', takeawayCue: '@99', actors: [
+        { entity: 'seat-count', label: 'Seat Count', value: '0', cue: '@1' },
+        { entity: 'booking', label: 'Booking', value: 'Confirmed', cue: '@2' },
+      ] }] },
+      { sceneIndex: 1, shots: [{ kind: 'state', headline: 'The lock expires', evidence: '@1', actors: [
+        { entity: 'ttl', label: 'Time to live', value: '10 seconds', cue: '@1' },
+        { entity: 'lock', label: 'Lock' },
+      ] }] },
+    ] };
+    return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(plan) }] } }] });
+  });
+  const ready = await prepareReelVisuals(board, timeline);
+  t.after(() => fs.rmSync(path.join('media', 'generated-reel-visuals', `${ready.fingerprint}.json`), { force: true }));
+  assert.equal(provider.mock.callCount(), 1);
+  const [booking, expiry] = ready.shots.map(shots => shots[0]);
+  assert.equal(booking.takeaway, undefined);
+  assert.equal(booking.kind, 'state');
+  assert.equal(booking.actors[0].value, undefined);
+  assert.equal(booking.actors[1].value, 'Confirmed');
+  assert.ok(booking.reveals[1] > 0);
+  assert.equal(expiry.kind, 'state');
+  assert.equal(expiry.actors[0].value, '10 seconds');
+});
+
+test('narration anchors keep a negative value tied to its spoken frame', () => {
+  const board = storyboardFor('Both requests decrement stock. Stock falls to -1.');
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = [0, 8, 17, 25, 100, 108, 116, 125];
+  const entry = {
+    kind: 'state', headline: 'Stock after the race', evidence: '@1',
+    actors: [{ entity: 'requests', label: 'Requests' }, { entity: 'stock', label: 'Stock', value: '−1', cue: '@2' }],
+  };
+  const plan = { scenes: [{ sceneIndex: 0, shots: [entry] }] };
+  assert.deepEqual(compileVisualPlan(plan, board, timeline)[0][0].reveals, [0, 100]);
+  entry.actors[1].value = '1';
+  assert.throws(() => compileVisualPlan(plan, board, timeline), /number absent from the approved script/);
+});
+
+test('shot plans use narration timestamps and reject invented or mistimed values', () => {
+  const board = storyboardFor('The fee starts at ₹30. The same route now costs ₹90.', 'A delivery quote changes');
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = [0, 4, 8, 16, 27, 55, 59, 65, 74, 82, 105];
+  const plan = { scenes: [{ sceneIndex: 0, shots: [
+    { kind: 'focus', cue: '', headline: 'The starting fee', evidence: 'The fee starts at ₹30' },
+    { kind: 'device', cue: 'The same route', headline: 'A new fee', evidence: 'The same route now costs ₹90', actors: [
+      { entity: 'before', label: 'Before' },
+      { entity: 'after', label: 'New fee', value: '₹90', cue: 'costs ₹90' },
+    ] },
+  ] }] };
+  const shots = compileVisualPlan(plan, board, timeline)[0];
+  assert.equal(shots[0].duration, 55);
+  assert.equal(shots[1].from, 55);
+  assert.deepEqual(shots[1].reveals, [0, 27]);
+  assert.equal(shots[1].duration + shots[0].duration, timeline.totalDurationInFrames);
+  const second = plan.scenes[0].shots[1];
+  assert.ok(second.actors);
+  second.actors[1].value = '₹900';
+  assert.throws(() => compileVisualPlan(plan, board, timeline), /absent from the approved script|exact phrase containing its number/);
+  second.actors[1].value = '₹90';
+  second.actors[1].cue = 'The same route';
+  assert.throws(() => compileVisualPlan(plan, board, timeline), /exact phrase containing its number/);
+});
+
+test('long focus shots reveal the approved phrases on the existing audio timeline', () => {
+  const code = 'SET seat_id_123 unique_value NX PX 10000';
+  const explanation = 'NX keeps an existing lock. PX expires the lock after 10 seconds.';
+  const board = storyboardFor(`${code}. ${explanation}`);
+  board.scenes[0].durationTargetSec = 16;
+  const timeline = buildVideoTimeline(board);
+  const words = board.scenes[0].narration.split(' ');
+  timeline.segments[0].wordFrames = words.map((_, index) => index * 22);
+  const plan = { scenes: [{ sceneIndex: 0, shots: [
+    { kind: 'code', headline: 'Acquire the lock', evidence: code, code, takeaway: 'Expires in 10 seconds', takeawayCue: 'after 10 seconds' },
+    { kind: 'focus', cue: 'NX keeps', headline: 'How the lock works', evidence: 'NX keeps an existing lock', takeaway: 'Expires after 10 seconds', takeawayCue: 'after 10 seconds' },
+  ] }] };
+  const [command, focus] = compileVisualPlan(plan, board, timeline)[0];
+  assert.equal(command.takeaway, undefined);
+  assert.equal(focus.kind, 'focus');
+  assert.equal(focus.from, 6 * 22);
+  assert.ok(focus.duration > timeline.fps * 6);
+  assert.deepEqual(focus.focus, {
+    code,
+    beats: [{ text: 'NX keeps an existing lock.', from: 0 }, { text: 'PX expires the lock after 10 seconds.', from: 5 * 22 }],
+  });
+  assert.equal(focus.takeaway, 'Expires after 10 seconds');
+  assert.ok(focus.takeawayFrame > focus.focus!.beats[1].from);
+  assert.equal(command.duration + focus.duration, timeline.totalDurationInFrames);
+});
+
+test('another domain can animate a grounded transfer and reject a wrong CTA', () => {
+  const board = storyboardFor('A producer publishes the event. Follow Queue School for more.', 'Event delivery');
+  const timeline = buildVideoTimeline(board);
+  const plan = { scenes: [{ sceneIndex: 0, shots: [
+    { kind: 'flow', cue: '', headline: 'Follow the event', evidence: 'A producer publishes the event', actors: [{ entity: 'producer', label: 'Producer' }, { entity: 'event', label: 'Event' }],
+      transfers: [{ source: 'producer', target: 'event', cue: 'publishes the event' }] },
+    { kind: 'cta', cue: 'Follow Queue School', headline: 'Follow Queue School', evidence: 'Follow Queue School for more' },
+  ] }] };
+  const shots = compileVisualPlan(plan, board, timeline)[0];
+  assert.ok(shots[0].movements[0] > 0);
+  assert.equal(shots[1].kind, 'cta');
+  plan.scenes[0].shots[1].headline = 'Follow Other School';
+  assert.throws(() => compileVisualPlan(plan, board, timeline), /CTA must use the approved narration/);
+});
+
+test('competing requests and the final outcome have distinct narration anchors', () => {
+  const board = storyboardFor(
+    'Buyer A sends a request. Buyer B sends a request. Buyer A gets the lock. After the booking commits, Buyer A is confirmed.',
+    'One seat, two buyers',
+  );
+  const timeline = buildVideoTimeline(board);
+  const plan = { scenes: [{ sceneIndex: 0, shots: [{
+    kind: 'state', cue: '', headline: 'Two buyers race for the seat', evidence: 'After the booking commits, Buyer A is confirmed',
+    actors: [
+      { entity: 'buyer-a', label: 'Buyer A', value: 'Confirmed', cue: 'Buyer A is confirmed', tone: 'success' },
+      { entity: 'buyer-b', label: 'Buyer B' },
+      { entity: 'seat', label: 'Seat', value: 'Locked', cue: 'Buyer A gets the lock' },
+    ],
+    transfers: [
+      { source: 'buyer-a', target: 'seat', cue: 'Buyer A sends a request' },
+      { source: 'buyer-b', target: 'seat', cue: 'Buyer B sends a request' },
+    ],
+  }] }] };
+  const [[shot]] = compileVisualPlan(plan, board, timeline);
+  assert.ok(shot.movements[1] > shot.movements[0]);
+  assert.ok(shot.reveals[2] > shot.movements[1]);
+  assert.ok(shot.reveals[0] > shot.reveals[2]);
 });
 
 test('speech preparation preserves a decimal and expands technical notation before stripping markup', () => {
@@ -360,195 +566,80 @@ test('timeline builds cueFrames for phone price reveal and race condition lock, 
   assert.equal(lockSeg.cueFrames[0], 57);
 });
 
-test('automatic word budget revision and illustrative 50ms SLA budget framing', async () => {
-  const { enforceWordBudget, frameIllustrativeBudget, countWords, scaleStoryboardForDuration } = await import('../src/modules/ai-script/word-budget.js');
-
-  // 1. Verify 50ms is framed as illustrative design budget
-  const factual50ms = 'Our system calculates everything under 50ms as a strict guarantee.';
-  const framed = frameIllustrativeBudget(factual50ms);
-  assert.match(framed, /illustrative 50ms (?:SLA )?budget/i);
-  assert.doesNotMatch(framed, /\bunder 50ms as a strict guarantee\b/i);
-
-  // 2. Verify word budget enforcement trims bloated word counts down to ~240-285 words
-  const bloatedScenes = Array.from({ length: 12 }, (_, i) => ({
-    id: `scene-${i + 1}`,
-    sceneIndex: i,
-    type: (i === 0 ? 'smartphoneMockup' : i === 7 ? 'queueTimeline' : 'architecturePipeline') as any,
-    narration: `This is a very long and verbose sentence explaining why Redis in-memory cache and H3 geospatial indexing calculate surge fees in parallel with SETNX mutex locks under 50ms so riders and customers always get updated prices immediately without database delay. `.repeat(2).trim(),
-    onScreenText: `Stage ${i + 1}`,
-    technicalKeyPoint: 'Surge calculation',
-    visualProps: {},
-  }));
-
-  const bloatedBoard = StoryboardSchema.parse({
-    topic: 'Surge Pricing',
-    title: 'Surge Pricing Architecture',
-    hook: 'Delivery fee jump',
-    learningObjective: 'Explain surge under 50ms',
-    scenes: bloatedScenes,
-  });
-
-  const totalWordsBefore = bloatedBoard.scenes.reduce((sum, sc) => sum + countWords(sc.narration), 0);
-  assert.ok(totalWordsBefore > 400, `Expected >400 words before, got ${totalWordsBefore}`);
-
-  const budgetedBoard = enforceWordBudget(bloatedBoard, 230, 285);
-  const totalWordsAfter = budgetedBoard.scenes.reduce((sum, sc) => sum + countWords(sc.narration), 0);
-  assert.ok(totalWordsAfter <= 290, `Expected <= 290 words after revision, got ${totalWordsAfter}`);
-  assert.ok(totalWordsAfter >= 210, `Expected >= 210 words after revision, got ${totalWordsAfter}`);
-
-  // Verify key terms are preserved after condensing
-  const allText = budgetedBoard.scenes.map(s => s.narration).join(' ');
-  assert.ok(/redis/i.test(allText));
-  assert.ok(/h3/i.test(allText));
-  assert.ok(/setnx/i.test(allText));
-
-  // 3. Verify duration scaling function adjusts words proportionally
-  const scaledBoard = scaleStoryboardForDuration(budgetedBoard, 165.0, 105.0);
-  const totalWordsScaled = scaledBoard.scenes.reduce((sum, sc) => sum + countWords(sc.narration), 0);
-  assert.ok(totalWordsScaled < totalWordsAfter, `Expected scaled words (${totalWordsScaled}) < unscaled (${totalWordsAfter})`);
+test('pasted plain text and creator JSON preserve every line with no added CTA', async () => {
+  const hook = 'Last seat. Why? Two people booked it at the same time!';
+  const tech = 'Use SET seat_id_123 unique_value NX PX 10000. Then confirm the booking.';
+  const script = { title: 'The last concert seat', hook, tech_explained: tech };
+  for (const input of [script, JSON.stringify(script), hook + '\n' + tech]) {
+    const board = await parseCustomScriptToStoryboard(input);
+    assert.equal(board.scenes.map(scene => scene.narration).join(' '), hook + ' ' + tech);
+  }
+  await assert.rejects(parseCustomScriptToStoryboard('{ "hook": '), /valid creator storyboard/);
+  assert.equal(prepareSpeech('Behind The Tech', true), 'बिहाइंड द टेक');
+  assert.equal(prepareSpeech('```redis\nSET seat_id_123 token NX PX 10000\n```', false), 'SET seat_id_123 token NX PX 10000');
 });
 
-test('duration rewriting covers undershoot, overshoot, complete sentences and technical payoff', async () => {
-  const { rewriteStoryboardForDuration, countWords } = await import('../src/modules/ai-script/word-budget.js');
-
-  // Test 1: Undershoot Expansion (70s -> 105s target)
-  const shortScenes = Array.from({ length: 12 }, (_, i) => ({
-    id: `short-${i + 1}`,
-    sceneIndex: i,
-    type: (i === 0 ? 'smartphoneMockup' : i === 1 ? 'h3SpatialMap' : i === 7 ? 'queueTimeline' : 'architecturePipeline') as any,
-    narration: `Redis aur H3 spatial index se surge price calculate hoti hai.`,
-    onScreenText: `Stage ${i + 1}`,
-    technicalKeyPoint: 'Fast lookups',
-    visualProps: {},
-  }));
-
-  const shortBoard = StoryboardSchema.parse({
-    topic: 'Surge Pricing',
-    title: 'Surge Architecture',
-    hook: 'Surge fees',
-    learningObjective: 'Understand surge',
-    scenes: shortScenes,
-  });
-
-  const shortWordsBefore = shortBoard.scenes.reduce((sum, sc) => sum + countWords(sc.narration), 0);
-  const expandedBoard = rewriteStoryboardForDuration(shortBoard, 70.0, 105.0);
-  const expandedWordsAfter = expandedBoard.scenes.reduce((sum, sc) => sum + countWords(sc.narration), 0);
-
-  // Expanded word count must be significantly higher
-  assert.ok(expandedWordsAfter > shortWordsBefore, `Expected expanded words (${expandedWordsAfter}) > original (${shortWordsBefore})`);
-  // All sentences must end cleanly with proper punctuation, no dangling fragments
-  for (const scene of expandedBoard.scenes) {
-    assert.match(scene.narration, /[.!?।]$/, `Scene ${scene.id} narration must end with proper punctuation`);
-    assert.doesNotMatch(scene.narration, /\b(?:ne|ko|mein?|par|se|aur)\.\s*$/i, `Scene ${scene.id} must not end on a dangling Hindi postposition`);
-  }
-  // Technical payoffs preserved
-  const expandedAll = expandedBoard.scenes.map(s => s.narration).join(' ');
-  assert.ok(/h3|hexagonal|equidistant/i.test(expandedAll), 'H3 hexagonal payoff must be preserved');
-  assert.ok(/redis|cache|latency/i.test(expandedAll), 'Redis cache payoff must be preserved');
-
-  // Test 2: Overshoot Condensation (165s -> 105s target)
-  const overshotBoard = rewriteStoryboardForDuration(expandedBoard, 165.0, 105.0);
-  const overshotWordsAfter = overshotBoard.scenes.reduce((sum, sc) => sum + countWords(sc.narration), 0);
-  assert.ok(overshotWordsAfter < expandedWordsAfter, `Expected overshot words (${overshotWordsAfter}) < expanded (${expandedWordsAfter})`);
-  for (const scene of overshotBoard.scenes) {
-    assert.match(scene.narration, /[.!?।]$/, `Scene ${scene.id} narration must end with proper punctuation`);
-    assert.doesNotMatch(scene.narration, /\b(?:ne|ko|mein?|par|se|aur)\.\s*$/i, `Scene ${scene.id} must not end on a dangling Hindi postposition`);
-  }
-});
-
-test('duration policy scopes to 90–120s deep-dive product and preserves existing shorter callers', async () => {
+test('TTS and timeline follow approved narration below and above the old 90-120s gate', async (t) => {
   const { synthesizeStoryboardNarration } = await import('../src/modules/tts/tts-service.js');
+  const board = storyboardFor('Two people try to book the last seat at a concert.', 'Distributed locks');
+  board.scenes = Array.from({ length: 12 }, (_, sceneIndex) => ({
+    ...board.scenes[0],
+    id: 'approved-' + sceneIndex,
+    sceneIndex,
+    narration: sceneIndex === 0 ? board.hook : 'Booking request ' + sceneIndex + ' uses SET seat_id_123 unique_value NX PX 10000.',
+  }));
+  board.scenes.forEach(Object.freeze);
+  Object.freeze(board.scenes);
+  Object.freeze(board);
+  const approved = JSON.stringify(board);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approved-voiceover-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  // Create a mock TTS provider
-  const createMockProvider = (clipDurationSec: number) => ({
-    name: 'mock-tts',
-    synthesizeClip: async (text: string, outputPath: string) => {
-      spawnSync(
-        findFfmpeg(),
-        ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono', '-t', String(clipDurationSec), '-c:a', 'libmp3lame', '-b:a', '160k', outputPath, '-y'],
-        { windowsHide: true }
-      );
-      return {
-        sceneId: 'test',
-        sceneIndex: 0,
-        filePath: outputPath,
-        durationMs: Math.round(clipDurationSec * 1000),
-        fileSizeBytes: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 1024,
-      };
-    },
-  });
-
-  const tempDir = path.resolve('remotion/public/audio/runs/test-duration-scope');
-  fs.mkdirSync(tempDir, { recursive: true });
-
-  // 1. Shorter caller with 3 scenes (e.g. 15s total) should be preserved without duration gate or errors
-  const shortCallerBoard = StoryboardSchema.parse({
-    topic: 'Quick Microtask Demo',
-    title: 'Microtasks Demo',
-    hook: 'Event loop demo',
-    learningObjective: 'Understand microtasks vs macrotasks in node',
-    scenes: [
-      { id: 'sc-1', sceneIndex: 0, type: 'smartphoneMockup', narration: 'Event loop queue.', onScreenText: 'Queue 1', technicalKeyPoint: 'Queue priority', visualProps: {} },
-      { id: 'sc-2', sceneIndex: 1, type: 'architecturePipeline', narration: 'Microtasks run first.', onScreenText: 'Queue 2', technicalKeyPoint: 'Microtasks', visualProps: {} },
-      { id: 'sc-3', sceneIndex: 2, type: 'summary', narration: 'Macrotasks run next.', onScreenText: 'Queue 3', technicalKeyPoint: 'Macrotasks', visualProps: {} },
-    ],
-  });
-
-  // Each clip 5s => total ~15s. Should succeed without error because scenes.length < 10
-  const shortResult = await synthesizeStoryboardNarration(
-    shortCallerBoard,
-    tempDir,
-    createMockProvider(5.0) as any,
-    { align: false }
-  );
-  assert.ok(Math.abs(shortResult.totalDurationSec - 15.0) < 0.5, `Shorter caller duration must be preserved (~15s), got ${shortResult.totalDurationSec}s`);
-  assert.equal(shortResult.clips.length, 3);
-
-  // 2. Deep-dive reel product (12 scenes) with out-of-range duration throws on retry exhaustion
-  const deepDiveBoard = StoryboardSchema.parse({
-    topic: 'Surge Pricing',
-    title: 'Surge System',
-    hook: 'Surge jump',
-    learningObjective: 'Surge mechanics and dynamic pricing architecture',
-    scenes: Array.from({ length: 12 }, (_, i) => ({
-      id: `dd-scene-${i + 1}`,
-      sceneIndex: i,
-      type: (i === 0 ? 'smartphoneMockup' : 'architecturePipeline') as any,
-      narration: `Redis cache handles high throughput under 50ms SLA budget.`,
-      onScreenText: `Stage ${i + 1}`,
-      technicalKeyPoint: 'Throughput',
-      visualProps: {},
-    })),
-  });
-
-  // Mock provider returns 5.0s per clip (60s total, < 90s) and does not change
-  let revisionsCount = 0;
-  let rejected = false;
-  try {
-    await synthesizeStoryboardNarration(
-      deepDiveBoard,
-      tempDir,
-      createMockProvider(5.0) as any,
-      {
-        durationPolicy: 'deep-dive-reel',
-        maxRetries: 2,
-        align: false,
-        onStoryboardRevised: (board) => {
-          revisionsCount++;
-          assert.ok(board.scenes.length === 12);
-        },
-      }
-    );
-  } catch (err: any) {
-    rejected = true;
-    assert.match(err.message, /\[TTS Gate REJECTED\].*outside specification/i);
+  for (const seconds of [1, 11]) {
+    const seed = path.join(dir, 'seed.mp3');
+    const ffmpeg = spawnSync(findFfmpeg(), ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000', '-t', String(seconds), seed], { encoding: 'utf8', windowsHide: true });
+    if (ffmpeg.error) throw ffmpeg.error;
+    assert.equal(ffmpeg.status, 0, ffmpeg.stderr);
+    const texts: string[] = [];
+    const provider: import('../src/modules/tts/tts-provider.js').TTSProvider = {
+      name: 'mock-tts',
+      async synthesizeClip(text, filePath, options) {
+        texts.push(text);
+        fs.copyFileSync(seed, filePath);
+        return { sceneId: options!.sceneId!, sceneIndex: options!.sceneIndex!, filePath,
+          durationMs: seconds * 1000, format: 'mp3', fileSizeBytes: fs.statSync(filePath).size };
+      },
+    };
+    const audio = await synthesizeStoryboardNarration(board, dir, provider, { align: false });
+    assert.deepEqual(texts, board.scenes.map(scene => prepareSpeech(scene.narration, false)));
+    assert.equal(JSON.stringify(board), approved);
+    assert.ok(Math.abs(audio.totalDurationSec - seconds * 12) < 0.6);
+    const timeline = buildVideoTimeline(board, audio.clips);
+    assert.deepEqual(timeline.segments.map(segment => segment.sceneId), board.scenes.map(scene => scene.id));
+    assert.equal(timeline.segments[0].audioDurationMs, audio.clips[0].durationMs);
+    const mismatched = [{ ...audio.clips[0], sceneId: 'old-scene' }, ...audio.clips.slice(1)];
+    assert.throws(() => buildVideoTimeline(board, mismatched), /does not match the finalized script/);
   }
+});
 
-  assert.ok(rejected, 'Expected out-of-range duration to be rejected after bounded retries');
-  assert.ok(revisionsCount >= 2, `Expected storyboard revision to be persisted across attempts, got ${revisionsCount}`);
-
-  // Cleanup
-  fs.rmSync(tempDir, { recursive: true, force: true });
+test('legacy rewritten narration restores the approved story and preserves the archived export', async () => {
+  const { restoreLegacyNarration } = await import('../src/modules/ai-script/master-script-service.js');
+  const narration = 'Two people try to book the last seat at a concert.';
+  const board = storyboardFor(narration);
+  const legacyScene = { ...board.scenes[0], originalNarration: narration, narration: 'Redis caching has low latency.' };
+  const session: import('../src/modules/ai-script/master-script-service.js').ScriptSession = {
+    id: 'old-reel', topic: board.topic, messages: [], currentMarkdown: narration, sections: {}, finalized: true,
+    storyboard: { ...board, scenes: [legacyScene] }, audioResult: { clips: [] }, timeline: {}, stillPreviews: [{}],
+    renderState: { status: 'completed', progress: 100, mediaUrl: '/media/old-reel.mp4' }, createdAt: 0, updatedAt: 0,
+  };
+  assert.equal(restoreLegacyNarration(session), true);
+  assert.equal(session.storyboard.scenes[0].narration, narration);
+  assert.equal(session.audioResult, undefined);
+  assert.equal(session.timeline, undefined);
+  assert.equal(session.stillPreviews, undefined);
+  assert.equal(session.voiceoverNeedsRefresh, true);
+  assert.equal(session.renderState?.mediaUrl, '/media/old-reel.mp4');
+  assert.equal(restoreLegacyNarration(session), false);
 });
 
 test('QueueTimelineScene preserves authored event-loop items and applies lock animation only from semantic cue', async () => {
@@ -640,32 +731,16 @@ test('QueueTimelineScene preserves authored event-loop items and applies lock an
   assert.equal(surgeTotal, 380, 'Surge total must equal 300 + 80 = 380');
 });
 
-test('regression: k21m0 truncated draft repairs mid-string cutoff to 15 typed scenes without falling back to 5 hook scenes', async () => {
-  const sessionPath = path.resolve('media/sessions/session_1795068591407_k21m0.json');
-  assert.ok(fs.existsSync(sessionPath), 'Expected session_1795068591407_k21m0.json to exist on disk');
-
-  const session = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-  const rawMarkdown = session.currentMarkdown;
-  assert.ok(rawMarkdown && rawMarkdown.length > 500);
-
-  // 1. Verify parseSectionsFromMarkdown tolerantly recovers the Remotion JSON despite mid-string truncation in scene 15
-  const sections = parseSectionsFromMarkdown(rawMarkdown);
-  assert.ok(sections.remotionSceneJson, 'remotionSceneJson should be recovered by tolerant parser');
-  assert.equal(sections.remotionSceneJson.scenes?.length, 15, 'Should recover all 15 scenes including truncated scene 15');
-
-  // 2. Build storyboard and assert it produces 15 typed scenes, NOT 5 hook scenes
-  const board = buildStoryboardFromParsed(session.topic, sections, rawMarkdown, session.angle);
-  assert.equal(board.scenes.length, 15, 'Storyboard must have exactly 15 scenes');
-  assert.notEqual(board.scenes.length, 5, 'Must NOT fall back to 5 raw hook scenes');
-
-  // 3. Verify scene 15 was cleanly recovered with its typed summary and narration
-  const lastScene = board.scenes[14];
-  assert.equal(lastScene.id, 'scene-15');
-  assert.equal(lastScene.type, 'summary');
-  assert.match(lastScene.narration, /H3 map ko divide karta hai/i);
+test('long authored storyboards keep every cut in order', () => {
+  const scenes = Array.from({ length: 18 }, (_, i) => ({
+    type: 'summary', narration: 'Preserve authored narration for scene ' + (i + 1) + '.',
+    onScreenText: 'Summary ' + (i + 1),
+  }));
+  const board = buildStoryboardFromParsed('Warehouse Relay', { remotionSceneJson: { scenes } });
+  assert.deepEqual(board.scenes.map(scene => scene.narration), scenes.map(scene => scene.narration));
 });
 
-test('topic-grounded recovery replaces static fallback for unrelated topics with zero Zomato/H3 pollution', async () => {
+test('Markdown narration stays authoritative when generated scene JSON changes the story', async () => {
   const unrelatedTopic = 'How Node.js Event Loop handles Microtasks vs Macrotasks';
   const unrelatedAngle = 'Call stack execution, microtask queue starvation, and setImmediate vs setTimeout macrotask phases';
   const voiceoverScript = `
@@ -677,14 +752,13 @@ Act 5: Poll phase ke turant baad setImmediate Check phase mein execute hota hai,
 Act 6: Architectural summary: Microtasks drain first, avoid CPU starvation, and use Worker Threads for heavy CPU computation.
 `;
 
-  // Provide empty remotionSceneJson to trigger fallback recovery
   const board = buildStoryboardFromParsed(unrelatedTopic, {
     voiceoverScript,
-    remotionSceneJson: null,
+    remotionSceneJson: { scenes: [{ type: 'hook', narration: 'Generic filler about Zomato and H3.' }] },
   }, '', unrelatedAngle);
-
-  // Must enforce 12-16 valid scenes
-  assert.ok(board.scenes.length >= 12 && board.scenes.length <= 16, `Scenes count must be 12-16, got ${board.scenes.length}`);
+  const expected = voiceoverScript.replace(/^Act \d+: /gm, '').replace(/\s+/g, ' ').trim();
+  assert.equal(board.scenes.map(scene => scene.narration).join(' '), expected);
+  assert.equal(board.angle, unrelatedAngle);
 
   // Must NOT contain ANY hardcoded Zomato, ₹30, ₹80, Biryani, or H3 references
   const boardText = JSON.stringify(board);
@@ -693,17 +767,14 @@ Act 6: Architectural summary: Microtasks drain first, avoid CPU starvation, and 
   // Must contain Node.js event loop concepts
   assert.match(boardText, /Microtask|Macrotask|Call Stack|Libuv/i, 'Must contain topic-grounded event loop concepts');
 
-  // Check queueTimeline scene in this topic preserves event loop items
-  const queueScene = board.scenes.find(s => s.type === 'queueTimeline');
-  assert.ok(queueScene, 'Should include queueTimeline scene');
-  const queueItemsText = JSON.stringify(queueScene.visualProps);
-  assert.match(queueItemsText, /Call Stack|Microtask|process\.nextTick|Promise|Timers/i);
 });
 
-test('job ID created before generation survives draft creation, finalization and render', async () => {
+test('job ID created before generation survives script finalization', async (t) => {
   const { masterScriptService } = await import('../src/modules/ai-script/master-script-service.js');
   const testSessionId = `session_job_test_${Date.now()}`;
   const initialJobId = `job_test_uuid_${Date.now()}`;
+  const diskPath = path.resolve('media/sessions', `${testSessionId}.json`);
+  t.after(() => fs.rmSync(diskPath, { force: true }));
 
   const initialSession: any = {
     id: testSessionId,
@@ -736,14 +807,11 @@ test('job ID created before generation survives draft creation, finalization and
   assert.equal(s?.jobId, initialJobId);
   assert.equal(s?.job?.id, initialJobId);
 
-  // 2. Finalize session without custom markdown
-  const finalized = masterScriptService.finalizeScript(testSessionId);
+  const approved = { title: 'Kafka rebalance', hook: 'A consumer goes offline. Why?', conclusion: 'The group redistributes its partitions.' };
+  const finalized = masterScriptService.finalizeScript(testSessionId, JSON.stringify(approved));
   assert.equal(finalized.jobId, initialJobId, 'jobId must survive finalization');
   assert.equal(finalized.job?.id, initialJobId, 'job.id must survive finalization');
   assert.equal(finalized.finalized, true);
-  assert.ok(finalized.storyboard.scenes.length >= 12 && finalized.storyboard.scenes.length <= 16, 'Finalized storyboard must enforce 12-16 scenes');
-
-  // Cleanup
-  const diskPath = path.resolve('media/sessions', `${testSessionId}.json`);
-  if (fs.existsSync(diskPath)) fs.unlinkSync(diskPath);
+  assert.deepEqual(finalized.sevenKeyScript, approved);
+  assert.deepEqual(finalized.storyboard.scenes.map(scene => scene.narration), [approved.hook, approved.conclusion]);
 });

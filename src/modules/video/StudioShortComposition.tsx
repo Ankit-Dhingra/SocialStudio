@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   AbsoluteFill,
   Audio,
@@ -13,13 +13,13 @@ import { VideoDesignTokens } from './design-system.js';
 import { renderRegisteredScene } from './SceneRegistry.js';
 import { KineticCaptions } from './KineticCaptions.js';
 import { AnimatedBlackCyberGrid } from './MotionStyles.js';
-import { CinematicStoryShot, GeneratedOpening } from './scenes/CinematicStoryShot.js';
-import { planSceneShots, readVisualContext, type ReelPlates, type VisualContext } from './visual-story.js';
+import { DirectedShot } from './scenes/DirectedShot.js';
+import type { TimedShot, VisualPlan } from './visual-story.js';
 
 export interface StudioShortProps {
   storyboard: Storyboard;
   timeline: VideoTimeline;
-  plates?: ReelPlates;
+  visualPlan?: VisualPlan;
 }
 
 function resolveAudioSource(src: string): string {
@@ -45,14 +45,9 @@ const SceneSequenceRenderer: React.FC<{
   seg: VideoTimeline['segments'][number];
   fps: number;
   isFirst: boolean;
-  context: VisualContext;
-  plates?: ReelPlates;
-  title: string;
-}> = ({ scene, seg, fps, isFirst, context, plates, title }) => {
+  shots?: TimedShot[];
+}> = ({ scene, seg, fps, isFirst, shots }) => {
   const sceneFrame = useCurrentFrame();
-  const shots = useMemo(() => planSceneShots(scene, seg, context, fps), [scene, seg, context, fps]);
-  const opening = isFirst ? plates?.opening : undefined;
-  const usesCinematicShots = Boolean(opening) || shots.some(shot => shot.kind !== 'scene');
 
   // Continuous Cinematic Push / Drift (1.00 -> 1.036 scale, -14px subtle upward drift)
   const cameraScale = interpolate(sceneFrame, [0, seg.durationInFrames], [1.0, 1.036], {
@@ -64,17 +59,17 @@ const SceneSequenceRenderer: React.FC<{
 
   return (
     <>
-      {shots.some(shot => shot.kind === 'scene' && sceneFrame >= shot.from && sceneFrame < shot.from + shot.duration) && <AbsoluteFill
+      {!shots && <AbsoluteFill
         style={{
           transform: `scale(${cameraScale}) translateY(${cameraTranslateY}px)`,
           transformOrigin: '50% 45%',
         }}
       >
-        {opening ? <GeneratedOpening file={opening} title={title} /> : renderRegisteredScene(scene, seg.cueFrames, seg.wordFrames, Math.ceil(seg.audioDurationMs * fps / 1000))}
+        {renderRegisteredScene(scene, seg.cueFrames, seg.wordFrames, Math.ceil(seg.audioDurationMs * fps / 1000))}
       </AbsoluteFill>}
-      {shots.map(shot => shot.kind !== 'scene' && (
-        <Sequence key={shot.from} name={shot.kind} from={shot.from} durationInFrames={shot.duration}>
-          <CinematicStoryShot kind={shot.kind} context={context} plates={plates} />
+      {shots?.map(shot => (
+        <Sequence key={shot.id} name={shot.headline} from={shot.from} durationInFrames={shot.duration}>
+          <DirectedShot shot={shot} />
         </Sequence>
       ))}
 
@@ -103,8 +98,8 @@ const SceneSequenceRenderer: React.FC<{
         wordFrames={seg.wordFrames}
         narration={scene.narration}
         durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * fps / 1000))}
-        highlightColor={usesCinematicShots ? '#ffd2a6' : '#00F2FE'}
-        useBackdrop={usesCinematicShots}
+        highlightColor={shots ? '#ffd2a6' : '#00F2FE'}
+        useBackdrop={Boolean(shots)}
       />
     </>
   );
@@ -125,9 +120,8 @@ export function musicVolumeAtFrame(timeline: VideoTimeline, frame: number) {
   return Math.min(0.085, timeline.bgmVolumeDucked) * (1 - presence * 0.72) * fade;
 }
 
-export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard, timeline, plates }) => {
+export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard, timeline, visualPlan }) => {
   const frame = useCurrentFrame();
-  const visualContext = useMemo(() => readVisualContext(storyboard), [storyboard]);
 
   // Background music source (defaults to our synthesized ambient tech track)
   const bgmTrack = timeline.bgmSrc || 'music/tech-ambient.wav';
@@ -142,10 +136,10 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
       }}
     >
       {/* Root Animated Black Cyber Grid Background */}
-      <AnimatedBlackCyberGrid />
+      {!visualPlan && <AnimatedBlackCyberGrid />}
 
       {/* Ultra-sleek Instagram-Story Style Progress Bar (Top Edge Only) */}
-      <div
+      {!visualPlan && <div
         style={{
           position: 'absolute',
           top: 16,
@@ -185,7 +179,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {/* Render Scenes by Timeline Segments */}
       {storyboard.scenes.map((scene, i) => {
@@ -203,9 +197,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
               seg={seg}
               fps={timeline.fps}
               isFirst={i === 0}
-              context={visualContext}
-              plates={plates}
-              title={storyboard.title}
+              shots={visualPlan?.[i]}
             />
           </Sequence>
         );

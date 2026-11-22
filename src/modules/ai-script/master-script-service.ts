@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
 import { Storyboard, StoryboardSchema, SceneTypeEnum } from '../contracts/storyboard.js';
+import { convertCreatorScriptToStoryboard, decodePastedScript, isCreatorScript, parseCustomScriptToStoryboard } from './custom-script-parser.js';
 import type { ReelVisualAssets } from '../render/reel-visual-assets.js';
 
 dotenv.config();
@@ -52,6 +53,7 @@ export interface ScriptSession {
   storyboard: Storyboard;
   finalized?: boolean;
   audioResult?: any;
+  voiceoverNeedsRefresh?: boolean;
   timeline?: any;
   stillPreviews?: any[];
   visualAssets?: ReelVisualAssets;
@@ -90,7 +92,8 @@ function loadSessionFromDisk(id: string): ScriptSession | undefined {
   try {
     const file = path.join(SESSIONS_DIR, `${id}.json`);
     if (fs.existsSync(file)) {
-      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const data: ScriptSession = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (restoreLegacyNarration(data)) saveSessionToDisk(data);
       sessions.set(id, data);
       return data;
     }
@@ -98,6 +101,37 @@ function loadSessionFromDisk(id: string): ScriptSession | undefined {
     console.warn(`[MasterScript] Warning: failed to load session ${id} from disk:`, err);
   }
   return undefined;
+}
+
+export function restoreLegacyNarration(session: ScriptSession): boolean {
+  const approvedCuts = session.sections?.remotionSceneJson?.scenes;
+  const approvedById = new Map<string, { narration?: string }>(
+    Array.isArray(approvedCuts) ? approvedCuts.filter(cut => typeof cut?.id === 'string').map(cut => [cut.id, cut]) : [],
+  );
+  let hasLegacyMarker = false;
+  let needsVoiceover = false;
+  const scenes = session.storyboard?.scenes?.map(scene => {
+    const { originalNarration, ...current } = scene as typeof scene & { originalNarration?: string };
+    if (typeof originalNarration !== 'string' || !originalNarration.trim()) return scene;
+    hasLegacyMarker = true;
+    // The old TTS gate saved the explicitly spoken text in this field when an override existed.
+    const approved = approvedById.get(scene.id)?.narration;
+    const spokenNarration = scene.spokenNarration === undefined ? undefined : originalNarration;
+    const narration = spokenNarration !== undefined && approved && approved !== scene.narration ? approved : originalNarration;
+    needsVoiceover ||= narration !== scene.narration || spokenNarration !== scene.spokenNarration;
+    return { ...current, narration, spokenNarration };
+  });
+  if (!hasLegacyMarker || !scenes) return false;
+  session.storyboard = { ...session.storyboard, scenes };
+  if (needsVoiceover) {
+    session.voiceoverNeedsRefresh = true;
+    delete session.audioResult;
+    delete session.timeline;
+    delete session.stillPreviews;
+    delete session.visualAssets;
+    if (session.renderState?.status !== 'completed') session.renderState = { status: 'idle', progress: 0 };
+  }
+  return true;
 }
 
 export function parseTolerantJson(jsonStr: string): any {
@@ -265,207 +299,6 @@ export function parseSectionsFromMarkdown(markdown: string): ParsedScriptSection
   return sections;
 }
 
-export function buildTopicGroundedFallbackScenes(
-  topic: string,
-  angle?: string,
-  fullText: string = '',
-): any[] {
-  // Clean fullText of markdown headers, cues and tags
-  const cleanFullText = fullText
-    .replace(/\*\*(?:ACT\s*\d+|Act\s*\d+)[^*]*\*\*/gi, '')
-    .replace(/<break\b[^>]*\/?>/gi, ' ')
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/[#*`_]/g, '')
-    .trim();
-
-  // Extract clean spoken sentences
-  const rawSentences = cleanFullText
-    .split(/(?<=[.!?।\n])\s+/u)
-    .map(s => s.replace(/^(?:Scene|Act)\s*\d+[:.\s-]*/i, '').trim())
-    .filter(s => s.length > 8);
-
-  const sentences = rawSentences.length > 0 ? rawSentences : [
-    `${topic}: Understanding the core engineering mystery.`,
-    'High concurrency causes severe race conditions and inconsistent state.',
-    'Distributed coordination provides exclusive access and data integrity.',
-    'In-memory state and atomic operations execute with sub-millisecond latency.',
-    'Failovers and leases automatically protect against deadlocks.',
-    'System design takeaways: eliminate race conditions and defend consistency.',
-  ];
-
-  // Canonical 12 scenes across the entire voiceover arc
-  const targetCuts = 12;
-
-  // If fewer sentences than targetCuts (12), subdivide sentences by clause boundaries
-  const expandedSentences: string[] = [];
-  for (const s of sentences) {
-    if (expandedSentences.length + (sentences.length - expandedSentences.length) < targetCuts && s.length > 40) {
-      const parts = s.split(/[,;—–]|\s+(?:aur|lekin|par|because|and|so|but|ki)\s+/i)
-        .map(p => p.trim())
-        .filter(p => p.length >= 10);
-      if (parts.length >= 2) {
-        expandedSentences.push(...parts);
-        continue;
-      }
-    }
-    expandedSentences.push(s);
-  }
-  while (expandedSentences.length < targetCuts) {
-    expandedSentences.push(sentences[expandedSentences.length % sentences.length]);
-  }
-
-  const workingSentences = expandedSentences.length >= targetCuts ? expandedSentences : sentences;
-  const sentencesPerCut = Math.max(1, Math.floor(workingSentences.length / targetCuts));
-
-  const scenes: any[] = [];
-  const assignedTypes: string[] = [];
-
-  for (let idx = 0; idx < targetCuts; idx++) {
-    const startIdx = idx * sentencesPerCut;
-    const endIdx = idx === targetCuts - 1 ? workingSentences.length : (idx + 1) * sentencesPerCut;
-    let cutSentences = workingSentences.slice(startIdx, Math.max(startIdx + 1, endIdx));
-    if (cutSentences.length === 0 || !cutSentences[0]) {
-      cutSentences = [workingSentences[idx % workingSentences.length] || topic];
-    }
-    const narration = cutSentences.join(' ');
-    const textLower = narration.toLowerCase();
-
-    let type = 'architecturePipeline';
-    let onScreenText = `${topic.slice(0, 36).toUpperCase()}`;
-    let keyPoint = cutSentences[0]?.slice(0, 70) || topic.slice(0, 70);
-    let visualProps: Record<string, any> = {};
-
-    if (idx === 0) {
-      type = 'hook';
-      onScreenText = `${topic.slice(0, 36).toUpperCase()}`;
-      keyPoint = 'The Engineering Mystery';
-      visualProps = {
-        headline: topic,
-        subtitle: angle || 'System Design & Distributed Architecture',
-        questionKicker: cutSentences[0] || topic,
-        badgeText: 'SYSTEM DESIGN',
-      };
-    } else if (idx === targetCuts - 1) {
-      type = 'tradeoffHUD';
-      onScreenText = 'INTERVIEW CHEAT-SHEET';
-      keyPoint = 'Senior SDE Mental Model';
-      visualProps = {
-        title: 'SDE INTERVIEW CHEAT-SHEET',
-        subtitle: 'Key architectural insights for your interviews',
-        interviewPoints: workingSentences.slice(1, 4).map(s => s.slice(0, 90)),
-        callToAction: 'Behind The Tech ko abhi follow karo!',
-      };
-    } else if (idx === targetCuts - 2) {
-      type = 'summary';
-      onScreenText = 'ARCHITECTURAL TAKEAWAYS';
-      keyPoint = 'Core System Recap';
-      const rawTakeaways = cutSentences.slice(0, 3).map(s => s.slice(0, 100));
-      visualProps = {
-        headline: `${topic.slice(0, 40)} Takeaways`,
-        takeaways: rawTakeaways.length >= 2 ? rawTakeaways : [
-          rawTakeaways[0] || `${topic} key architectural takeaway`,
-          'Guaranteed state consistency and resilience under high concurrent load',
-        ],
-        callToAction: 'Behind The Tech ko abhi follow karo!',
-      };
-    } else if (/race\s*condition|concurrency|simultaneous|double\s*booking|contention|conflict/i.test(textLower)) {
-      type = 'raceCondition';
-      onScreenText = 'CONCURRENCY COLLISION';
-      keyPoint = 'Parallel Workers Competing for Mutex';
-      visualProps = {
-        title: 'CONCURRENCY COLLISION',
-        itemTitle: `${topic.slice(0, 24)} Mutex`,
-        user1Name: 'Worker Instance A',
-        user2Name: 'Worker Instance B',
-        atomicQuery: '// Acquire exclusive atomic lock',
-      };
-    } else if (/queue|timeline|phase|step|delay|ttl|expire|retry|crash|microtask|macrotask|call\s*stack|event\s*loop/i.test(textLower)) {
-      type = 'queueTimeline';
-      onScreenText = 'EXECUTION TIMELINE';
-      keyPoint = 'Phased State Progression';
-      const isEventLoop = /microtask|macrotask|libuv|call\s*stack|nexttick/i.test(`${topic} ${narration}`);
-      visualProps = {
-        title: isEventLoop ? 'Event Loop & Queue Priority' : 'State Transition Pipeline',
-        items: isEventLoop ? [
-          { name: '1. V8 Synchronous Call Stack', priority: 'high', detail: 'Immediate execution frame' },
-          { name: '2. process.nextTick Queue', priority: 'high', detail: 'Priority microtask queue' },
-          { name: '3. Promise.then Microtask Queue', priority: 'high', detail: 'Drained before macrotask phase' },
-          { name: '4. Timers Macrotask Queue', priority: 'medium', detail: 'setTimeout and setInterval' },
-        ] : cutSentences.slice(0, 4).map((s, i) => ({
-          name: `${i + 1}. Step ${i + 1}`,
-          priority: i === 0 ? 'high' : 'medium',
-          detail: s.slice(0, 80),
-        })),
-      };
-    } else if (/\b(?:code|command|syntax|query|sql|function|handler|await|snippet)\b|\b(?:SELECT|UPDATE|INSERT|SETNX)\b/i.test(textLower)) {
-      type = 'code';
-      onScreenText = 'CORE IMPLEMENTATION';
-      keyPoint = 'Atomic Execution Flow';
-      visualProps = {
-        filename: 'system_handler.ts',
-        code: `// ${topic.slice(0, 30)} execution handler\nasync function handleTransaction(context) {\n  const lock = await acquireLock(context.id);\n  try {\n    return await executeAtomicState(context);\n  } finally {\n    await releaseLock(lock);\n  }\n}`,
-        language: 'typescript',
-      };
-    } else if (/compare|versus|vs|naive|fail|slow|expensive|diff/i.test(textLower)) {
-      type = 'comparison';
-      onScreenText = 'NAIVE vs ENGINEERED';
-      keyPoint = 'Architectural Bottleneck Comparison';
-      visualProps = {
-        leftTitle: 'Naive Approach',
-        leftPoints: ['Uncoordinated execution', 'Bottlenecks under sudden high load'],
-        rightTitle: 'Engineered Architecture',
-        rightPoints: ['In-memory atomic coordination', 'Predictable sub-millisecond execution'],
-        verdict: cutSentences[0]?.slice(0, 90) || 'Architectural coordination eliminates bottlenecks',
-      };
-    } else {
-      type = 'architecturePipeline';
-      onScreenText = 'PIPELINE ARCHITECTURE';
-      keyPoint = 'System Request Flow';
-      visualProps = {
-        title: `${topic.slice(0, 32)} Architecture`,
-        subtitle: 'End-to-End System Pipeline',
-        redisLatencyMs: 1.5,
-        steps: [
-          { label: 'Client Ingestion', description: 'Incoming client request validated', status: 'completed' },
-          { label: 'State Coordination', description: 'In-memory mutex / routing', status: 'active' },
-          { label: 'Durable Persistence', description: 'Atomic state commit acknowledged', status: 'pending' },
-        ],
-      };
-    }
-
-    // Prevent immediate consecutive duplicate types
-    if (assignedTypes.length > 0 && assignedTypes[assignedTypes.length - 1] === type) {
-      if (type === 'architecturePipeline') {
-        type = 'requestFlow';
-        visualProps = {
-          title: 'Request Pipeline Flow',
-          steps: [
-            { label: 'Client Gateway', description: 'Request routed', status: 'active' },
-            { label: 'In-Memory State', description: 'Lock acquired', status: 'completed' },
-            { label: 'Storage Commit', description: 'Durable write acknowledged', status: 'cached' },
-          ],
-        };
-      } else {
-        type = 'architecturePipeline';
-      }
-    }
-    assignedTypes.push(type);
-
-    scenes.push({
-      id: `scene-${idx + 1}`,
-      sceneIndex: idx,
-      type,
-      narration,
-      onScreenText,
-      technicalKeyPoint: keyPoint,
-      durationTargetSec: Math.min(60, Math.max(2, Math.round(narration.split(/\s+/).length / 2.35))),
-      visualProps,
-    });
-  }
-
-  return scenes;
-}
-
 export function buildStoryboardFromParsed(
   topic: string,
   sections: ParsedScriptSections,
@@ -473,19 +306,17 @@ export function buildStoryboardFromParsed(
   angle?: string,
 ): Storyboard {
   const jsonMeta = sections.remotionSceneJson?.meta || {};
-  const jsonScenes = sections.remotionSceneJson?.scenes || [];
+  const jsonScenes: any[] = Array.isArray(sections.remotionSceneJson?.scenes) ? sections.remotionSceneJson.scenes : [];
 
   let scenes: any[] = [];
 
-  // Parse acts from voiceover script reliably
-  const voText = sections.voiceoverScript || fullMarkdown || '';
-  const actChunks: string[] = [];
-  for (let a = 1; a <= 6; a++) {
-    const actPattern = new RegExp(`(?:Act\\s*${a}|#+\\s*Act\\s*${a})\\s*[-—:]?\\s*([\\s\\S]*?)(?=(?:Act\\s*\\d|#+\\s*Act\\s*\\d|###|---|$)|\$)`, 'i');
-    const match = voText.match(actPattern);
-    if (match && match[1].trim()) {
-      actChunks.push(match[1].trim());
-    }
+  const voiceover = sections.voiceoverScript?.replace(/^[ \t]*(?:[#*]+[ \t]*)?Act[ \t]+\d+[ \t]*[:—–-][ \t]*/gim, '').trim();
+  const normalize = (text: string) => text.replace(/\s+/g, ' ').trim();
+  const draftNarration = jsonScenes.map(scene => scene?.narration || '').join(' ');
+  if (!jsonScenes.length || (voiceover && normalize(voiceover) !== normalize(draftNarration))) {
+    const narration = voiceover || fullMarkdown.trim();
+    if (!narration) throw new Error('Provide narration before finalizing the script.');
+    return { ...convertCreatorScriptToStoryboard({ title: jsonMeta.title || topic, hook: narration }, topic), topic, angle };
   }
 
   if (jsonScenes.length > 0) {
@@ -545,7 +376,7 @@ export function buildStoryboardFromParsed(
         return String(v).trim() || fallback;
       };
 
-      const narration = extractCleanText(js.narration || actChunks[i], '');
+      const narration = typeof js.narration === 'string' ? js.narration.trim() : '';
       const onScreenText = extractCleanText(js.onScreenText || js.text, topic).slice(0, 100);
       const keyPoint = extractCleanText(js.technicalKeyPoint || js.visualProps?.subtitle,
         narration.split(/(?<=[.!?।])\s+/u)[0]);
@@ -755,21 +586,12 @@ export function buildStoryboardFromParsed(
 
       scenes.push({
         id: `scene-${i+1}`, sceneIndex: i, type, narration, onScreenText,
-        spokenNarration: js.spokenNarration || undefined,
+        spokenNarration: voiceover ? undefined : js.spokenNarration || undefined,
         technicalKeyPoint: keyPoint,
         durationTargetSec: Math.max(1, Math.min(60, Math.round((js.durationFrames || 180) / 30))),
         visualProps: cleanVisualProps,
       });
     }
-  } else {
-    // If provider Remotion JSON was truncated or failed to parse, decompose the voiceover into 12 canonical topic-grounded typed scenes
-    const allVoiceoverText = (sections.voiceoverScript || actChunks.join(' ') || fullMarkdown).trim();
-    scenes = buildTopicGroundedFallbackScenes(topic, angle, allVoiceoverText);
-  }
-
-  // Bound to 12-16 scenes
-  if (scenes.length > 16) {
-    scenes = scenes.slice(0, 16);
   }
 
   const finalScenes = scenes;
@@ -880,7 +702,7 @@ export class MasterScriptService {
     const userPrompt = `TOPIC: ${topic.trim()}\nANGLE: ${angle ? angle.trim() : 'Focus on real-world production failure, edge cases and distributed architecture'}`;
 
     console.log(`[MasterScript] Generating initial master script for Topic: "${topic}"...`);
-    let responseText = await this.callLLM(userPrompt, systemPrompt);
+    const responseText = await this.callLLM(userPrompt, systemPrompt);
 
     // Try parsing as 7-key JSON (Contract V4)
     const sevenKeyObj = tryParseSevenKeyJson(responseText);
@@ -889,56 +711,7 @@ export class MasterScriptService {
       return this.createCustomSession(sevenKeyObj, topic, existingSessionId, angle);
     }
 
-    let sections = parseSectionsFromMarkdown(responseText);
-
-    // Automatic recovery if Section 4 JSON was truncated or has fewer than 10 scenes
-    const sceneCount = sections.remotionSceneJson?.scenes?.length || 0;
-    if (sceneCount < 10) {
-      console.warn(`[MasterScript] Provider response truncated or incomplete (${sceneCount} scenes). Initiating automatic LLM regeneration for Section 4 Remotion Scene JSON...`);
-      try {
-        const repairPrompt = `The previous Remotion Scene JSON in Section 4 was truncated or had only ${sceneCount} scenes (target is 10 to 12 scenes for a 75-85 second reel).
-Here is the Final Voiceover Script:
-${sections.voiceoverScript || responseText}
-${sections.visualDirection || ''}
-
-Generate ONLY the valid Section 4 Remotion Scene JSON containing 10 to 12 scenes corresponding to the 5 acts in the voiceover script.
-Rules:
-- Output strictly valid JSON enclosed inside \`\`\`json ... \`\`\`
-- Escape any double quotes inside string fields (like code, filenames, labels, titles) as \\\"
-- The JSON object must have "meta" (title, durationSeconds: 80) and "scenes" (array of 10-12 scenes with id, sceneIndex, type, narration, onScreenText, technicalKeyPoint, durationFrames, visualProps).
-- Valid scene types: smartphoneMockup, h3SpatialMap, architecturePipeline, raceCondition, code, comparison, queueTimeline, tradeoffHUD, summary.
-- The scenes must tell ONE continuous story without repeated summary scenes in the middle. The recap summary must only be at Scene 11, followed by Scene 12 tradeoffHUD.`;
-
-        const repairResponse = await this.callLLM(repairPrompt, 'You are an expert system design video animator. Output ONLY valid JSON inside ```json ... ```.');
-        const parsedDirect = parseTolerantJson(repairResponse);
-        if (parsedDirect?.scenes && Array.isArray(parsedDirect.scenes) && parsedDirect.scenes.length >= 10) {
-          sections.remotionSceneJson = parsedDirect;
-          console.log(`[MasterScript] Successfully recovered Section 4 JSON! Recovered ${parsedDirect.scenes.length} scenes.`);
-          if (responseText.match(/###?\s*4\.?\s*(?:REMOTION\s*SCENE\s*JSON|Remotion\s*Scene\s*JSON)/i)) {
-            responseText = responseText.replace(
-              /(###?\s*4\.?\s*(?:REMOTION\s*SCENE\s*JSON|Remotion\s*Scene\s*JSON))[\s\S]*?(?=###?\s*5|$)/i,
-              `$1\n\n\`\`\`json\n${JSON.stringify(sections.remotionSceneJson, null, 2)}\n\`\`\`\n\n`
-            );
-          } else {
-            responseText += `\n\n### 4. REMOTION SCENE JSON\n\`\`\`json\n${JSON.stringify(sections.remotionSceneJson, null, 2)}\n\`\`\`\n\n`;
-          }
-        }
-      } catch (repairErr: any) {
-        console.warn(`[MasterScript] Automatic repair attempt failed: ${repairErr.message}`);
-      }
-
-      // If still fewer than 10 scenes, use canonical 12-scene decomposition of the authentic voiceover
-      if (!sections.remotionSceneJson?.scenes || sections.remotionSceneJson.scenes.length < 10) {
-        const allVoiceoverText = (sections.voiceoverScript || responseText).trim();
-        const fullScenes = buildTopicGroundedFallbackScenes(topic, angle, allVoiceoverText);
-        sections.remotionSceneJson = {
-          meta: { title: topic, durationSeconds: 80 },
-          scenes: fullScenes,
-        };
-        console.log(`[MasterScript] Applied canonical 12-scene voiceover-grounded storyboard across all 5 acts.`);
-      }
-    }
-
+    const sections = parseSectionsFromMarkdown(responseText);
     const storyboard = buildStoryboardFromParsed(topic, sections, responseText, angle);
     const existingSession = existingSessionId ? this.getSession(existingSessionId) : undefined;
     const id = existingSessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -1045,10 +818,16 @@ Always return the full updated 7 sections so the script remains complete and sel
 
     if (customMarkdown?.trim() && customMarkdown !== session.currentMarkdown) {
       const sections = parseSectionsFromMarkdown(customMarkdown);
-      const storyboard = buildStoryboardFromParsed(session.topic, sections, customMarkdown, session.angle);
+      const approved = decodePastedScript(customMarkdown) ?? tryParseSevenKeyJson(customMarkdown);
+      const typed = StoryboardSchema.safeParse(approved);
+      const creatorScript = isCreatorScript(approved) ? approved as NonNullable<ScriptSession['sevenKeyScript']> : undefined;
+      const storyboard = creatorScript ? convertCreatorScriptToStoryboard(creatorScript, session.topic)
+        : typed.success ? typed.data
+        : buildStoryboardFromParsed(session.topic, sections, customMarkdown, session.angle);
       this.clearMedia(session);
       session.currentMarkdown = customMarkdown;
-      session.sections = sections;
+      session.sevenKeyScript = creatorScript;
+      session.sections = { ...sections, voiceoverScript: storyboard.scenes.map(scene => scene.narration).join('\n\n') };
       session.storyboard = storyboard;
     }
 
@@ -1070,18 +849,12 @@ Always return the full updated 7 sections so the script remains complete and sel
     existingSessionId?: string,
     angleOverride?: string
   ): Promise<ScriptSession> {
-    const { decodePastedScript, parseCustomScriptToStoryboard } = await import('./custom-script-parser.js');
-    let scriptObj: Record<string, any> = {};
-    if (typeof customScript === 'string') {
-      const decoded = decodePastedScript(customScript);
-      scriptObj = decoded && typeof decoded === 'object' && !Array.isArray(decoded)
-        ? decoded
-        : tryParseSevenKeyJson(customScript) || { title: topicFallback, hook: customScript };
-    } else {
-      scriptObj = customScript;
-    }
-
-    const storyboard = await parseCustomScriptToStoryboard(scriptObj, topicFallback);
+    const decoded = typeof customScript === 'string' ? decodePastedScript(customScript) : customScript;
+    const structuredScript = decoded && typeof decoded === 'object' && !Array.isArray(decoded)
+      ? decoded as Record<string, any>
+      : typeof customScript === 'string' ? tryParseSevenKeyJson(customScript) : null;
+    const storyboard = await parseCustomScriptToStoryboard(structuredScript ?? customScript, topicFallback);
+    const scriptObj = structuredScript ?? { title: topicFallback, hook: customScript };
     const existing = existingSessionId ? this.getSession(existingSessionId) : undefined;
     const id = existingSessionId || `session_${randomUUID()}`;
     const rawText = typeof customScript === 'string' ? customScript : JSON.stringify(scriptObj, null, 2);
@@ -1117,6 +890,7 @@ Always return the full updated 7 sections so the script remains complete and sel
 
   private clearMedia(session: ScriptSession) {
     delete session.audioResult;
+    delete session.voiceoverNeedsRefresh;
     delete session.timeline;
     delete session.stillPreviews;
     delete session.visualAssets;

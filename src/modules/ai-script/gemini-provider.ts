@@ -4,6 +4,51 @@ export interface LLMCallParams {
   temperature?: number;
 }
 
+export class GeminiRequestError extends Error {
+  constructor(message: string, readonly retryDelayMs?: number, readonly status?: number) {
+    super(message);
+  }
+}
+
+export async function geminiRequest(url: string, apiKey: string, body: object, timeoutMs: number): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'TimeoutError';
+    throw new GeminiRequestError(timedOut ? `Gemini timed out after ${timeoutMs / 1000} seconds.` : 'Could not reach the Gemini API.', 1000);
+  }
+  if (response.ok) return response;
+
+  const status = response.status;
+  const { error } = await response.json().catch(() => ({})) as {
+    error?: { status?: string; details?: Array<{ reason?: string; retryDelay?: string }> };
+  };
+  const details = Array.isArray(error?.details) ? error.details : [];
+  const retryFromBody = details.find(detail => typeof detail?.retryDelay === 'string')?.retryDelay?.match(/^(\d+(?:\.\d+)?)s$/)?.[1];
+  const retryAfter = response.headers.get('retry-after');
+  const seconds = Number(retryAfter ?? retryFromBody);
+  const retryAfterMs = Math.ceil(Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter ?? '') - Date.now());
+  const retryDelayMs = Number.isFinite(retryAfterMs) ? Math.max(0, retryAfterMs) : undefined;
+  const code = `Gemini returned HTTP ${status}.`;
+  if (status === 429) {
+    const detail = retryDelayMs !== undefined ? ` Retry after ${Math.ceil(retryDelayMs / 1000)} seconds.` : ' Check the project’s quota and billing in Google AI Studio.';
+    throw new GeminiRequestError(`${code} The model reached a quota or rate limit.${detail}`, retryDelayMs, status);
+  }
+  if (status === 401 || status === 403 || details.some(detail => detail?.reason === 'API_KEY_INVALID')) {
+    throw new GeminiRequestError(`${code} Check the API key and project permissions.`, undefined, status);
+  }
+  if (error?.status === 'FAILED_PRECONDITION') throw new GeminiRequestError(`${code} Check billing and regional availability for the Gemini project.`, undefined, status);
+  if (status === 404) throw new GeminiRequestError(`${code} The configured model is unavailable to this project.`, undefined, status);
+  if (status >= 500) throw new GeminiRequestError(`${code} Gemini is temporarily unavailable.`, retryDelayMs ?? 1000, status);
+  throw new GeminiRequestError(`${code} Gemini rejected the request.`, undefined, status);
+}
+
 export class GeminiProvider {
   private apiKey: string;
   private model: string;
@@ -13,8 +58,9 @@ export class GeminiProvider {
     this.model = model;
   }
 
-  async generateJSON(prompt: string, systemInstruction?: string): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+  async generateJSON(prompt: string, systemInstruction?: string, timeoutMs = 25_000, responseJsonSchema?: object): Promise<string> {
+    const model = this.model.replace(/^models\//, '');
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
     const body: Record<string, unknown> = {
       contents: [
@@ -26,6 +72,7 @@ export class GeminiProvider {
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.6,
+        responseJsonSchema,
       },
     };
 
@@ -35,24 +82,18 @@ export class GeminiProvider {
       };
     }
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25000), // 25s timeout
+    const res = await geminiRequest(url, this.apiKey, body, timeoutMs);
+    const data = await res.json().catch(() => {
+      throw new GeminiRequestError('Gemini returned an unreadable API response.');
     });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Gemini API error [${res.status}]: ${errorText}`);
-    }
-
-    const data = await res.json();
     const candidate = data.candidates?.[0];
-    if (!candidate || !candidate.content?.parts?.[0]?.text) {
-      throw new Error(`Empty response from Gemini API: ${JSON.stringify(data)}`);
+    const output = candidate?.content?.parts?.map((part: { text?: string; thought?: boolean }) =>
+      part.thought ? '' : part.text ?? '',
+    ).join('');
+    if (candidate?.finishReason === 'MAX_TOKENS') {
+      throw new GeminiRequestError('Gemini stopped before the JSON response was complete.');
     }
-
-    return candidate.content.parts[0].text;
+    if (!output?.trim()) throw new GeminiRequestError('Gemini returned no JSON output.');
+    return output;
   }
 }

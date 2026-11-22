@@ -30,7 +30,7 @@ import { masterScriptService } from './modules/ai-script/master-script-service.j
 import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort, renderStillPreviews } from './modules/render/video-renderer.js';
-import { prepareReelVisuals } from './modules/render/reel-visual-assets.js';
+import { prepareReelVisuals, VisualAssetError, VisualPlanningError } from './modules/render/reel-visual-assets.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
 import { execFileSync } from 'node:child_process';
@@ -261,6 +261,9 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
+  if (!session.finalized) {
+    return res.status(409).json({ error: 'Finalize the script before creating voiceover.' });
+  }
 
   if (spokenNarration !== undefined && (
     !Array.isArray(spokenNarration) ||
@@ -270,15 +273,12 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     return res.status(400).json({ error: 'Voice text must contain one entry per scene, up to 2500 characters each.' });
   }
 
-  const storyboard = spokenNarration === undefined ? session.storyboard : {
-    ...session.storyboard,
-    scenes: session.storyboard.scenes.map((scene, index) => ({
-      ...scene,
-      spokenNarration: spokenNarration[index].trim() || undefined,
-    })),
-  };
-
-  const sourceStoryboard = session.storyboard;
+  const storyboard = session.storyboard;
+  if (spokenNarration?.some((value: string, index: number) =>
+    value.trim() !== (storyboard.scenes[index].spokenNarration?.trim() || '')
+  )) {
+    return res.status(409).json({ error: 'Save and finalize narration edits before creating voiceover.' });
+  }
   const audioRun = `${sessionId}/${randomUUID()}`;
   try {
     console.log(`[Pipeline] Synthesizing audio for session ${sessionId}...`);
@@ -339,9 +339,10 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     });
 
     // Update session
-    if (session.storyboard !== sourceStoryboard) return res.status(409).json({error: 'Script changed while synthesizing. Generate audio for the current revision.'});
-    session.storyboard = storyboard;
+    if (masterScriptService.getSession(sessionId)?.storyboard !== storyboard) return res.status(409).json({error: 'Script changed while synthesizing. Generate audio for the current revision.'});
     session.stillPreviews = [];
+    delete session.visualAssets;
+    delete session.voiceoverNeedsRefresh;
     session.renderState = {status: 'idle', progress: 0};
     session.audioResult = {
       ...audioResult,
@@ -396,8 +397,12 @@ app.post('/api/pipeline/stills', async (req, res) => {
 
     const storyboard = session.storyboard;
     const timeline = session.timeline;
-    const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets?.warning ? undefined : session.visualAssets);
-    if (session.timeline !== timeline || session.storyboard !== storyboard) {
+    const isCurrentRevision = () => {
+      const current = masterScriptService.getSession(sessionId);
+      return current?.storyboard === storyboard && current.timeline === timeline;
+    };
+    const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets);
+    if (!isCurrentRevision()) {
       return res.status(409).json({ error: 'The script or audio changed while preparing visuals.' });
     }
     session.visualAssets = visuals;
@@ -410,11 +415,10 @@ app.post('/api/pipeline/stills', async (req, res) => {
       timeline,
       previewDir,
       `/previews/${sessionId}/${previewRun}`,
-      false,
-      visuals.plates,
+      visuals.shots,
     );
 
-    if (session.timeline !== timeline || session.storyboard !== storyboard) {
+    if (!isCurrentRevision()) {
       return res.status(409).json({ error: 'The script or audio changed while rendering visual previews.' });
     }
     session.stillPreviews = stills;
@@ -423,11 +427,15 @@ app.post('/api/pipeline/stills', async (req, res) => {
     res.json({
       ok: true,
       stills,
-      visuals: { status: visuals.status, warning: visuals.warning },
+      visuals: { status: visuals.status, shotCount: visuals.shots.flat().length },
     });
   } catch (err: any) {
     console.error(`[Pipeline Stills Error]:`, err);
-    res.status(500).json({ error: err.message });
+    const status = err instanceof VisualPlanningError ? (err.unavailable ? 503 : 502) : err instanceof VisualAssetError ? 422 : 500;
+    res.status(status).json({
+      error: err.message,
+      shotId: err instanceof VisualAssetError ? err.shotId : undefined,
+    });
   }
 });
 
@@ -462,6 +470,10 @@ app.post('/api/pipeline/render', async (req, res) => {
   if (session.renderState?.status === 'rendering') return res.status(409).json({error: 'A render is already running.'});
   const renderTimeline = session.timeline;
   const storyboard = session.storyboard;
+  const isCurrentRevision = () => {
+    const current = masterScriptService.getSession(sessionId);
+    return current?.storyboard === storyboard && current.timeline === renderTimeline;
+  };
   const renderFilename = `final-${randomUUID()}.mp4`;
   // Set rendering status
   session.renderState = {
@@ -477,16 +489,16 @@ app.post('/api/pipeline/render', async (req, res) => {
     try {
       console.log(`[Pipeline] Rendering StudioShort for session ${sessionId}...`);
       const visuals = await prepareReelVisuals(storyboard, renderTimeline, session.visualAssets);
-      if (session.timeline !== renderTimeline || session.storyboard !== storyboard) return;
+      if (!isCurrentRevision()) return;
       session.visualAssets = visuals;
       masterScriptService.updateSession(session);
       const renderResult = await renderStudioShort({
         storyboard,
         timeline: renderTimeline,
-        plates: visuals.plates,
+        visualPlan: visuals.shots,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
-          if (session.timeline !== renderTimeline) return;
+          if (!isCurrentRevision()) return;
           session.renderState = {
             status: 'rendering',
             progress: Math.min(99, Math.max(1, Math.round(p.percent))),
@@ -496,7 +508,7 @@ app.post('/api/pipeline/render', async (req, res) => {
       });
 
       console.log(`[Pipeline] Video render finished for session ${sessionId}. Running Media QA...`);
-      if (session.timeline !== renderTimeline) return;
+      if (!isCurrentRevision()) return;
       const qaReport = performMediaQA(renderResult, renderTimeline);
       if (!qaReport.passed) throw new Error(qaReport.errors.join('. '));
 
@@ -510,7 +522,7 @@ app.post('/api/pipeline/render', async (req, res) => {
       masterScriptService.updateSession(session);
       console.log(`🎉 [Pipeline] Video ready at ${mediaUrl}!`);
     } catch (err: any) {
-      if (session.timeline !== renderTimeline) return;
+      if (!isCurrentRevision()) return;
       console.error(`❌ [Pipeline] Render failed for session ${sessionId}:`, err);
       session.renderState = {
         status: 'failed',
@@ -536,7 +548,7 @@ app.get('/api/pipeline/render/status/:sessionId', (req, res) => {
   }
   res.json({
     renderState: session.renderState || { status: 'idle', progress: 0 },
-    visuals: session.visualAssets && { status: session.visualAssets.status, warning: session.visualAssets.warning },
+    visuals: session.visualAssets?.shots && { status: session.visualAssets.status, shotCount: session.visualAssets.shots.flat().length },
   });
 });
 
@@ -690,7 +702,7 @@ app.post('/api/previews', async (req, res) => {
     const id = randomUUID();
     const dir = path.resolve('media/previews', id);
     const {clips} = await synthesizeStoryboardNarration(
-      {...storyboard, scenes: storyboard.scenes.slice(0,1)}, dir, getTTSProvider(), {fitDuration:false, align:false}
+      {...storyboard, scenes: storyboard.scenes.slice(0,1)}, dir, getTTSProvider(), {align:false}
     );
     res.json({storyboard, audioUrl: `/media/previews/${id}/${path.basename(clips[0].filePath)}`});
   } catch (err: any) {
