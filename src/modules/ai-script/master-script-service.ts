@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { Storyboard, StoryboardSchema, SceneTypeEnum } from '../contracts/storyboard.js';
 import { convertCreatorScriptToStoryboard, decodePastedScript, isCreatorScript, parseCustomScriptToStoryboard } from './custom-script-parser.js';
 import type { ReelVisualAssets } from '../render/reel-visual-assets.js';
+import type { StoryDirectionOverrides } from '../video/visual-story.js';
 
 dotenv.config();
 
@@ -57,6 +58,16 @@ export interface ScriptSession {
   timeline?: any;
   stillPreviews?: any[];
   visualAssets?: ReelVisualAssets;
+  storyDirections?: StoryDirectionOverrides;
+  motionPreview?: {
+    mediaUrl: string;
+    sceneIndex: number;
+    scope?: 'scene' | 'sequence';
+    durationSec: number;
+    shots: Array<{
+      id: string; title: string; kind: string; fromSec: number; action?: string; camera?: string; footage?: boolean;
+    }>;
+  };
   renderState?: RenderState;
   job?: any;
   createdAt: number;
@@ -129,6 +140,8 @@ export function restoreLegacyNarration(session: ScriptSession): boolean {
     delete session.timeline;
     delete session.stillPreviews;
     delete session.visualAssets;
+    delete session.motionPreview;
+    delete session.storyDirections;
     if (session.renderState?.status !== 'completed') session.renderState = { status: 'idle', progress: 0 };
   }
   return true;
@@ -894,6 +907,8 @@ Always return the full updated 7 sections so the script remains complete and sel
     delete session.timeline;
     delete session.stillPreviews;
     delete session.visualAssets;
+    delete session.motionPreview;
+    delete session.storyDirections;
     session.renderState = {status: 'idle', progress: 0};
   }
 

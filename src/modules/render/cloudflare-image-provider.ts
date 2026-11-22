@@ -41,9 +41,11 @@ export async function generateCloudflareImage(prompt: string, referencePath?: st
   }
   if (!response.ok) {
     const status = response.status;
+    const payload = await response.json().catch(() => undefined) as { errors?: Array<{ code?: number }> } | undefined;
+    const code = payload?.errors?.[0]?.code;
     const detail = status === 401 || status === 403 ? ' Check the token’s Workers AI permission and account.'
       : status === 429 ? ' Check the Workers AI quota and rate limits.' : '';
-    throw new Error(`Cloudflare Workers AI returned HTTP ${status}.${detail}`);
+    throw new Error(`Cloudflare Workers AI returned HTTP ${status}${Number.isInteger(code) ? ` (code ${code})` : ''}.${detail}`);
   }
   if (response.headers.get('content-type')?.startsWith('image/')) return Buffer.from(await response.arrayBuffer());
   const payload = await response.json().catch(() => undefined) as { success?: boolean; result?: { image?: string } } | undefined;

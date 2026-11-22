@@ -14,6 +14,7 @@ import { renderRegisteredScene } from './SceneRegistry.js';
 import { KineticCaptions } from './KineticCaptions.js';
 import { AnimatedBlackCyberGrid } from './MotionStyles.js';
 import { DirectedShot } from './scenes/DirectedShot.js';
+import type { StoryHandoffShot } from './scenes/StoryFootage.js';
 import type { TimedShot, VisualPlan } from './visual-story.js';
 import { buildMotionStages, type MotionStage } from './motion-stage.js';
 
@@ -49,7 +50,8 @@ const SceneSequenceRenderer: React.FC<{
   shots?: TimedShot[];
   stages?: Map<string, MotionStage>;
   artwork?: Map<string, string>;
-}> = ({ scene, seg, fps, isFirst, shots, stages, artwork }) => {
+  handoffs?: Map<string, StoryHandoffShot>;
+}> = ({ scene, seg, fps, isFirst, shots, stages, artwork, handoffs }) => {
   const sceneFrame = useCurrentFrame();
 
   // Continuous Cinematic Push / Drift (1.00 -> 1.036 scale, -14px subtle upward drift)
@@ -72,7 +74,7 @@ const SceneSequenceRenderer: React.FC<{
       </AbsoluteFill>}
       {shots?.map(shot => (
         <Sequence key={shot.id} name={shot.headline} from={shot.from} durationInFrames={shot.duration}>
-          <DirectedShot shot={shot} stage={stages?.get(shot.id)} artwork={artwork?.get(shot.id)} />
+          <DirectedShot shot={shot} stage={stages?.get(shot.id)} artwork={artwork?.get(shot.id)} handoff={handoffs?.get(shot.id)} />
         </Sequence>
       ))}
 
@@ -126,19 +128,25 @@ export function musicVolumeAtFrame(timeline: VideoTimeline, frame: number) {
 export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard, timeline, visualPlan }) => {
   const frame = useCurrentFrame();
   const stages = useMemo(() => visualPlan && buildMotionStages(visualPlan, timeline), [visualPlan, timeline]);
-  const artwork = useMemo(() => {
+  const { artwork, handoffs } = useMemo(() => {
     const backgrounds = new Map<string, string>();
+    const transitions = new Map<string, StoryHandoffShot>();
     let opening: string | undefined;
     let recent: string | undefined;
+    let previous: TimedShot | undefined;
     for (const shot of visualPlan?.flat() ?? []) {
       if (shot.kind === 'image' && shot.asset) {
         opening ??= shot.asset;
         recent = shot.asset;
       }
-      if ((shot.kind === 'motion' || shot.kind === 'device') && shot.backdrop && recent) backgrounds.set(shot.id, recent);
+      if ((shot.kind === 'motion' || shot.kind === 'device') && shot.backdrop) {
+        if (previous?.kind === 'film' || (previous?.kind === 'image' && (previous.camera || previous.clip))) transitions.set(shot.id, previous);
+        else if (recent) backgrounds.set(shot.id, recent);
+      }
       if (shot.kind === 'cta' && opening) backgrounds.set(shot.id, opening);
+      previous = shot;
     }
-    return backgrounds;
+    return { artwork: backgrounds, handoffs: transitions };
   }, [visualPlan]);
 
   // Background music source (defaults to our synthesized ambient tech track)
@@ -218,6 +226,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
               shots={visualPlan?.[i]}
               stages={stages}
               artwork={artwork}
+              handoffs={handoffs}
             />
           </Sequence>
         );

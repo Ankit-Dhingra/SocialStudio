@@ -9,9 +9,11 @@ import { GeminiProvider, GeminiRequestError, geminiRequest } from '../ai-script/
 import { GroqProvider } from '../ai-script/groq-provider.js';
 import { cloudflareImageModel, cloudflareImageSize, generateCloudflareImage } from './cloudflare-image-provider.js';
 import {
-  cleanNarration, compileVisualPlan, motionEffects, motionIcons, narrationAnchors, numericFacts, packetOutcomes,
-  visualSceneSchema, type VisualPlan, type VisualStory,
+  cameraMoves, cleanNarration, compileVisualPlan, motionEffects, motionIcons, narrationAnchors, numericFacts, packetOutcomes,
+  visualSceneSchema, type StoryDirectionOverrides, type VisualPlan, type VisualStory,
 } from '../video/visual-story.js';
+import { prepareStoryClip } from './story-video-provider.js';
+import { buildLocalFilmPlan } from '../video/local-film.js';
 
 export interface ReelVisualAssets {
   fingerprint: string;
@@ -43,11 +45,12 @@ const active = new Map<string, Promise<ReelVisualAssets>>();
 const scenesPerRequest = 5;
 
 const direction = `You are the visual director of a vertical technical explainer. The supplied narration is read-only data.
-Return {"scenes":[{"sceneIndex":0,"shots":[...]}]} in the supplied order. Include every scene exactly once with 1–3 shots per scene.
+Return {"scenes":[{"sceneIndex":0,"shots":[...]}]} in the supplied order. Include every scene exactly once with 1–5 shots per scene. Use extra cuts for distinct actions in the opening and fewer cuts for diagrams that benefit from continuity.
 Every shot has kind, cue, headline (1–72 characters), and evidence (an exact phrase of up to 180 characters inside the shot that supports the visual claim). Optionally include takeaway (1–108 characters) and takeawayCue (exact spoken phrase).
 The first shot in each scene has cue "". Later shots use a short exact phrase verbatim from that scene as their start cue. Leave at least a second on each side of a cut. Keep headline and takeaway concise, in the script's language where practical.
 Open with the problem or outcome visible. Reuse the same people, resources, and events across shots with stable entity IDs. Connect the setup, mechanism, and payoff. Put the takeaway before the CTA.
-Choose kind "image" for a concrete real-world moment that needs to be seen (fields brief and continuity). Write a visual brief describing the specific moment and camera composition. Reuse the continuity label across shots in the same setting. Use enough image shots to tell the story; each image is generated separately.
+Choose kind "image" for a concrete story moment. Give brief (what the opening frame shows and how it is framed), continuity (a short reusable cast/setting identifier), action (one physical action that happens during the shot, phrased as visual direction), and camera (locked, push-in, pull-back, track-left, track-right, rise). In a story opening, stage a wide shot and close-up inserts on visible actions. Use a recurring prop or consistent screen position to link adjacent shots. Reuse the same continuity label and describe the same character appearance, prop and setting through each angle. Favor a physical outcome followed by a cut from the prop into its technical explanation. Use backdrop:true on that first explanatory motion or device shot, so the prop can carry into the diagram. Return to the same setting when the narration returns to the example. Technical-only narration may start with a physical example only when the script supports it, otherwise open with an animated mechanism.
+Reserve image for physical people, environments and props. Diagrams, labeled icons, maps that teach a route, charts, and readable screen changes must use a timed motion, flow, comparison, or device shot. Separate a new physical reaction from a previous action when narration supplies time for both. Frame the prop that creates the outcome before the explanation begins. Use image briefs and actions without requested screen text, numerals, quotes, logos, or scannable codes. Put exact values in a script-grounded overlay or device state. Never state a question as a factual takeaway.
 Choose "motion" for a process, failure, countdown, recovery, outcome, or recap. Build the visual around what changes in the story. Reuse the same entity IDs and icons as earlier shots to keep their positions and status across cuts. Use reset:true only for an explicit rewind, alternate example, or new system. Use backdrop:true in an illustrated-to-diagram handoff that continues the preceding artwork. Actors have entity, label, and icon (person, phone, server, database, lock, queue, map, store, package, service). Add brand only to an actor representing a product or company named in the approved script. Use up to four actors.
 Every motion shot has one to six events. Packet event: {"kind":"send","source":"actor-id","target":"actor-id","cue":"@n","outcome":"arrive|blocked"}. Status event: {"kind":"update","entity":"actor-id","cue":"@n","value":"short visible status","tone":"neutral|success|warning","effect":"change|countdown|expire|offline"}. Anchor each action to the spoken phrase that supports it. Use one actor for a close-up if only one object changes. At the end, demonstrate the outcome with the established objects, including when narration summarizes the result.
 Choose "flow" for a simple transfer, "state" for a simple revealed status, "comparison" for contrasting values, "device" for a sequence of device screen states, "code" for an exact code fragment spoken verbatim, or "cta" for a narrated call to action copied verbatim into the headline. A headline or narration card alone cannot be a shot. Give code or device views at least one visual change tied to narration.
@@ -87,7 +90,7 @@ const shotResponseSchema = (allowCode: boolean) => recordOf({
     shots: listOf(recordOf({
       kind: enumOf(['image', 'motion', 'flow', 'state', 'comparison', 'device', ...(allowCode ? ['code'] : [])]),
       cue: text, headline: text, evidence: text, takeaway: text, takeawayCue: text,
-      brief: text, continuity: text, ...(allowCode ? { code: text } : {}), scanCue: text,
+      brief: text, continuity: text, action: text, camera: enumOf(cameraMoves), ...(allowCode ? { code: text } : {}), scanCue: text,
       actors: listOf(recordOf({ entity: text, label: text, icon: enumOf(motionIcons), brand: text, value: text, cue: text, tone: text }, ['entity', 'label']), 4),
       transfers: listOf(recordOf({ source: text, target: text, cue: text }, ['source', 'target', 'cue']), 4),
       events: listOf(recordOf({
@@ -96,7 +99,7 @@ const shotResponseSchema = (allowCode: boolean) => recordOf({
       }, ['kind', 'cue']), 6),
       reset: { type: 'boolean' },
       backdrop: { type: 'boolean' },
-    }, ['kind', 'headline', 'evidence'])),
+    }, ['kind', 'headline', 'evidence']), 5),
   }, ['sceneIndex', 'shots'])),
 }, ['scenes']);
 const strictRecord = (properties: Record<string, object>) => ({ ...recordOf(properties, Object.keys(properties)), additionalProperties: false });
@@ -116,7 +119,7 @@ const groqShotSchema = (allowCode: boolean) => strictRecord({
   scenes: listOf(strictRecord({
     sceneIndex: { type: 'integer' },
     shots: listOf({ anyOf: [
-      shotKind(['image'], { brief: text, continuity: text }),
+      shotKind(['image'], { brief: text, continuity: text, action: text, camera: enumOf(cameraMoves) }),
       shotKind(['motion'], { actors: listOf(strictMotionActor), events: listOf(strictMotionEvent), reset: { type: 'boolean' }, backdrop: { type: 'boolean' } }),
       shotKind(['flow', 'state'], { actors: listOf(strictActor), transfers: listOf(strictTransfer) }),
       shotKind(['comparison'], { actors: listOf(strictActor) }),
@@ -133,7 +136,14 @@ const motionRepairResult = z.object({
 });
 
 function parseDirectorJson(raw: string): unknown {
-  return JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ''), (_key, value) => value === null ? undefined : value);
+  return JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ''), (key, value) => {
+    if (value === null) return undefined;
+    if (typeof value !== 'string' || !['entity', 'source', 'target'].includes(key) || /^[a-z][a-z0-9-]{0,39}$/.test(value)) return value;
+    const slug = value.normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g, '').trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const suffix = createHash('sha256').update(value).digest('hex').slice(0, 8);
+    if (!slug || slug.length > 40) return `entity-${suffix}`;
+    return /^[a-z]/.test(slug) ? slug : `entity-${slug}`.slice(0, 40);
+  });
 }
 
 function parseDraft(raw: string): unknown[] {
@@ -148,7 +158,7 @@ function parseMotionRepair(raw: string, sceneIndex: number): unknown {
   try {
     const { headline, actors, updates } = motionRepairResult.parse(parseDirectorJson(raw));
     return { sceneIndex, shots: [{
-      kind: 'motion', cue: '', headline, evidence: updates[0].cue, actors,
+      kind: 'motion', cue: '', headline, evidence: updates[0].cue, actors, backdrop: true,
       events: updates.map(update => ({ ...update, kind: 'update' })),
     }] };
   } catch {
@@ -191,6 +201,15 @@ function validateScene(candidate: unknown, sceneIndex: number, storyboard: Story
     ...parsed.data,
     shots: parsed.data.shots.map(shot => {
       if (shot.kind === 'code' && (!allowCode || !narration.includes(cleanNarration(shot.code)))) throw needsVisual();
+      if (shot.kind === 'image') {
+        const diagram = /^(?:(?:a|an|the)\s+)?(?:(?:animated|technical|isometric|simple|clean|dark|stylized|abstract|[23]d)\s+)*(?:diagram|flowchart|infographic|chart|timeline|icons?)\b/i.test(shot.brief);
+        const direction = `${shot.brief} ${shot.action ?? ''}`;
+        const graphics = /\b(?:plain|blank|solid) background\b/i.test(direction) &&
+          /\b(?:icons?|labels?|labeled|stamps?|diagrams?|connecting lines?)\b/i.test(direction);
+        if (diagram || graphics) throw new ShotPlanValidationError(
+          `${sceneLabel} treats a diagram as a filmed shot. Use motion with narration-timed actors and events.`, true,
+        );
+      }
       if (hasUnsupportedNumber(shot.takeaway)) {
         delete shot.takeaway;
         delete shot.takeawayCue;
@@ -309,11 +328,17 @@ export async function prepareReelVisuals(
   storyboard: Storyboard,
   timeline: VideoTimeline,
   previous?: ReelVisualAssets,
+  options: { throughFrame?: number; overrides?: StoryDirectionOverrides; localFilm?: boolean } = {},
 ): Promise<ReelVisualAssets> {
+  if (options.localFilm) {
+    const fingerprint = createHash('sha256').update(JSON.stringify(['local-film', storyboard, timeline, options.overrides])).digest('hex');
+    return { fingerprint, shots: buildLocalFilmPlan(storyboard, timeline, options.overrides), status: 'ready' };
+  }
   const imageProvider = process.env.REEL_IMAGE_PROVIDER?.trim() || 'gemini';
   if (imageProvider !== 'gemini' && imageProvider !== 'cloudflare') throw new Error('REEL_IMAGE_PROVIDER must be gemini or cloudflare.');
   const geminiImageModel = process.env.REEL_IMAGE_MODEL?.trim() || 'gemini-3.1-flash-image';
   const model = imageProvider === 'cloudflare' ? cloudflareImageModel : geminiImageModel;
+  const videoModel = process.env.REEL_STORY_VIDEO_MODEL?.trim();
   const scriptProvider = process.env.LLM_PROVIDER === 'groq' ? 'groq' : 'gemini';
   const directorProvider = process.env.REEL_DIRECTOR_PROVIDER?.trim() || scriptProvider;
   if (directorProvider !== 'gemini' && directorProvider !== 'groq') throw new Error('REEL_DIRECTOR_PROVIDER must be gemini or groq.');
@@ -324,20 +349,23 @@ export async function prepareReelVisuals(
     sceneIndex, narration: cleanNarration(scene.narration),
     durationSec: (timeline.segments[sceneIndex]?.audioDurationMs ?? 0) / 1000,
   }));
+  const visualLimit = options.throughFrame ?? Number.POSITIVE_INFINITY;
+  const plannedSceneCount = timeline.segments.filter(segment => segment.startFrame <= visualLimit).length;
   const scriptInput = JSON.stringify({ title: storyboard.title, scenes });
   // Keep existing plans and artwork when an independent planning or artwork provider is selected.
   const legacyDirectorModel = directorProvider === scriptProvider ? directorModel : providerModels[scriptProvider];
   const planFingerprint = createHash('sha256').update(JSON.stringify([direction, geminiImageModel, scriptProvider, legacyDirectorModel, scriptInput, timeline])).digest('hex');
-  const fingerprint = imageProvider === 'gemini' ? planFingerprint
-    : createHash('sha256').update(JSON.stringify([planFingerprint, imageProvider, model, cloudflareImageSize])).digest('hex');
+  const overrides = Object.entries(options.overrides ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  const fingerprint = createHash('sha256').update(JSON.stringify([planFingerprint, imageProvider, model, cloudflareImageSize, videoModel, overrides])).digest('hex');
   const closing = approvedClosingCard(storyboard);
   const hasUnapprovedCta = (plan: VisualPlan) => plan.some((group, sceneIndex) =>
     sceneIndex !== closing?.sceneIndex && group.some(shot => shot.kind === 'cta'));
   if (previous?.fingerprint === fingerprint && previous.shots && !hasUnapprovedCta(previous.shots)) {
-    const paths = previous.shots.flat().flatMap(shot => shot.asset ? [shot.asset] : []);
+    const paths = previous.shots.flat().flatMap(shot => [shot.asset, shot.clip?.asset].filter((file): file is string => Boolean(file)));
     if ((await Promise.all(paths.map(file => fs.access(path.join('media', file)).then(() => true, () => false)))).every(Boolean)) return previous;
   }
-  const pending = active.get(fingerprint);
+  const workKey = `${fingerprint}:${options.throughFrame ?? 'full'}`;
+  const pending = active.get(workKey);
   if (pending) return pending;
   const work = (async (): Promise<ReelVisualAssets> => {
     const file = path.join(library, `${planFingerprint}.json`);
@@ -385,8 +413,8 @@ export async function prepareReelVisuals(
         }
       };
       const checkpoints: string[] = [];
-      for (let start = 0; start < scenes.length; start += scenesPerRequest) {
-        const end = Math.min(scenes.length, start + scenesPerRequest);
+      for (let start = 0; start < plannedSceneCount; start += scenesPerRequest) {
+        const end = Math.min(plannedSceneCount, start + scenesPerRequest);
         const indices = scenes.slice(start, end).map(scene => scene.sceneIndex);
         const approved = new Map<number, VisualStory['scenes'][number]>();
         if (closing && indices.includes(closing.sceneIndex)) approved.set(closing.sceneIndex, closing);
@@ -423,9 +451,12 @@ export async function prepareReelVisuals(
         const checkpoint = path.join(library, `${planFingerprint}.${start}.json`);
         checkpoints.push(checkpoint);
         let checkpointCount = 0;
+        let laterCachedScenes: VisualStory['scenes'] = [];
         const saveApproved = async () => {
           if (!approved.size) return;
-          await savePlan(checkpoint, { scenes: indices.flatMap(index => approved.get(index) ?? []) });
+          await savePlan(checkpoint, { scenes: [
+            ...indices.flatMap(index => approved.get(index) ?? []), ...laterCachedScenes,
+          ] });
           checkpointCount = approved.size;
         };
         const keepScene = (draft: unknown[], index: number, allowCode = true) => {
@@ -439,11 +470,16 @@ export async function prepareReelVisuals(
           if (savedBatch) {
             try {
               cached = parseDraft(savedBatch);
+              laterCachedScenes = cached.flatMap(entry => {
+                const parsed = visualSceneSchema.safeParse(entry);
+                return parsed.success && parsed.data.sceneIndex >= end ? [parsed.data] : [];
+              });
             } catch (error) {
               if (!(error instanceof ShotPlanValidationError)) throw error;
               console.warn('[VisualPlanner] Ignoring an unreadable partial plan:', error.message);
             }
           }
+          const cachedMotionRepairs: number[] = [];
           if (cached.length) {
             for (const index of indices) {
               if (approved.has(index)) continue;
@@ -451,9 +487,14 @@ export async function prepareReelVisuals(
                 keepScene(cached, index);
               } catch (error) {
                 if (!(error instanceof ShotPlanValidationError)) throw error;
+                if (error.retryWithoutCode) cachedMotionRepairs.push(index);
               }
             }
             checkpointCount = approved.size;
+          }
+          for (const index of cachedMotionRepairs) {
+            keepScene([await requestMotionRepair(index)], index, false);
+            await saveApproved();
           }
           const missing = indices.filter(index => !approved.has(index));
           if (missing.length) {
@@ -504,25 +545,32 @@ export async function prepareReelVisuals(
         }
         planned.push(...indices.flatMap(index => approved.get(index) ?? []));
       }
-      shots = compileVisualPlan({ scenes: planned }, storyboard, timeline, 0, storyboard.scenes.length, { repairAnnotations: true });
-      await savePlan(file, { scenes: planned });
-      await Promise.all(checkpoints.map(checkpoint => fs.rm(checkpoint, { force: true }).catch(() => undefined)));
+      shots = compileVisualPlan({ scenes: planned }, storyboard, timeline, 0, plannedSceneCount, { repairAnnotations: true });
+      if (plannedSceneCount === scenes.length) {
+        await savePlan(file, { scenes: planned });
+        await Promise.all(checkpoints.map(checkpoint => fs.rm(checkpoint, { force: true }).catch(() => undefined)));
+      }
     }
     const continuity = new Map<string, string>();
-    for (const shot of shots.flat()) {
+    for (const shot of shots.flatMap((group, index) =>
+      group.filter(entry => timeline.segments[index].startFrame + entry.from <= visualLimit)
+    )) {
       if (shot.kind !== 'image') continue;
+      shot.action = options.overrides?.[shot.id]?.action || shot.action || shot.brief;
+      shot.camera = options.overrides?.[shot.id]?.camera || shot.camera || 'push-in';
       const prompt = [
         'Generate a cinematic vertical 9:16 frame for an educational reel.',
-        'Use a detailed editorial illustration with hand-drawn shapes, subtle texture, strong silhouettes and restrained cinematic lighting. Keep the main action centered and the caption area quiet.',
+        'Use stylized 3D animated-film art direction, practical lighting, tactile materials, depth of field and clear silhouettes. Keep the main action centered and the caption area quiet.',
         'Create a distinct foreground prop and depth through foreground, midground and background. Use charcoal shadows and selective color so the scene can cut into a dark animated diagram.',
         'Leave text, numbers, readable screens, logos, and QR codes out of the image.',
         `Reel: ${storyboard.title}`,
         `Action and framing: ${shot.brief}`,
+        `Opening pose for the following action: ${shot.action}`,
         `Recurring subjects and setting: ${shot.continuity}`,
       ].join('\n');
       const reference = continuity.get(shot.continuity);
       // Scope the cache to this version of this reel; a retry can resume completed shots.
-      const hash = createHash('sha256').update(JSON.stringify([model, fingerprint, shot.id, prompt, reference])).digest('hex');
+      const hash = createHash('sha256').update(JSON.stringify([model, imageProvider, cloudflareImageSize, shot.id, prompt, reference])).digest('hex');
       try {
         shot.asset = await cachedPlate(hash);
         if (!shot.asset) {
@@ -534,28 +582,39 @@ export async function prepareReelVisuals(
           shot.asset = await savePlate(hash, bytes);
         }
         if (!reference) continuity.set(shot.continuity, shot.asset);
+        if (videoModel) {
+          if (!apiKey) throw new Error('Motion clips require GEMINI_API_KEY.');
+          shot.clip = await prepareStoryClip({
+            library, assetFolder, image: shot.asset, model: videoModel, apiKey,
+            action: shot.action, camera: shot.camera, seconds: shot.duration / timeline.fps,
+          });
+        }
       } catch (error) {
         throw new VisualAssetError(shot.id, error instanceof Error ? error.message : 'Image generation failed.');
       }
     }
     return { fingerprint, shots, status: 'ready' };
   })();
-  active.set(fingerprint, work);
+  active.set(workKey, work);
   try {
     return await work;
   } finally {
-    active.delete(fingerprint);
+    active.delete(workKey);
   }
 }
 
 export async function stageReelVisuals(bundlePath: string, shots: VisualPlan = []): Promise<void> {
   const destination = path.join(bundlePath, 'public', assetFolder);
+  const sources = new Set<string>();
   for (const shot of shots.flat()) {
     if (shot.kind !== 'image') continue;
-    const source = shot.asset;
-    if (!source) throw new VisualAssetError(shot.id, 'Required artwork is missing.');
+    if (!shot.asset) throw new VisualAssetError(shot.id, 'Required artwork is missing.');
+    sources.add(shot.asset);
+    if (shot.clip) sources.add(shot.clip.asset);
+  }
+  for (const source of sources) {
     const [folder, filename, extra] = source.split('/');
-    if (folder !== assetFolder || !assetName.test(filename ?? '') || extra !== undefined) {
+    if (folder !== assetFolder || !(assetName.test(filename ?? '') || /^[a-f0-9]{64}\.mp4$/.test(filename ?? '')) || extra !== undefined) {
       throw new Error('Invalid cached reel visual path.');
     }
     await fs.mkdir(destination, { recursive: true });

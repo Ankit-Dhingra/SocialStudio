@@ -3,6 +3,10 @@ import { AbsoluteFill, Easing, Img, interpolate, staticFile, useCurrentFrame, us
 import type { TimedShot } from '../visual-story.js';
 import type { MotionStage } from '../motion-stage.js';
 import { CinematicStage } from './CinematicStage.js';
+import { StoryFootage, StoryHandoff, type StoryHandoffShot } from './StoryFootage.js';
+import { LocalFilm } from './LocalFilm.js';
+import { CheckoutPilotShot } from './CheckoutFilm.js';
+import { PaymentGuide } from './PaymentGuide.js';
 
 const canvas = '#080a0d';
 const ivory = '#f5f1e8';
@@ -159,7 +163,9 @@ function NarrationFocus({ focus, duration }: { focus: NonNullable<TimedShot['foc
   </div>;
 }
 
-export function DirectedShot({ shot, stage, artwork }: { shot: TimedShot; stage?: MotionStage; artwork?: string }) {
+export function DirectedShot({ shot, stage, artwork, handoff }: {
+  shot: TimedShot; stage?: MotionStage; artwork?: string; handoff?: StoryHandoffShot;
+}) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const focus = (shot.kind === 'focus' && !shot.focus) || shot.kind === 'cta';
@@ -171,14 +177,19 @@ export function DirectedShot({ shot, stage, artwork }: { shot: TimedShot; stage?
     background: 'radial-gradient(ellipse at 52% 42%, #222846 0%, #121827 43%, #080a12 79%)',
     color: ivory, fontFamily: 'Segoe UI, Nirmala UI, sans-serif', overflow: 'hidden',
   }}>
-    {shot.kind === 'image' && <SceneImage asset={shot.asset!} duration={shot.duration} mode="plate" />}
+    {shot.kind === 'image' && (shot.camera || shot.clip
+      ? <StoryFootage shot={shot} />
+      : <SceneImage asset={shot.asset!} duration={shot.duration} mode="plate" />)}
+    {shot.paymentGuide && <PaymentGuide shot={{ ...shot, paymentGuide: shot.paymentGuide }} />}
+    {shot.kind === 'film' && !shot.paymentGuide && (shot.checkout
+      ? <CheckoutPilotShot shot={{ ...shot, checkout: shot.checkout }} /> : <LocalFilm shot={shot} />)}
     {artwork && <SceneImage asset={artwork} duration={shot.duration} mode={shot.kind === 'cta' ? 'callback' : 'handoff'} />}
     {stage && <CinematicStage stage={stage} />}
     {shot.kind === 'comparison' && <Compare shot={shot} />}
     {shot.kind === 'device' && <Device shot={shot} />}
     {shot.focus && <NarrationFocus focus={shot.focus} duration={shot.duration} />}
     {shot.kind === 'code' && <CodeShot shot={shot} />}
-    <div style={{
+    {shot.headline && shot.kind !== 'film' && !(shot.kind === 'image' && (shot.camera || shot.clip)) && <div style={{
       position: 'absolute', top: focus ? 535 : 226, left: 84, width: 848,
       fontSize: headlineSize, lineHeight: 1.04, fontWeight: 790, letterSpacing: -2.1,
       ...(shot.kind === 'cta' ? {
@@ -187,10 +198,11 @@ export function DirectedShot({ shot, stage, artwork }: { shot: TimedShot; stage?
       } : {}),
       overflowWrap: 'anywhere', textWrap: 'balance', textShadow: `0 12px 45px ${canvas}`,
       translate: `0 ${interpolate(frame, [0, fps * 0.37], [21, 0], clamp)}px`,
-    }}>{shot.headline}</div>
+    }}>{shot.headline}</div>}
     {shot.takeaway && frame >= shot.takeawayFrame && <div style={{
       position: 'absolute', top: 1235, left: 84, width: 848, color: '#ffe0ba', fontSize: 36,
       lineHeight: 1.13, fontWeight: 660, overflowWrap: 'anywhere',
     }}>{shot.takeaway}</div>}
+    {handoff && <StoryHandoff previous={handoff} />}
   </AbsoluteFill>;
 }

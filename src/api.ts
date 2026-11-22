@@ -31,6 +31,7 @@ import { getTTSProvider, synthesizeStoryboardNarration } from './modules/tts/tts
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort, renderStillPreviews } from './modules/render/video-renderer.js';
 import { prepareReelVisuals, VisualAssetError, VisualPlanningError } from './modules/render/reel-visual-assets.js';
+import { storyDirectionSchema } from './modules/video/visual-story.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
 import { execFileSync } from 'node:child_process';
@@ -342,6 +343,8 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
     if (masterScriptService.getSession(sessionId)?.storyboard !== storyboard) return res.status(409).json({error: 'Script changed while synthesizing. Generate audio for the current revision.'});
     session.stillPreviews = [];
     delete session.visualAssets;
+    delete session.motionPreview;
+    delete session.storyDirections;
     delete session.voiceoverNeedsRefresh;
     session.renderState = {status: 'idle', progress: 0};
     session.audioResult = {
@@ -368,6 +371,8 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
   }
 });
 
+const stillPreviewJobs = new Set<string>();
+
 // 6.5. Generate Still Previews (fast 3-4s visual verification without full render)
 app.post('/api/pipeline/stills', async (req, res) => {
   const { sessionId } = req.body;
@@ -385,7 +390,12 @@ app.post('/api/pipeline/stills', async (req, res) => {
       error: 'Audio not synthesized yet. Please synthesize voiceover before generating visual previews.',
     });
   }
+  const motion = motionPreviewJobs.get(sessionId);
+  if (stillPreviewJobs.has(sessionId) || (motion && motion.status !== 'failed')) {
+    return res.status(409).json({ error: 'A visual preview is already running.' });
+  }
 
+  stillPreviewJobs.add(sessionId);
   try {
     if (!session.timeline) {
       session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
@@ -397,11 +407,12 @@ app.post('/api/pipeline/stills', async (req, res) => {
 
     const storyboard = session.storyboard;
     const timeline = session.timeline;
+    const directions = session.storyDirections;
     const isCurrentRevision = () => {
       const current = masterScriptService.getSession(sessionId);
-      return current?.storyboard === storyboard && current.timeline === timeline;
+      return current?.storyboard === storyboard && current.timeline === timeline && current.storyDirections === directions;
     };
-    const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets);
+    const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets, { overrides: directions, localFilm: true });
     if (!isCurrentRevision()) {
       return res.status(409).json({ error: 'The script or audio changed while preparing visuals.' });
     }
@@ -436,6 +447,8 @@ app.post('/api/pipeline/stills', async (req, res) => {
       error: err.message,
       shotId: err instanceof VisualAssetError ? err.shotId : undefined,
     });
+  } finally {
+    stillPreviewJobs.delete(sessionId);
   }
 });
 
@@ -447,6 +460,99 @@ app.get('/api/pipeline/stills/:sessionId', (req, res) => {
   res.json({
     stills: session.stillPreviews || [],
   });
+});
+
+type MotionPreviewJob = {
+  status: 'planning' | 'rendering' | 'failed';
+  progress: number;
+  error?: string;
+};
+const motionPreviewJobs = new Map<string, MotionPreviewJob>();
+const motionPreviewRequest = z.object({
+  sessionId: z.string().min(1),
+  sceneIndex: z.number().int().nonnegative().default(0),
+  scope: z.enum(['scene', 'sequence']).default('sequence'),
+  directions: z.record(z.string().regex(/^\d+-\d+$/), storyDirectionSchema).default({}),
+});
+
+app.get('/api/pipeline/motion-preview/:sessionId', (req, res) => {
+  const session = masterScriptService.getSession(req.params.sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found.' });
+  res.json({ job: motionPreviewJobs.get(session.id), preview: session.motionPreview });
+});
+
+app.post('/api/pipeline/motion-preview', (req, res) => {
+  const request = motionPreviewRequest.safeParse(req.body);
+  if (!request.success) return res.status(400).json({ error: 'Choose a session and a valid start scene.' });
+  const { sessionId, sceneIndex, scope, directions } = request.data;
+  const session = masterScriptService.getSession(sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found.' });
+  const storyboard = session.storyboard;
+  const timeline = session.timeline as ReturnType<typeof buildVideoTimeline> | undefined;
+  const startFrame = timeline?.segments[sceneIndex]?.startFrame;
+  if (!timeline || !session.audioResult || startFrame === undefined) {
+    return res.status(400).json({ error: 'Generate voiceover and select a valid start scene.' });
+  }
+  const active = motionPreviewJobs.get(sessionId);
+  if (active && active.status !== 'failed') return res.status(409).json({ error: 'A motion preview is already running.', job: active });
+  if (stillPreviewJobs.has(sessionId)) return res.status(409).json({ error: 'Wait for the still previews to finish.' });
+  if (session.renderState?.status === 'rendering') return res.status(409).json({ error: 'Wait for the current video export to finish.' });
+  const editedShots = Object.keys(directions);
+  if (editedShots.some(id => !session.motionPreview?.shots.some(shot => shot.id === id && ['film', 'image'].includes(shot.kind)))) {
+    return res.status(400).json({ error: 'Edit a story shot from the current motion preview.' });
+  }
+  const overrides = { ...session.storyDirections, ...directions };
+  const sceneEnd = startFrame + timeline.segments[sceneIndex].durationInFrames - 1;
+  const endFrame = Math.min(timeline.totalDurationInFrames - 1, startFrame + 24 * timeline.fps - 1,
+    scope === 'scene' ? sceneEnd : Number.POSITIVE_INFINITY);
+  const mediaUrl = `/media/runs/${sessionId}/motion-${randomUUID()}.mp4`;
+  const job: MotionPreviewJob = { status: 'planning', progress: 0 };
+  motionPreviewJobs.set(sessionId, job);
+  const currentRevision = () => {
+    const current = masterScriptService.getSession(sessionId);
+    return current?.storyboard === storyboard && current.timeline === timeline;
+  };
+
+  void (async () => {
+    try {
+      const visuals = await prepareReelVisuals(storyboard, timeline, session.visualAssets, { throughFrame: endFrame, overrides, localFilm: true });
+      if (!currentRevision()) return;
+      job.status = 'rendering';
+      const rendered = await renderStudioShort({
+        storyboard, timeline, visualPlan: visuals.shots,
+        outputFilePath: path.resolve(mediaUrl.slice(1)), previewRange: [startFrame, endFrame],
+        onProgress: progress => { job.progress = progress.percent; },
+      });
+      if (!currentRevision()) return;
+      if (editedShots.length) {
+        session.storyDirections = overrides;
+        delete session.visualAssets;
+        delete session.stillPreviews;
+      }
+      session.motionPreview = {
+        mediaUrl, sceneIndex, scope, durationSec: rendered.durationSec,
+        shots: visuals.shots.flatMap((shots, index) => shots.flatMap(shot => {
+          const firstFrame = timeline.segments[index].startFrame + shot.from;
+          if (firstFrame > endFrame || firstFrame + shot.duration <= startFrame) return [];
+          return [{
+            id: shot.id, title: shot.headline || storyboard.scenes[index].onScreenText || `Scene ${index + 1}`,
+            kind: shot.kind, fromSec: Math.max(0, firstFrame - startFrame) / timeline.fps,
+            ...(shot.kind === 'image' && { action: shot.action || shot.brief, camera: shot.camera, footage: Boolean(shot.clip) }),
+            ...(shot.kind === 'film' && { action: shot.action, camera: shot.camera }),
+          }];
+        })),
+      };
+      masterScriptService.updateSession(session);
+    } catch (error) {
+      if (!currentRevision()) return;
+      console.error('[Motion Preview]', error);
+      job.status = 'failed';
+      job.error = error instanceof Error ? error.message : 'Motion preview failed.';
+    } finally {
+      if (job.status !== 'failed') motionPreviewJobs.delete(sessionId);
+    }
+  })();
+  res.status(202).json({ job });
 });
 
 // 7. Video rendering (1080x1920 MP4)
@@ -468,6 +574,9 @@ app.post('/api/pipeline/render', async (req, res) => {
   }
 
   if (session.renderState?.status === 'rendering') return res.status(409).json({error: 'A render is already running.'});
+  if (stillPreviewJobs.has(sessionId)) return res.status(409).json({ error: 'Wait for the still previews to finish.' });
+  const previewJob = motionPreviewJobs.get(sessionId);
+  if (previewJob && previewJob.status !== 'failed') return res.status(409).json({ error: 'Wait for the motion preview to finish.' });
   const renderTimeline = session.timeline;
   const storyboard = session.storyboard;
   const isCurrentRevision = () => {
@@ -488,7 +597,7 @@ app.post('/api/pipeline/render', async (req, res) => {
   (async () => {
     try {
       console.log(`[Pipeline] Rendering StudioShort for session ${sessionId}...`);
-      const visuals = await prepareReelVisuals(storyboard, renderTimeline, session.visualAssets);
+      const visuals = await prepareReelVisuals(storyboard, renderTimeline, session.visualAssets, { overrides: session.storyDirections, localFilm: true });
       if (!isCurrentRevision()) return;
       session.visualAssets = visuals;
       masterScriptService.updateSession(session);

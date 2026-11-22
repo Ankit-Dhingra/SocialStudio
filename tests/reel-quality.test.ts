@@ -12,6 +12,7 @@ import { StoryboardSchema } from '../src/modules/contracts/storyboard.js';
 import { findFfmpeg } from '../src/modules/tts/sarvam-provider.js';
 import { parseCustomScriptToStoryboard } from '../src/modules/ai-script/custom-script-parser.js';
 import { compileVisualPlan } from '../src/modules/video/visual-story.js';
+import { buildLocalFilmPlan } from '../src/modules/video/local-film.js';
 import { buildMotionStages } from '../src/modules/video/motion-stage.js';
 import { prepareReelVisuals, stageReelVisuals } from '../src/modules/render/reel-visual-assets.js';
 import { randomUUID } from 'node:crypto';
@@ -449,6 +450,44 @@ test('shot plans use narration timestamps and reject invented or mistimed values
   second.actors[1].value = '₹90';
   second.actors[1].cue = 'The same route';
   assert.throws(() => compileVisualPlan(plan, board, timeline), /exact phrase containing its number/);
+});
+
+test('local direction stages physical actions at spoken cues and then switches to diagram animation', () => {
+  const board = storyboardFor('Two friends drink tea. The vendor gives the bill. They scan QR. The speaker beeps. But how did the bank know?', 'A counter transaction');
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = board.scenes[0].narration.split(' ').map((_, index) => index * 12);
+  const [shots] = buildLocalFilmPlan(board, timeline, { '1-2': { action: 'Counter exchange', camera: 'pull-back' } });
+  assert.deepEqual(shots.map(shot => shot.kind === 'film' ? shot.performance : shot.kind),
+    ['drink', 'serve', 'scan', 'confirm', 'motion']);
+  const bill = shots[1];
+  assert.equal(bill.kind, 'film');
+  assert.equal(bill.camera, 'pull-back');
+  assert.deepEqual(shots.map(shot => shot.from), [0, 48, 108, 156, 180]);
+  assert.ok(shots.every(shot => !shot.asset && !shot.clip));
+});
+
+test('a story can keep four distinct camera shots in time with a single approved voice take', () => {
+  const board = storyboardFor('The musician opens the case. She lifts the violin. The bow touches the strings. The note rings out.', 'How a violin makes sound');
+  const timeline = buildVideoTimeline(board);
+  timeline.segments[0].wordFrames = board.scenes[0].narration.split(' ').map((_, index) => index * 8);
+  const briefs = [
+    ['Open the case', 'Wide view of the musician leaning over a dark violin case.', 'The musician opens the case.'],
+    ['Lift the violin', 'Close detail of the musician reaching for the neck of the violin.', 'She lifts the violin.'],
+    ['Touch the strings', 'Tight profile of the bow held near the violin strings.', 'The bow touches the strings.'],
+    ['Follow the sound', 'Side view of the violin body as the musician holds the bow.', 'The note rings out.'],
+  ];
+  const cuts = briefs.map(([headline, brief, action], index) => ({
+    kind: 'image', headline, brief, action, continuity: 'music-room',
+    camera: index === 3 ? 'pull-back' : 'push-in',
+    evidence: `@${index + 1}`, cue: index ? `@${index + 1}` : '',
+  }));
+  const [timed] = compileVisualPlan({ scenes: [{ sceneIndex: 0, shots: cuts }] }, board, timeline);
+  assert.deepEqual(timed.map(shot => shot.from), [0, 40, 72, 112]);
+  assert.equal(timed.reduce((total, shot) => total + shot.duration, 0), timeline.totalDurationInFrames);
+  const last = timed.at(-1);
+  assert.equal(last?.kind, 'image');
+  assert.equal(last.camera, 'pull-back');
+  assert.equal(last.action, 'The note rings out.');
 });
 
 test('long focus shots reveal the approved phrases on the existing audio timeline', () => {

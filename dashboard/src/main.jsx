@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionPreview } from './MotionPreview.jsx';
 import {
   Sparkles,
   FileText,
@@ -2278,7 +2279,7 @@ function App() {
                             Stage 3: Visual Shot Review
                           </h3>
                           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
-                            Generate artwork from the finalized script and inspect the 1080×1920 scenes before export.
+                            Review camera moves and cuts with the saved voiceover, or inspect individual frames.
                           </p>
                         </div>
 
@@ -2295,7 +2296,7 @@ function App() {
                             ) : (
                               <Camera size={13} />
                             )}
-                            <span>{generatingStills ? 'Preparing Artwork & Previews…' : 'Generate Previews'}</span>
+                            <span>{generatingStills ? 'Preparing stills…' : 'Generate Stills'}</span>
                           </button>
 
                           <button
@@ -2329,6 +2330,10 @@ function App() {
                       {session?.visualAssets?.status === 'ready' && (
                         <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{stills.length} visual shots ready.</p>
                       )}
+                      {session?.id && <MotionPreview
+                        key={`${session.id}:${audioResult?.fullAudioUrl || session.audioResult?.fullAudioUrl || ''}`}
+                        sessionId={session.id} scenes={session.storyboard?.scenes ?? []} toApiUrl={toApiUrl}
+                      />}
 
                       {/* STILLS GRID */}
                       {stills && stills.length > 0 ? (

@@ -16,6 +16,8 @@ export interface RenderShortOptions {
   timeline: VideoTimeline;
   outputFilePath: string;
   visualPlan?: VisualPlan;
+  previewRange?: [startFrame: number, endFrame: number];
+  previewScale?: number;
   onProgress?: (progress: { percent: number; renderedFrames: number; totalFrames: number }) => void;
 }
 
@@ -121,7 +123,7 @@ export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string
 }
 
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
-  const { storyboard, timeline, outputFilePath, visualPlan, onProgress } = options;
+  const { storyboard, timeline, outputFilePath, visualPlan, onProgress, previewRange } = options;
 
   const outputDir = path.dirname(outputFilePath);
   if (!fs.existsSync(outputDir)) {
@@ -130,7 +132,10 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
 
   const startTime = Date.now();
   const bundleLocation = await getOrCreateBundle(timeline);
-  await stageReelVisuals(bundleLocation, visualPlan);
+  const stagedPlan = previewRange ? visualPlan?.map((group, index) =>
+    group.filter(shot => timeline.segments[index].startFrame + shot.from <= previewRange[1])
+  ) : visualPlan;
+  await stageReelVisuals(bundleLocation, stagedPlan);
   const inputProps = { storyboard, timeline, visualPlan };
   const { concurrency, ffmpegThreads, gl, browserExecutable } = getRenderingConfig();
 
@@ -150,9 +155,10 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     inputProps,
   });
 
-  const totalFrames = composition.durationInFrames;
+  const totalFrames = previewRange ? previewRange[1] - previewRange[0] + 1 : composition.durationInFrames;
+  const scale = previewRange ? options.previewScale ?? 0.5 : 1;
   console.log(
-    `[Renderer] Starting render: ${totalFrames} frames (${(totalFrames / 30).toFixed(2)}s) @ 1080x1920...`
+    `[Renderer] Starting ${previewRange ? 'preview' : 'export'}: ${totalFrames} frames (${(totalFrames / timeline.fps).toFixed(2)}s) ...`
   );
 
   let lastPercentLogged = 0;
@@ -162,7 +168,9 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     serveUrl: bundleLocation,
     codec: 'h264',
     x264Preset: 'veryfast',
-    crf: 20,
+    crf: scale < 1 ? 26 : 20,
+    frameRange: previewRange,
+    scale,
     pixelFormat: 'yuv420p',
     outputLocation: outputFilePath,
     concurrency,
@@ -212,8 +220,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
   const probe = JSON.parse(execFileSync(ffprobeBin, ['-v', 'error', '-show_entries',
     'format=duration:stream=codec_type,width,height,duration', '-of', 'json', outputFilePath], {encoding: 'utf8'}));
   const video = probe.streams.find((stream: {codec_type: string}) => stream.codec_type === 'video');
-  if (video?.width !== 1080 || video?.height !== 1920 || !probe.streams.some((s: {codec_type: string}) => s.codec_type === 'audio')) {
-    throw new Error('Export must contain a 1080x1920 video stream and an audio stream.');
+  if (video?.width !== 1080 * scale || video?.height !== 1920 * scale || !probe.streams.some((s: {codec_type: string}) => s.codec_type === 'audio')) {
+    throw new Error(`Render must contain a ${1080 * scale}x${1920 * scale} video stream and an audio stream.`);
   }
   const stats = fs.statSync(outputFilePath);
   const fileBuffer = fs.readFileSync(outputFilePath);
@@ -263,7 +271,8 @@ export async function renderStillPreviews(
     const metadata = { sceneIndex: idx, sceneId: scene.id, type: scene.type };
     return visualPlan ? visualPlan[idx].map(shot => {
       const start = seg.startFrame + shot.from;
-      const event = shot.scanFrame ?? (shot.eventFrames?.length ? Math.max(...shot.eventFrames) : undefined);
+      const event = shot.kind === 'film' ? Math.min(shot.duration - 1, Math.round(timeline.fps * 0.65))
+        : shot.scanFrame ?? (shot.eventFrames?.length ? Math.max(...shot.eventFrames) : undefined);
       const finalFrame = start + shot.duration - 1;
       const nextScreen = shot.scanFrame !== undefined ? shot.reveals.find(at => at > shot.scanFrame!) : undefined;
       const motion = event !== undefined ? [

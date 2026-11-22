@@ -20,6 +20,13 @@ const actor = z.object({
 export const motionIcons = ['person', 'phone', 'server', 'database', 'lock', 'queue', 'map', 'store', 'package', 'service'] as const;
 export const motionEffects = ['change', 'countdown', 'expire', 'offline'] as const;
 export const packetOutcomes = ['arrive', 'blocked'] as const;
+export const cameraMoves = ['locked', 'push-in', 'pull-back', 'track-left', 'track-right', 'rise'] as const;
+export const filmActions = ['drink', 'serve', 'scan', 'confirm', 'travel', 'open', 'operate'] as const;
+export const storyDirectionSchema = z.object({
+  action: z.string().trim().min(1).max(240),
+  camera: z.enum(cameraMoves),
+});
+export type StoryDirectionOverrides = Record<string, z.infer<typeof storyDirectionSchema>>;
 const motionActor = actor.pick({ entity: true, label: true }).extend({
   icon: z.enum(motionIcons), brand: optionalVisualField(z.string().trim().min(1).max(36)),
 });
@@ -48,7 +55,15 @@ const start = z.object({
   takeawayCue: optionalVisualField(z.string().trim().max(140)),
 });
 const shot = z.discriminatedUnion('kind', [
-  start.extend({ kind: z.literal('image'), brief: z.string().trim().min(12).max(500), continuity: z.string().trim().min(1).max(70) }),
+  start.extend({
+    kind: z.literal('film'), action: storyDirectionSchema.shape.action, camera: storyDirectionSchema.shape.camera,
+    performance: z.enum(filmActions), set: z.enum(['counter', 'street', 'room']),
+  }),
+  start.extend({
+    kind: z.literal('image'), brief: z.string().trim().min(12).max(500), continuity: z.string().trim().min(1).max(70),
+    action: optionalVisualField(storyDirectionSchema.shape.action),
+    camera: optionalVisualField(storyDirectionSchema.shape.camera),
+  }),
   start.extend({
     kind: z.literal('motion'),
     actors: z.array(motionActor).min(1).max(4),
@@ -69,7 +84,7 @@ const shot = z.discriminatedUnion('kind', [
 ]);
 export const visualSceneSchema = z.object({
   sceneIndex: z.number().int().nonnegative(),
-  shots: z.array(shot).min(1).max(3),
+  shots: z.array(shot).min(1).max(5),
 });
 export const visualStorySchema = z.object({ scenes: z.array(visualSceneSchema).min(1) });
 
@@ -79,6 +94,7 @@ export type TimedShot = z.infer<typeof shot> & {
   from: number;
   duration: number;
   asset?: string;
+  clip?: { asset: string; seconds: number };
   reveals: number[];
   movements: number[];
   eventFrames?: number[];
@@ -86,6 +102,28 @@ export type TimedShot = z.infer<typeof shot> & {
   scanFrame?: number;
   takeawayFrame: number;
   focus?: { beats: Array<{ text: string; from: number }>; code?: string };
+  checkout?: {
+    phase: 'story' | 'scan' | 'alert' | 'banks';
+    amount: string;
+    merchant: string;
+    payer: string;
+    banks: [string, string];
+    offset: number;
+    cues: { begin?: number; scan: number; authorize: number; confirm: number; alert: number; question: number; payer: number; merchant: number; payerBank: number; merchantBank: number };
+    closeQuestionAt?: number;
+  };
+  paymentGuide?: {
+    label: string;
+    title: string;
+    nodes: Array<{
+      id: string; label: string; detail: string; at: number; x: number; y: number;
+      icon: 'phone' | 'bank' | 'switch' | 'qr' | 'lock' | 'status' | 'ledger';
+      updates?: Array<{ at: number; text: string; tone: 'blue' | 'gold' | 'green' }>;
+    }>;
+    edges?: Array<{ from: string; to: string; at: number; label: string; tone?: 'blue' | 'gold' | 'green' }>;
+    notes?: Array<{ at: number; text: string }>;
+    receiptAt?: number;
+  };
 };
 export type VisualPlan = TimedShot[][];
 
@@ -235,7 +273,8 @@ export function compileVisualPlan(
       const takeawayWord = takeawayCue ? localCue(takeawayCue) : startAt.word;
       const takeawayFrame = takeawayCue && takeawayWord >= 0 ? Math.max(0, frameAt(takeawayWord) - startAt.frame) : 0;
       if (takeawayWord < 0 || takeawayFrame >= duration || missingFacts(takeaway ?? '', takeawayCue) ||
-          (repairAnnotations && hasUnknownIdentifier(takeaway ?? ''))) takeaway = undefined;
+          (repairAnnotations && (hasUnknownIdentifier(takeaway ?? '') ||
+            (/\?[\s"'’”]*$/.test(cueText(takeawayCue)) && !takeaway?.includes('?'))))) takeaway = undefined;
       const displayed = [{ field: 'headline', value: headline }, { field: 'takeaway', value: takeaway ?? '' }];
       if (entry.kind === 'code') {
         if (!narration.includes(cleanNarration(entry.code))) throw new Error(`${sceneLabel} contains code absent from its narration.`);

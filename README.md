@@ -25,6 +25,14 @@ npm run dev:dashboard
 ```
 Open `http://localhost:5173`. Keep the development automation token equal to `AUTOMATION_TOKEN` in your `.env`; **never expose this API publicly without proper authentication.**
 
+### Animated story workflow
+
+In **Create Reel**, finalize your script and generate the voiceover. In **Visual Shot Review**, choose a starting scene and select **Generate Motion Preview**. Review one scene or up to 24 seconds with the saved narration. The shot list lets you seek to a cut and edit the camera for a 3D shot. **Apply and preview** saves a successful revision for the final export.
+
+The dashboard plans visuals locally from the script and its measured narration. Supported physical cues select reusable 3D sets, rigs and props. Other cues select timed concept reveals or an excerpt of the approved narration. Stills, moving previews and final exports use the same plan. This path uses WebGL and does not require an artwork or visual-planning API.
+
+The manually directed UPI reel uses the same Remotion renderer through `npx tsx scripts/render-payment-pilot.ts <session-id> --full`. Run it with the matching approved UPI draft and its saved voiceover. Add `--check-plan` to validate the narration cues before rendering. This command writes the finished MP4 to the session's `media/runs` directory.
+
 Click **Queue Video**. The worker creates script, narration and the MP4. When finished, watch it and approve or reject. `media/<uuid>.mp4` is the output. Review does **not** upload to any platform.
 
 ### Switch to real AI
