@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MotionPreview } from './MotionPreview.jsx';
+import { ManualVisualImport } from './ManualVisualImport.jsx';
+import { pipelineFetch } from './pipeline-api.js';
 import {
   Sparkles,
   FileText,
@@ -278,7 +280,9 @@ function App() {
   const [audioSynthesizing, setAudioSynthesizing] = useState(false);
   const [audioResult, setAudioResult] = useState(null);
   const [stills, setStills] = useState([]);
+  const [reviewedVisualRevision, setReviewedVisualRevision] = useState(null);
   const [generatingStills, setGeneratingStills] = useState(false);
+  const [visualMode, setVisualMode] = useState('automatic');
   const [visualPreviewError, setVisualPreviewError] = useState(null);
   const [selectedStill, setSelectedStill] = useState(null);
   const [selectedMotionFrame, setSelectedMotionFrame] = useState(null);
@@ -318,7 +322,7 @@ function App() {
   // Load existing pipeline sessions on mount & for Overview library
   async function loadSessions() {
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/sessions'));
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/sessions'));
       if (res.ok) {
         const list = await res.json();
         setSessionsList(list || []);
@@ -326,7 +330,7 @@ function App() {
         const savedId = localStorage.getItem('socialstudio_active_session');
         const targetId = savedId && list.some((s) => s.id === savedId) ? savedId : null;
         if (targetId && !session) {
-          const latestRes = await fetch(toApiUrl(`/api/pipeline/status/${targetId}`));
+          const latestRes = await pipelineFetch(toApiUrl(`/api/pipeline/status/${targetId}`));
           if (latestRes.ok) {
             const statusData = await latestRes.json();
             const fullSession = statusData.session || {};
@@ -375,7 +379,7 @@ function App() {
       return;
     }
     try {
-      await fetch(toApiUrl('/api/pipeline/script/finalize'), {
+      await pipelineFetch(toApiUrl('/api/pipeline/script/finalize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -399,7 +403,7 @@ function App() {
     if (e) e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this reel / draft?')) return;
     try {
-      const res = await fetch(toApiUrl(`/api/pipeline/session/${sessionId}`), {
+      const res = await pipelineFetch(toApiUrl(`/api/pipeline/session/${sessionId}`), {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -423,7 +427,7 @@ function App() {
   async function handleLoadSessionIntoStudio(sess, targetStage = null) {
     try {
       setStudioLoading(true);
-      const res = await fetch(toApiUrl(`/api/pipeline/status/${sess.id}`));
+      const res = await pipelineFetch(toApiUrl(`/api/pipeline/status/${sess.id}`));
       let fullSession = sess;
       let fullAudio = null;
       let fullStills = [];
@@ -491,7 +495,7 @@ function App() {
 
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [activeNav]);
 
   // Poll server pipeline job and render status
   useEffect(() => {
@@ -499,7 +503,7 @@ function App() {
     if (rendering && session?.id) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(toApiUrl(`/api/pipeline/status/${session.id}`));
+          const res = await pipelineFetch(toApiUrl(`/api/pipeline/status/${session.id}`));
           if (res.ok) {
             const data = await res.json();
             const job = data.job;
@@ -533,6 +537,7 @@ function App() {
 
   function clearRenderPreview() {
     setStills([]);
+    setReviewedVisualRevision(null);
     setSelectedStill(null);
     setQaReport(null);
     setRendering(false);
@@ -548,7 +553,7 @@ function App() {
     setRenderError('');
     clearRenderPreview();
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/generate-reel'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/generate-reel'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: topic.trim(), angle: angle.trim() }),
@@ -576,7 +581,7 @@ function App() {
     setStudioLoading(true);
     setIsEditingScript(false);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/script/start'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: topic.trim(), angle: angle.trim() }),
@@ -608,7 +613,7 @@ function App() {
       } catch (e) {
         payload = customScriptText.trim();
       }
-      const res = await fetch(toApiUrl('/api/pipeline/script/custom'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/custom'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customScript: payload, topic: payload.title || topic }),
@@ -633,7 +638,7 @@ function App() {
     if (!editForm || !session?.id) return;
     setSavingEdits(true);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/script/custom'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/custom'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -661,7 +666,7 @@ function App() {
     if (!aiRefinePrompt.trim() || !session?.id) return;
     setRefiningAi(true);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/script/chat'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id, message: aiRefinePrompt.trim() }),
@@ -689,7 +694,7 @@ function App() {
     setChatSending(true);
     setChatInput('');
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/script/chat'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id, message: text.trim() }),
@@ -711,7 +716,7 @@ function App() {
     if (!session?.id) return;
     setStudioLoading(true);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/script/finalize'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/finalize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id }),
@@ -732,7 +737,7 @@ function App() {
     if (!session?.id) return;
     setAudioSynthesizing(true);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/audio/synthesize'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/audio/synthesize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id }),
@@ -741,7 +746,7 @@ function App() {
       if (!res.ok) throw new Error(data.error || 'Audio synthesis failed');
       setAudioResult(data.audioResult);
       clearRenderPreview();
-      const sessRes = await fetch(toApiUrl(`/api/pipeline/script/${session.id}`));
+      const sessRes = await pipelineFetch(toApiUrl(`/api/pipeline/script/${session.id}`));
       if (sessRes.ok) setSession(await sessRes.json());
     } catch (err) {
       alert(`Audio Synthesis Error: ${err.message}`);
@@ -750,21 +755,30 @@ function App() {
     }
   }
 
-  // 4.5. Generate High-Res Visual Screenshots (Stills in 3-4s)
-  async function handleGenerateStills() {
+  useEffect(() => {
+    setVisualMode(session?.visualAssets?.source === 'manual' ? 'manual' : 'automatic');
+  }, [session?.id, session?.visualAssets?.source]);
+
+  function acceptVisualPreviews(data) {
+    setStills(data.stills || []);
+    setReviewedVisualRevision({ sessionId: session.id, fingerprint: data.visuals.fingerprint });
+    setSession(current => current?.id === session.id ? { ...current, visualAssets: data.visuals } : current);
+    setVisualPreviewError(null);
+  }
+
+  async function handleGenerateStills(editorFeedback, sceneIndex) {
     if (!session?.id) return;
     setGeneratingStills(true);
     setVisualPreviewError(null);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/stills'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/stills'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id }),
+        body: JSON.stringify({ sessionId: session.id, editorFeedback, sceneIndex, visualMode: 'automatic' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to generate visual stills');
-      setStills(data.stills || []);
-      setSession(current => current?.id === session.id ? { ...current, visualAssets: data.visuals } : current);
+      acceptVisualPreviews(data);
     } catch (err) {
       setVisualPreviewError({ sessionId: session.id, message: err.message });
     } finally {
@@ -780,10 +794,14 @@ function App() {
     setRenderProgress(5);
     setStage(4);
     try {
-      const res = await fetch(toApiUrl('/api/pipeline/render'), {
+      const res = await pipelineFetch(toApiUrl('/api/pipeline/render'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id }),
+        body: JSON.stringify({
+          sessionId: session.id,
+          visualRevision: reviewedVisualRevision?.sessionId === session.id
+            ? reviewedVisualRevision.fingerprint : session.visualAssets?.inputRevision ? session.visualAssets.fingerprint : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Render trigger failed');
@@ -803,6 +821,7 @@ function App() {
   }
 
   const detectedKeys = detectKeys(customScriptText);
+  const awaitingManualVisuals = visualMode === 'manual' && session?.visualAssets?.source !== 'manual';
 
   const libraryReels = sessionsList.filter((s) => Boolean(s.hasVideo || s.mediaUrl));
   const draftsList = sessionsList.filter((s) => !s.hasVideo && !s.mediaUrl);
@@ -1399,7 +1418,7 @@ function App() {
             <div className="studio-main-container">
               {/* STUDIO WORKFLOW BREADCRUMB / HEADER */}
               <div className="studio-workflow-header">
-                <div>
+                <div className="studio-header-heading">
                   <div className="studio-breadcrumbs">
                     <span>Studio</span>
                     <span style={{ opacity: 0.4 }}>/</span>
@@ -1413,7 +1432,7 @@ function App() {
                   )}
                 </div>
 
-                <div className="studio-header-right" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div className="studio-header-right">
                   <div className="studio-tag-group">
                     <span className="studio-meta-tag">
                       <Film size={12} />
@@ -1431,12 +1450,11 @@ function App() {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div className="studio-header-actions">
                     <button
                       type="button"
                       onClick={handleSaveDraft}
                       className="btn btn-secondary"
-                      style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
                       title="Save Current State as Draft"
                     >
                       <Bookmark size={13} />
@@ -1446,7 +1464,6 @@ function App() {
                       type="button"
                       onClick={handleStartNewReel}
                       className="btn btn-secondary"
-                      style={{ padding: '6px 12px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
                       title="Start a fresh Reel"
                     >
                       <RotateCcw size={13} />
@@ -2281,14 +2298,23 @@ function App() {
                           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
                             Review camera moves and cuts with the saved voiceover, or inspect individual frames.
                           </p>
+                          <div className="visual-mode-switch" role="group" aria-label="Visual generation mode">
+                            <button type="button" aria-pressed={visualMode === 'automatic'} disabled={generatingStills}
+                              onClick={() => setVisualMode('automatic')}>Automatic (Groq)</button>
+                            <button type="button" aria-pressed={visualMode === 'manual'} disabled={generatingStills}
+                              onClick={() => setVisualMode('manual')}>Manual (Import JSON)</button>
+                          </div>
+                          {visualMode === 'manual' && session?.id && <ManualVisualImport key={session.id} sessionId={session.id} toApiUrl={toApiUrl}
+                            narrationKey={JSON.stringify([(audioResult || session.audioResult)?.fullAudioUrl, session.finalized, session.voiceoverNeedsRefresh])}
+                            busy={generatingStills} onBusyChange={setGeneratingStills} onGenerated={data => { acceptVisualPreviews(data); setRenderedMediaUrl(''); }} />}
                         </div>
 
                         <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24, alignItems: 'center' }}>
-                          <button
+                          {visualMode === 'automatic' && <button
                             type="button"
                             className="btn btn-primary"
                             disabled={generatingStills}
-                            onClick={handleGenerateStills}
+                            onClick={() => handleGenerateStills()}
                             style={{ padding: '8px 20px', fontSize: 13, gap: 8 }}
                           >
                             {generatingStills ? (
@@ -2297,7 +2323,7 @@ function App() {
                               <Camera size={13} />
                             )}
                             <span>{generatingStills ? 'Preparing stills…' : 'Generate Stills'}</span>
-                          </button>
+                          </button>}
 
                           <button
                             type="button"
@@ -2312,7 +2338,7 @@ function App() {
                           <button
                             type="button"
                             className="btn btn-emerald"
-                            disabled={generatingStills}
+                            disabled={generatingStills || awaitingManualVisuals}
                             onClick={() => setStage(4)}
                             style={{ padding: '8px 18px', gap: 6 }}
                           >
@@ -2327,12 +2353,57 @@ function App() {
                           {visualPreviewError.message}
                         </p>
                       )}
-                      {session?.visualAssets?.status === 'ready' && (
-                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>{stills.length} visual shots ready.</p>
+                      {stills.length > 0 && session?.visualAssets?.status === 'ready' && !session.visualAssets.unresolvedScenes?.length && (
+                        <p role="status" style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                          {stills.length} visual shots ready.
+                        </p>
                       )}
-                      {session?.id && <MotionPreview
-                        key={`${session.id}:${audioResult?.fullAudioUrl || session.audioResult?.fullAudioUrl || ''}`}
+                      {!!session?.visualAssets?.unresolvedScenes?.length && (
+                        <p role="status" className="text-sm text-amber-200">
+                          Visual planning is incomplete for scenes {session.visualAssets.unresolvedScenes.map(index => index + 1).join(', ')}. Generate Stills retries the flagged scenes.
+                        </p>
+                      )}
+                      {session?.visualAssets?.review?.status === 'unavailable' && (
+                        <p role="status" className="text-sm text-amber-200">Automated visual review unavailable. Inspect the previews before export.</p>
+                      )}
+                      {session?.visualAssets?.review?.status === 'needs-review' && (
+                        <ul className="text-sm text-amber-200">
+                          {session.visualAssets.review.issues.map(({ sceneIndex, issue }, index) => (
+                            <li key={index}>Scene {sceneIndex + 1} · {issue}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {stills.length > 0 && session?.visualAssets?.visualThread && (
+                        <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{session.visualAssets.visualThread}</p>
+                      )}
+                      {visualMode === 'automatic' && session?.visualAssets?.source !== 'manual' && <details key={session?.id} style={{ marginBottom: 16 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 13 }}>Revise visual plan</summary>
+                        <form onSubmit={event => {
+                          event.preventDefault();
+                          const data = new FormData(event.currentTarget);
+                          const feedback = data.get('editorFeedback')?.trim();
+                          const selectedScene = data.get('sceneIndex');
+                          if (feedback) void handleGenerateStills(feedback, selectedScene ? Number(selectedScene) : undefined);
+                        }} style={{ display: 'grid', justifyItems: 'start', gap: 8, marginTop: 8 }}>
+                          <textarea name="editorFeedback" aria-label="Visual direction feedback" required maxLength={500}
+                            rows={2} placeholder="Describe what should change in the shots or timing."
+                            style={{ width: '100%', maxWidth: 540, resize: 'vertical', font: 'inherit', padding: 8 }} />
+                          {stills.length > 0 && (
+                            <select name="sceneIndex" aria-label="Scene to revise">
+                              <option value="">All scenes</option>
+                              {session.storyboard?.scenes?.map((scene, index) => (
+                                <option key={scene.id} value={index}>Scene {index + 1} · {scene.onScreenText}</option>
+                              ))}
+                            </select>
+                          )}
+                          <button type="submit" disabled={generatingStills} className="btn btn-secondary">Regenerate with feedback</button>
+                        </form>
+                      </details>}
+                      {session?.id && !awaitingManualVisuals && <MotionPreview
+                        key={`${session.id}:${audioResult?.fullAudioUrl || session.audioResult?.fullAudioUrl || ''}:${session.visualAssets?.fingerprint || ''}`}
                         sessionId={session.id} scenes={session.storyboard?.scenes ?? []} toApiUrl={toApiUrl}
+                        visualRevision={session.visualAssets?.fingerprint}
+                        onReviewedRevision={setReviewedVisualRevision}
                       />}
 
                       {/* STILLS GRID */}
@@ -2391,7 +2462,7 @@ function App() {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      disabled={rendering}
+                      disabled={rendering || Boolean(session?.visualAssets?.unresolvedScenes?.length)}
                       onClick={handleRenderVideo}
                       style={{
                         padding: '8px 20px',
@@ -2404,6 +2475,10 @@ function App() {
                       <span>{rendering ? `Rendering (${renderProgress}%)` : 'Start Render'}</span>
                     </button>
                   </div>
+
+                  {!!session?.visualAssets?.unresolvedScenes?.length && (
+                    <p role="status" className="text-sm text-amber-200">Return to visual previews and retry the flagged scenes to enable export.</p>
+                  )}
 
                   {/* PROGRESS BAR */}
                   {rendering && (

@@ -9,16 +9,31 @@ import { GeminiProvider, GeminiRequestError, geminiRequest } from '../ai-script/
 import { GroqProvider } from '../ai-script/groq-provider.js';
 import { cloudflareImageModel, cloudflareImageSize, generateCloudflareImage } from './cloudflare-image-provider.js';
 import {
-  cameraMoves, cleanNarration, compileVisualPlan, motionEffects, motionIcons, narrationAnchors, numericFacts, packetOutcomes,
+  cameraMoves, cleanNarration, compileVisualPlan, filmActions, filmFraming, filmSets, motionEffects, motionIcons, narrationAnchors, numericFacts, packetOutcomes,
   visualSceneSchema, type StoryDirectionOverrides, type VisualPlan, type VisualStory,
 } from '../video/visual-story.js';
-import { prepareStoryClip } from './story-video-provider.js';
+import { prepareStoryClip, StoryClipRequestError } from './story-video-provider.js';
 import { buildLocalFilmPlan } from '../video/local-film.js';
+import { stageDirectedFilm } from '../video/directed-film.js';
+import { directOfflineMessaging, isOfflineMessagingStory } from '../video/messaging-story.js';
+import { premiumEditorialPrompt, premiumEditResponse, premiumEditSchema, premiumShotPrompt, validatePremiumHook, validatePremiumMechanism, type PremiumEdit } from './premium-direction.js';
+import { captureInstagramPost, planPublicPostShots, searchInstagramPost } from './public-posts.js';
 
 export interface ReelVisualAssets {
+  inputRevision?: string;
+  schemaVersion?: string;
+  source?: 'manual' | 'automatic';
+  manualImport?: import('./visual-directives.js').SavedVisualImport;
   fingerprint: string;
   shots: VisualPlan;
   status: 'ready';
+  direction?: 'directed' | 'mixed' | 'local';
+  visualThread?: string;
+  editorFeedback?: string;
+  unresolvedScenes?: number[];
+  semanticVisual?: import('./semantic-visual-planner.js').SemanticVisualState;
+  visualPlanningErrors?: Record<number, string>;
+  review?: import('./review-storyboard.js').VisualReview;
 }
 
 export class VisualAssetError extends Error {
@@ -76,6 +91,18 @@ Each scene's spokenNumbers lists the only numbers allowed for numeric values or 
 Use the anchor timestamps and the scene's duration to estimate each shot's span. Give a long explanation an action, a state change, or a code demonstration where the narration supports it.
 When validationFeedback is provided, repair the requested scene only. Prefer one continuous visual if the earlier cuts or reveals could not be grounded.`;
 
+const animatedDirection = `${anchorDirection}
+This renderer films original 3D sets and animates diagrams. Use kind "film" in place of "image", and never request image generation. Choose a supported set and one supported physical action for each filmed shot:
+- counter: drink (from a cup), serve (slide a bill across the counter), scan (point a phone at a QR), confirm (show a payment speaker reacting).
+- street: travel (a rider on a scooter).
+- room: open (open a fridge compartment), operate (press a physical button).
+For a film return set, performance, framing (wide, medium, close), action (the visible movement), camera, and actionCue (spoken event in this shot). Use a close insert for the object that changes and keep the setting consistent when the story returns to it.
+Match the narrated object and action before choosing a film set. An app opening, scrolling, liking a post or adding an item to a cart takes place on the phone screen. A fridge or cabinet only belongs in a scene that explicitly names that prop and action.
+Use kind "motion" for a technical explanation. Animate a grounded packet, state change, comparison, or failure on the corresponding spoken cue. Preserve the identity of participants and their previous states. Use backdrop:true when the previous shot was a filmed prop that leads into the explanation.
+Illustrate explicitly narrated facts. Leave a hypothesis unresolved until the narration answers it. Only show a transfer if the narration supports both endpoints and direction. Never turn a question, an analogy, or a pending result into a successful transaction.
+When narration names an app being opened, use a device shot with appName exactly as spoken and openCue at the spoken open/tap. Use its ordered actors as consecutive phone screen states with timing cues, for example a post appearing, a separate likes reveal, a product added to cart, or a payment status. Avoid turning app interaction into an unrelated physical action. Keep the actual named content in the state label and show concrete values only at the corresponding approved cue.
+For brand-specific hardware use the ordinary film action; the renderer selects a matching bundled model from the approved narration if it has one. For unsupported physical action, choose a grounded diagram or device interaction that explains the relevant behavior.`;
+
 const motionRepairDirection = `Direct one continuous animated diagram for the supplied approved narration. Return only headline, actors, and updates.
 Choose up to four actors or objects from the narration. Reuse an established entity ID when it represents the same object. Show the concrete operation or constraint using one to four visible states. Each update's value must describe a fact explicitly stated in its selected cue. Omit guessed initial states and consequences that the chosen cue does not say. One well-grounded update is enough. Use short qualitative values and a short headline. Do not add commands, measurements, or outcomes.`;
 
@@ -84,13 +111,15 @@ const text = { type: 'string' };
 const listOf = (items: object, maxItems?: number) => ({ type: 'array', items, maxItems });
 const recordOf = (properties: Record<string, object>, required: string[]) => ({ type: 'object', properties, required });
 const enumOf = (values: readonly string[]) => ({ type: 'string', enum: values });
-const shotResponseSchema = (allowCode: boolean) => recordOf({
+const shotResponseSchema = (allowCode: boolean, animated = false, premium = false) => recordOf({
   scenes: listOf(recordOf({
     sceneIndex: { type: 'integer' },
     shots: listOf(recordOf({
-      kind: enumOf(['image', 'motion', 'flow', 'state', 'comparison', 'device', ...(allowCode ? ['code'] : [])]),
+      kind: enumOf([animated ? 'film' : 'image', 'motion', 'flow', 'state', 'comparison', 'device', ...(allowCode ? ['code'] : [])]),
       cue: text, headline: text, evidence: text, takeaway: text, takeawayCue: text,
       brief: text, continuity: text, action: text, camera: enumOf(cameraMoves), ...(allowCode ? { code: text } : {}), scanCue: text,
+      ...(animated && { set: enumOf(filmSets), performance: enumOf(filmActions), framing: enumOf(filmFraming), actionCue: text, appName: text, openCue: text }),
+      ...(premium && { actionCue: text, appName: text, openCue: text, screenLayout: enumOf(['phone', 'desktop']), screenContent: enumOf(['messages', 'feed', 'checkout', 'status']) }),
       actors: listOf(recordOf({ entity: text, label: text, icon: enumOf(motionIcons), brand: text, value: text, cue: text, tone: text }, ['entity', 'label']), 4),
       transfers: listOf(recordOf({ source: text, target: text, cue: text }, ['source', 'target', 'cue']), 4),
       events: listOf(recordOf({
@@ -115,15 +144,21 @@ const shotKind = (kinds: string[], fields: Record<string, object> = {}) => stric
   kind: { type: 'string', enum: kinds }, cue: text, headline: text, evidence: text,
   ...fields, takeaway: nullableText, takeawayCue: nullableText,
 });
-const groqShotSchema = (allowCode: boolean) => strictRecord({
+const groqShotSchema = (allowCode: boolean, animated = false, premium = false) => strictRecord({
   scenes: listOf(strictRecord({
     sceneIndex: { type: 'integer' },
     shots: listOf({ anyOf: [
-      shotKind(['image'], { brief: text, continuity: text, action: text, camera: enumOf(cameraMoves) }),
+      animated ? shotKind(['film'], {
+        action: text, camera: enumOf(cameraMoves), set: enumOf(filmSets), performance: enumOf(filmActions),
+        framing: enumOf(filmFraming), actionCue: text,
+      }) : shotKind(['image'], { brief: text, continuity: text, action: text, camera: enumOf(cameraMoves), ...(premium && { actionCue: nullableText }) }),
       shotKind(['motion'], { actors: listOf(strictMotionActor), events: listOf(strictMotionEvent), reset: { type: 'boolean' }, backdrop: { type: 'boolean' } }),
       shotKind(['flow', 'state'], { actors: listOf(strictActor), transfers: listOf(strictTransfer) }),
       shotKind(['comparison'], { actors: listOf(strictActor) }),
-      shotKind(['device'], { actors: listOf(strictActor), backdrop: { type: 'boolean' }, scanCue: nullableText }),
+      shotKind(['device'], { actors: listOf(strictActor), backdrop: { type: 'boolean' }, scanCue: nullableText,
+        ...((animated || premium) && { appName: nullableText, openCue: nullableText }),
+        ...(premium && { screenLayout: { anyOf: [enumOf(['phone', 'desktop']), { type: 'null' }] },
+          screenContent: { anyOf: [enumOf(['messages', 'feed', 'checkout', 'status']), { type: 'null' }] } }) }),
       ...(allowCode ? [shotKind(['code'], { code: text })] : []),
     ] }),
   })),
@@ -172,7 +207,7 @@ function sceneFromDraft(draft: unknown[], sceneIndex: number): unknown {
   return matches[0];
 }
 
-function approvedClosingCard(storyboard: Storyboard): VisualStory['scenes'][number] | undefined {
+export function approvedClosingCard(storyboard: Storyboard): VisualStory['scenes'][number] | undefined {
   const sceneIndex = storyboard.scenes.length - 1;
   const scene = storyboard.scenes[sceneIndex];
   if (scene?.type !== 'tradeoffHUD' || !scene.visualProps?.callToAction) return;
@@ -268,7 +303,7 @@ async function readPlan(file: string): Promise<string | undefined> {
   });
 }
 
-async function savePlan(file: string, plan: VisualStory): Promise<void> {
+async function savePlan(file: string, plan: VisualStory | PremiumEdit): Promise<void> {
   await fs.mkdir(library, { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
   try {
@@ -324,59 +359,160 @@ async function savePlate(hash: string, bytes: Buffer): Promise<string> {
   return `${assetFolder}/${filename}`;
 }
 
+export async function prepareSceneArtwork(brief: string, evidence: string): Promise<string | undefined> {
+  if (process.env.REEL_IMAGE_GENERATION !== 'on') return;
+  const provider = process.env.REEL_IMAGE_PROVIDER?.trim() || 'gemini';
+  const model = provider === 'cloudflare' ? cloudflareImageModel : process.env.REEL_IMAGE_MODEL?.trim() || 'gemini-3.1-flash-image';
+  const imagePrompt = `Portrait 9:16 cinematic editorial illustration of this scene: ${brief}.
+Spoken context: ${evidence}. Compose the main subject near the center with room for captions below. Show one physical moment in a believable environment with natural light and controlled color. No text, logos, diagrams or added technical claims.`;
+  const hash = createHash('sha256').update(JSON.stringify([provider, model, imagePrompt])).digest('hex');
+  const cached = await cachedPlate(hash);
+  if (cached) return cached;
+  try {
+    const key = process.env.GEMINI_API_KEY;
+    if (provider === 'cloudflare') return await savePlate(hash, await generateCloudflareImage(imagePrompt));
+    if (provider === 'gemini' && key) return await savePlate(hash, await generateGeminiImage(key, model, imagePrompt));
+  } catch {
+    console.warn('[Storyboard] Scene artwork was unavailable.');
+  }
+}
+
+export async function saveAppScreen(bytes: Buffer): Promise<string> {
+  return savePlate(createHash('sha256').update(bytes).digest('hex'), bytes);
+}
+
+export async function saveVectorAsset(bytes: Buffer): Promise<string> {
+  await fs.mkdir(library, { recursive: true });
+  const filename = `${createHash('sha256').update(bytes).digest('hex')}.svg`;
+  const temporary = path.join(library, `${randomUUID()}.tmp`);
+  try {
+    await fs.writeFile(temporary, bytes, { flag: 'wx' });
+    await fs.rename(temporary, path.join(library, filename));
+  } finally {
+    await fs.rm(temporary, { force: true });
+  }
+  return `${assetFolder}/${filename}`;
+}
+
+async function stagePublicAppScreens(plan: VisualPlan, storyboard: Storyboard, timeline: VideoTimeline, search = true): Promise<VisualPlan> {
+  const shots = planPublicPostShots(plan, storyboard, timeline);
+  const captures = new Map<string, string | undefined>();
+  for (const [sceneIndex, group] of shots.entries()) for (const shot of group) {
+    if (shot.kind !== 'device' || shot.appName?.toLowerCase() !== 'instagram' || shot.asset || shot.scanFrame !== undefined) continue;
+    try {
+      const subject = narrationAnchors(storyboard.scenes[sceneIndex].narration).find(anchor => anchor.id === shot.evidence)?.text ?? shot.evidence;
+      const url = shot.publicPostUrl ?? (search && /\bpost\b|पोस्ट/iu.test(subject) ? await searchInstagramPost(subject) : undefined);
+      if (!url) continue;
+      if (!captures.has(url)) {
+        const hash = createHash('sha256').update(`instagram-embed-v1:${url}`).digest('hex');
+        const asset = await cachedPlate(hash) ?? await savePlate(hash, await captureInstagramPost(url));
+        captures.set(url, asset);
+      }
+      shot.publicPostUrl = url;
+      shot.asset = captures.get(url);
+    } catch (error) {
+      console.warn('[Public App Screen]', error instanceof Error ? error.message : 'Capture unavailable');
+    }
+  }
+  return shots;
+}
+
+export async function prepareSavedReelVisuals(storyboard: Storyboard, timeline: VideoTimeline,
+  previous: ReelVisualAssets | undefined, overrides?: StoryDirectionOverrides): Promise<ReelVisualAssets> {
+  if (previous?.shots.length === storyboard.scenes.length && previous.shots.flat().every(shot => shot.premium)) return previous;
+  if (isOfflineMessagingStory(storyboard)) return offlineMessagingAssets(storyboard, timeline, previous);
+  const saved = previous?.shots.length === storyboard.scenes.length ? previous : undefined;
+  const base = saved?.shots ?? buildLocalFilmPlan(storyboard, timeline);
+  return {
+    fingerprint: saved?.fingerprint ?? '', status: 'ready', direction: saved?.direction ?? 'local',
+    shots: await stagePublicAppScreens(stageDirectedFilm(base, storyboard, timeline, overrides), storyboard, timeline, false),
+  };
+}
+
+function offlineMessagingAssets(storyboard: Storyboard, timeline: VideoTimeline, previous?: ReelVisualAssets): ReelVisualAssets {
+  const fingerprint = createHash('sha256').update(JSON.stringify(['offline-messaging-v2', storyboard, timeline])).digest('hex');
+  return { fingerprint, status: 'ready', direction: 'directed', shots: directOfflineMessaging(storyboard, timeline, previous?.shots) };
+}
+
 export async function prepareReelVisuals(
   storyboard: Storyboard,
   timeline: VideoTimeline,
   previous?: ReelVisualAssets,
-  options: { throughFrame?: number; overrides?: StoryDirectionOverrides; localFilm?: boolean } = {},
+  options: { throughFrame?: number; overrides?: StoryDirectionOverrides; localFilm?: boolean; premium?: boolean; editorFeedback?: string } = {},
 ): Promise<ReelVisualAssets> {
-  if (options.localFilm) {
-    const fingerprint = createHash('sha256').update(JSON.stringify(['local-film', storyboard, timeline, options.overrides])).digest('hex');
-    return { fingerprint, shots: buildLocalFilmPlan(storyboard, timeline, options.overrides), status: 'ready' };
-  }
+  const premium = options.premium === true;
+  const animated = options.localFilm === true && !premium;
+  if (animated && isOfflineMessagingStory(storyboard)) return offlineMessagingAssets(storyboard, timeline, previous);
   const imageProvider = process.env.REEL_IMAGE_PROVIDER?.trim() || 'gemini';
-  if (imageProvider !== 'gemini' && imageProvider !== 'cloudflare') throw new Error('REEL_IMAGE_PROVIDER must be gemini or cloudflare.');
+  if (!animated && imageProvider !== 'gemini' && imageProvider !== 'cloudflare') throw new Error('REEL_IMAGE_PROVIDER must be gemini or cloudflare.');
   const geminiImageModel = process.env.REEL_IMAGE_MODEL?.trim() || 'gemini-3.1-flash-image';
   const model = imageProvider === 'cloudflare' ? cloudflareImageModel : geminiImageModel;
   const videoModel = process.env.REEL_STORY_VIDEO_MODEL?.trim();
   const scriptProvider = process.env.LLM_PROVIDER === 'groq' ? 'groq' : 'gemini';
-  const directorProvider = process.env.REEL_DIRECTOR_PROVIDER?.trim() || scriptProvider;
+  const directorProvider = (premium && process.env.REEL_PREMIUM_DIRECTOR_PROVIDER?.trim()) || process.env.REEL_DIRECTOR_PROVIDER?.trim() || scriptProvider;
   if (directorProvider !== 'gemini' && directorProvider !== 'groq') throw new Error('REEL_DIRECTOR_PROVIDER must be gemini or groq.');
   const providerModels = { groq: process.env.GROQ_MODEL?.trim(), gemini: process.env.GEMINI_MODEL?.trim() };
-  const directorModel = process.env.REEL_DIRECTOR_MODEL?.trim() || providerModels[directorProvider];
+  const directorModel = (premium && process.env.REEL_PREMIUM_DIRECTOR_MODEL?.trim()) || process.env.REEL_DIRECTOR_MODEL?.trim() || providerModels[directorProvider];
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   const scenes = storyboard.scenes.map((scene, sceneIndex) => ({
     sceneIndex, narration: cleanNarration(scene.narration),
     durationSec: (timeline.segments[sceneIndex]?.audioDurationMs ?? 0) / 1000,
   }));
-  const visualLimit = options.throughFrame ?? Number.POSITIVE_INFINITY;
+  // A dashboard preview and a full export share the complete directed plan.
+  const visualLimit = animated || premium ? Number.POSITIVE_INFINITY : options.throughFrame ?? Number.POSITIVE_INFINITY;
   const plannedSceneCount = timeline.segments.filter(segment => segment.startFrame <= visualLimit).length;
-  const scriptInput = JSON.stringify({ title: storyboard.title, scenes });
+  const editorFeedback = premium ? (options.editorFeedback ?? previous?.editorFeedback)?.trim() : undefined;
+  const scriptInput = JSON.stringify({ title: storyboard.title, scenes, ...(editorFeedback && { editorFeedback }) });
+  const editorialPrompt = editorFeedback
+    ? `${premiumEditorialPrompt}\nApply the supplied editorFeedback to visual direction only. Keep all scenes, narration and technical claims grounded in the supplied script.`
+    : premiumEditorialPrompt;
   // Keep existing plans and artwork when an independent planning or artwork provider is selected.
   const legacyDirectorModel = directorProvider === scriptProvider ? directorModel : providerModels[scriptProvider];
-  const planFingerprint = createHash('sha256').update(JSON.stringify([direction, geminiImageModel, scriptProvider, legacyDirectorModel, scriptInput, timeline])).digest('hex');
+  const planFingerprint = createHash('sha256').update(JSON.stringify(animated
+    ? [animatedDirection, directorProvider, directorModel, scriptInput, timeline]
+    : premium ? [anchorDirection, editorialPrompt, premiumShotPrompt, 'premium-v1', directorProvider, directorModel, scriptInput, timeline]
+      : [direction, geminiImageModel, scriptProvider, legacyDirectorModel, scriptInput, timeline])).digest('hex');
   const overrides = Object.entries(options.overrides ?? {}).sort(([left], [right]) => left.localeCompare(right));
-  const fingerprint = createHash('sha256').update(JSON.stringify([planFingerprint, imageProvider, model, cloudflareImageSize, videoModel, overrides])).digest('hex');
+  const fingerprint = animated ? planFingerprint
+    : createHash('sha256').update(JSON.stringify([planFingerprint, imageProvider, model, cloudflareImageSize, videoModel, overrides])).digest('hex');
   const closing = approvedClosingCard(storyboard);
   const hasUnapprovedCta = (plan: VisualPlan) => plan.some((group, sceneIndex) =>
     sceneIndex !== closing?.sceneIndex && group.some(shot => shot.kind === 'cta'));
   if (previous?.fingerprint === fingerprint && previous.shots && !hasUnapprovedCta(previous.shots)) {
-    const paths = previous.shots.flat().flatMap(shot => [shot.asset, shot.clip?.asset].filter((file): file is string => Boolean(file)));
-    if ((await Promise.all(paths.map(file => fs.access(path.join('media', file)).then(() => true, () => false)))).every(Boolean)) return previous;
+    if (animated) {
+      if (previous.shots.length === storyboard.scenes.length) {
+        const staged = stageDirectedFilm(previous.shots, storyboard, timeline, options.overrides);
+        return { ...previous, shots: await stagePublicAppScreens(staged, storyboard, timeline) };
+      }
+    } else {
+      const paths = previous.shots.flat().flatMap(shot => [shot.asset, shot.beatAsset, shot.clip?.asset].filter((file): file is string => Boolean(file)));
+      if ((await Promise.all(paths.map(file => fs.access(path.join('media', file)).then(() => true, () => false)))).every(Boolean)) return previous;
+    }
   }
-  const workKey = `${fingerprint}:${options.throughFrame ?? 'full'}`;
+  const workKey = animated ? `${fingerprint}:${JSON.stringify(overrides)}` : `${fingerprint}:${premium ? 'full' : options.throughFrame ?? 'full'}`;
   const pending = active.get(workKey);
   if (pending) return pending;
   const work = (async (): Promise<ReelVisualAssets> => {
     const file = path.join(library, `${planFingerprint}.json`);
     const saved = await readPlan(file);
     let shots: VisualPlan | undefined;
+    let localScenes: number[] = [];
     let cachedScenes: unknown[] = [];
+    let editorialPlan: PremiumEdit | undefined;
+    const isMechanism = (index: number) => editorialPlan?.scenes.find(scene => scene.sceneIndex === index)?.purpose === 'mechanism';
+    const editFile = path.join(library, `${planFingerprint}.edit.json`);
+    if (premium) {
+      const savedEdit = await readPlan(editFile);
+      if (savedEdit) {
+        try { editorialPlan = premiumEditSchema.parse(JSON.parse(savedEdit)); } catch { /* Rebuild an invalid editorial plan. */ }
+      }
+    }
     if (saved) {
       try {
         cachedScenes = parseDraft(saved);
         const compiled = compileVisualPlan({ scenes: cachedScenes }, storyboard, timeline, 0, storyboard.scenes.length, { repairAnnotations: true });
-        if (!hasUnapprovedCta(compiled)) shots = compiled;
+        if (!hasUnapprovedCta(compiled) && (!premium || (editorialPlan && !validatePremiumHook(compiled, storyboard, timeline)
+          && compiled.every((group, index) => !validatePremiumMechanism(group, isMechanism(index), index))))) shots = compiled;
       } catch (error) {
         console.warn('[VisualPlanner] Replanning an invalid cached shot plan:', error instanceof Error ? error.message : 'Invalid plan');
       }
@@ -389,7 +525,39 @@ export async function prepareReelVisuals(
         ? new GroqProvider(directorKey, directorModel)
         : new GeminiProvider(directorKey, directorModel);
       const responseSchema = directorProvider === 'groq' ? groqShotSchema : shotResponseSchema;
+      const alternateKey = directorProvider === 'groq' ? apiKey : process.env.GROQ_API_KEYS?.trim() || process.env.GROQ_API_KEY?.trim();
+      const backup = !premium || !alternateKey ? undefined : directorProvider === 'groq'
+        ? new GeminiProvider(alternateKey, providerModels.gemini) : new GroqProvider(alternateKey, providerModels.groq);
+      let preferBackup = false;
+      const generate = async (prompt: string, instructions: string, schema: object, backupSchema = schema) => {
+        const callBackup = () => backup!.generateJSON(prompt, instructions, 60_000, backupSchema);
+        if (backup && (!provider || preferBackup)) return requestVisualPlan(callBackup);
+        if (!provider) throw new VisualPlanningError(`Visual planning needs a configured ${directorProvider} API key.`);
+        try { return await requestVisualPlan(() => provider.generateJSON(prompt, instructions, 60_000, schema)); }
+        catch (error) {
+          const status = error instanceof GeminiRequestError ? error.status : Number(error instanceof Error ? /^Groq API error \[(\d+)\]/.exec(error.message)?.[1] : 0);
+          if (!backup || (!status || (status !== 429 && status < 500))) throw error;
+          preferBackup = true;
+          return requestVisualPlan(callBackup);
+        }
+      };
+      if (premium && !editorialPlan) {
+        try {
+          const raw = await generate(scriptInput, editorialPrompt, premiumEditResponse);
+          editorialPlan = premiumEditSchema.parse(parseDirectorJson(raw));
+          const indices = editorialPlan.scenes.map(scene => scene.sceneIndex).sort((left, right) => left - right);
+          if (indices.length !== scenes.length || indices.some((index, expected) => index !== expected)) {
+            throw new Error('The editorial plan needs one entry for each scene.');
+          }
+          await savePlan(editFile, editorialPlan);
+        } catch (error) {
+          const detail = error instanceof z.ZodError ? error.issues.map(issue => `${issue.path.join('.')} ${issue.message}`).join(', ')
+            : error instanceof Error ? error.message : 'The provider returned an invalid plan.';
+          throw new VisualPlanningError(`Could not complete the premium editorial plan. ${detail}`);
+        }
+      }
       const planned: VisualStory['scenes'] = [];
+      let directorUnavailable = !provider;
       const entities = new Map<string, string>();
       const settings = new Set<string>();
       const scenesWithAnchors = scenes.map(scene => ({
@@ -420,7 +588,6 @@ export async function prepareReelVisuals(
         if (closing && indices.includes(closing.sceneIndex)) approved.set(closing.sceneIndex, closing);
         let label = describeScenes(start, end);
         const requestPlan = async (requestedIndices: number[], validationFeedback?: string) => {
-          if (!provider) throw new VisualPlanningError(`Visual planning needs a configured ${directorProvider} API key.`);
           const requested = new Set(requestedIndices);
           const inputs = scenesWithAnchors.filter(scene => requested.has(scene.sceneIndex));
           label = describeScenes(requestedIndices[0], requestedIndices[requestedIndices.length - 1] + 1);
@@ -429,12 +596,15 @@ export async function prepareReelVisuals(
             scenes: inputs,
             storyContext: scenes.filter(scene => !requested.has(scene.sceneIndex)),
             establishedEntities: { actors: Object.fromEntries(entities), settings: [...settings] },
+            ...(editorialPlan && { editorialPlan, editorFeedback }),
             validationFeedback,
           });
-          return requestVisualPlan(() => provider.generateJSON(prompt, anchorDirection, 60_000, responseSchema(inputs.some(scene => scene.allowCode))));
+          const instructions = animated ? animatedDirection : premium ? `${anchorDirection}\n${premiumShotPrompt}` : anchorDirection;
+          const allowCode = inputs.some(scene => scene.allowCode);
+          const alternateSchema = directorProvider === 'groq' ? shotResponseSchema : groqShotSchema;
+          return generate(prompt, instructions, responseSchema(allowCode, animated, premium), alternateSchema(allowCode, animated, premium));
         };
         const requestMotionRepair = async (index: number) => {
-          if (!provider) throw new VisualPlanningError(`Visual planning needs a configured ${directorProvider} API key.`);
           label = describeScenes(index, index + 1);
           const { narration, anchors } = scenesWithAnchors[index];
           const schema = strictRecord({
@@ -445,7 +615,7 @@ export async function prepareReelVisuals(
             }), 4),
           });
           const prompt = JSON.stringify({ narration, anchors, establishedActors: Object.fromEntries(entities) });
-          const raw = await requestVisualPlan(() => provider.generateJSON(prompt, motionRepairDirection, 60_000, schema));
+          const raw = await generate(prompt, motionRepairDirection, schema);
           return parseMotionRepair(raw, index);
         };
         const checkpoint = path.join(library, `${planFingerprint}.${start}.json`);
@@ -461,6 +631,30 @@ export async function prepareReelVisuals(
         };
         const keepScene = (draft: unknown[], index: number, allowCode = true) => {
           const scene = validateScene(sceneFromDraft(draft, index), index, storyboard, timeline, allowCode);
+          if (premium && scene.shots.some(shot => shot.kind === 'film')) {
+            throw new ShotPlanValidationError(`Scene ${index + 1} contains a stock physical shot. Choose story artwork, a screen or a diagram.`);
+          }
+          if (premium && scene.shots.some(shot => shot.kind === 'image' && (!shot.action || !shot.camera))) {
+            throw new ShotPlanValidationError(`Scene ${index + 1} needs a specific opening frame, visible action and camera direction for each artwork shot.`);
+          }
+          if (premium && (index === 0 || isMechanism(index))) {
+            const compiled = compileVisualPlan({ scenes: [scene] }, storyboard, timeline, index, index + 1, { repairAnnotations: true });
+            const issue = validatePremiumMechanism(compiled[0], isMechanism(index), index)
+              ?? (index === 0 ? validatePremiumHook(compiled, storyboard, timeline) : undefined);
+            if (issue) throw new ShotPlanValidationError(issue);
+          }
+          if (animated && scene.shots.some(shot => shot.kind === 'image')) {
+            throw new ShotPlanValidationError(`Scene ${index + 1} requires film or an animated diagram.`, true);
+          }
+          if (animated && scene.shots.some(shot => shot.kind === 'film' && shot.set === 'room' && shot.performance === 'open') &&
+              !/\b(?:fridge|refrigerator|cabinet|cupboard|compartment)\b|फ्रिज|अलमारी/iu.test(scenes[index].narration)) {
+            throw new ShotPlanValidationError(`Scene ${index + 1} does not narrate a compartment opening. Use the narrated device action or explanation.`, true);
+          }
+          if (animated && scene.shots.some(shot => shot.kind === 'film' &&
+              ((shot.performance === 'scan' && !/\b(?:qr|scan\w*)\b|स्कैन/iu.test(scenes[index].narration)) ||
+               (shot.performance === 'confirm' && !/sound\s*box|speaker|साउंड\s*बॉक्स|स्पीकर/iu.test(scenes[index].narration))))) {
+            throw new ShotPlanValidationError(`Scene ${index + 1} does not narrate the scan or payment speaker shown. Use a device or motion shot.`, true);
+          }
           approved.set(index, scene);
           rememberContinuity(scene);
         };
@@ -491,6 +685,11 @@ export async function prepareReelVisuals(
               }
             }
             checkpointCount = approved.size;
+          }
+          if (animated && directorUnavailable) {
+            planned.push(...approved.values());
+            localScenes.push(...indices.filter(index => !approved.has(index)));
+            continue;
           }
           for (const index of cachedMotionRepairs) {
             keepScene([await requestMotionRepair(index)], index, false);
@@ -532,8 +731,17 @@ export async function prepareReelVisuals(
             }
           }
         } catch (error) {
+          const groqStatus = error instanceof Error ? /^Groq API error \[(\d+)\]/.exec(error.message) : null;
+          if (animated) {
+            const status = Number(error instanceof GeminiRequestError ? error.status : groqStatus?.[1]);
+            directorUnavailable = directorUnavailable || status === 429 || status === 401 || status === 403 || status >= 500;
+            const missing = indices.filter(index => !approved.has(index));
+            localScenes.push(...missing);
+            console.warn(`[VisualPlanner] Using local direction for scenes ${missing.map(index => index + 1).join(', ')}.`);
+            planned.push(...approved.values());
+            continue;
+          }
           if (error instanceof VisualPlanningError) throw error;
-          const groqStatus = error instanceof Error && /^Groq API error \[(\d+)\]/.exec(error.message);
           const detail = error instanceof GeminiRequestError || error instanceof ShotPlanValidationError ? error.message
             : groqStatus ? `Groq returned HTTP ${groqStatus[1]}. Check the configured model and project quota.`
             : 'The model could not produce a valid shot plan for these scenes.';
@@ -545,13 +753,27 @@ export async function prepareReelVisuals(
         }
         planned.push(...indices.flatMap(index => approved.get(index) ?? []));
       }
-      shots = compileVisualPlan({ scenes: planned }, storyboard, timeline, 0, plannedSceneCount, { repairAnnotations: true });
-      if (plannedSceneCount === scenes.length) {
+      if (localScenes.length) {
+        const local = buildLocalFilmPlan(storyboard, timeline);
+        for (const scene of planned) {
+          local[scene.sceneIndex] = compileVisualPlan({ scenes: [scene] }, storyboard, timeline, scene.sceneIndex,
+            scene.sceneIndex + 1, { repairAnnotations: true })[0];
+        }
+        shots = local;
+      } else shots = compileVisualPlan({ scenes: planned }, storyboard, timeline, 0, plannedSceneCount, { repairAnnotations: true });
+      if (plannedSceneCount === scenes.length && !localScenes.length) {
         await savePlan(file, { scenes: planned });
         await Promise.all(checkpoints.map(checkpoint => fs.rm(checkpoint, { force: true }).catch(() => undefined)));
       }
     }
+    if (animated) {
+      return {
+        fingerprint, shots: await stagePublicAppScreens(stageDirectedFilm(shots, storyboard, timeline, options.overrides), storyboard, timeline), status: 'ready',
+        direction: localScenes.length === 0 ? 'directed' : localScenes.length === scenes.length ? 'local' : 'mixed',
+      };
+    }
     const continuity = new Map<string, string>();
+    let videoUnavailable = false;
     for (const shot of shots.flatMap((group, index) =>
       group.filter(entry => timeline.segments[index].startFrame + entry.from <= visualLimit)
     )) {
@@ -567,33 +789,58 @@ export async function prepareReelVisuals(
         `Action and framing: ${shot.brief}`,
         `Opening pose for the following action: ${shot.action}`,
         `Recurring subjects and setting: ${shot.continuity}`,
+        ...(editorialPlan ? [`Reel visual continuity: ${editorialPlan.continuity}`] : []),
       ].join('\n');
       const reference = continuity.get(shot.continuity);
       // Scope the cache to this version of this reel; a retry can resume completed shots.
       const hash = createHash('sha256').update(JSON.stringify([model, imageProvider, cloudflareImageSize, shot.id, prompt, reference])).digest('hex');
       try {
-        shot.asset = await cachedPlate(hash);
-        if (!shot.asset) {
+        const getArtwork = async (key: string, instructions: string, reference?: string) => {
+          const cached = await cachedPlate(key);
+          if (cached) return cached;
           if (process.env.REEL_IMAGE_GENERATION === 'off') throw new Error('Image generation is disabled.');
           const referencePath = reference ? path.join('media', reference) : undefined;
           if (imageProvider === 'gemini' && !apiKey) throw new Error('Gemini artwork requires GEMINI_API_KEY.');
-          const bytes = imageProvider === 'cloudflare' ? await generateCloudflareImage(prompt, referencePath)
-            : await generateGeminiImage(apiKey!, model, prompt, referencePath);
-          shot.asset = await savePlate(hash, bytes);
-        }
+          const bytes = imageProvider === 'cloudflare' ? await generateCloudflareImage(instructions, referencePath)
+            : await generateGeminiImage(apiKey!, model, instructions, referencePath);
+          return savePlate(key, bytes);
+        };
+        shot.asset = await getArtwork(hash, prompt, reference);
         if (!reference) continuity.set(shot.continuity, shot.asset);
-        if (videoModel) {
+        if (videoModel && !videoUnavailable) {
           if (!apiKey) throw new Error('Motion clips require GEMINI_API_KEY.');
-          shot.clip = await prepareStoryClip({
-            library, assetFolder, image: shot.asset, model: videoModel, apiKey,
-            action: shot.action, camera: shot.camera, seconds: shot.duration / timeline.fps,
-          });
+          try {
+            shot.clip = await prepareStoryClip({
+              library, assetFolder, image: shot.asset, model: videoModel, apiKey,
+              action: shot.action, camera: shot.camera, seconds: shot.duration / timeline.fps,
+              ...(premium && shot.actionFrame !== undefined && { actionAtSec: shot.actionFrame / timeline.fps }),
+            });
+          } catch (error) {
+            if (!premium || !(error instanceof StoryClipRequestError) || ![402, 403, 429, 503].includes(error.status)) throw error;
+            console.warn(`[VisualArtwork] ${error.message} The remaining shots will use artwork.`);
+            videoUnavailable = true;
+          }
+        }
+        if (!shot.clip && premium && shot.actionFrame !== undefined && shot.actionFrame > 0 && shot.duration - shot.actionFrame > timeline.fps * 0.45) {
+          const resultPrompt = `${prompt}\nShow the visible result after this one action finishes: ${shot.action}. Use the supplied opening artwork as a reference. Keep the camera framing, characters and environment consistent. Change the object or pose needed to make the action readable.`;
+          const resultHash = createHash('sha256').update(JSON.stringify([hash, resultPrompt, shot.asset])).digest('hex');
+          shot.beatAsset = await getArtwork(resultHash, resultPrompt, shot.asset);
         }
       } catch (error) {
         throw new VisualAssetError(shot.id, error instanceof Error ? error.message : 'Image generation failed.');
       }
     }
-    return { fingerprint, shots, status: 'ready' };
+    if (premium) {
+      const retained = previous?.shots.flat();
+      for (const shot of shots.flat()) {
+        if (shot.kind !== 'device' || !shot.appName) continue;
+        const capture = retained?.find(item => item.id === shot.id && item.kind === 'device' && item.appName === shot.appName && item.evidence === shot.evidence);
+        if (capture?.asset && !capture.publicPostUrl) shot.asset = capture.asset;
+      }
+      shots = await stagePublicAppScreens(shots, storyboard, timeline);
+      for (const shot of shots.flat()) shot.premium = true;
+    }
+    return { fingerprint, shots, status: 'ready', ...(premium && { direction: 'directed' as const, visualThread: editorialPlan?.visualThread, editorFeedback }) };
   })();
   active.set(workKey, work);
   try {
@@ -607,14 +854,17 @@ export async function stageReelVisuals(bundlePath: string, shots: VisualPlan = [
   const destination = path.join(bundlePath, 'public', assetFolder);
   const sources = new Set<string>();
   for (const shot of shots.flat()) {
-    if (shot.kind !== 'image') continue;
-    if (!shot.asset) throw new VisualAssetError(shot.id, 'Required artwork is missing.');
-    sources.add(shot.asset);
+    for (const layer of shot.vector?.layers ?? []) if (layer.asset) sources.add(layer.asset);
+    if (shot.kind === 'image' && !shot.asset) throw new VisualAssetError(shot.id, 'Required artwork is missing.');
+    if (shot.kind !== 'image' && !(shot.kind === 'device' && shot.appName)) continue;
+    if (shot.asset) sources.add(shot.asset);
+    if (shot.beatAsset) sources.add(shot.beatAsset);
+    for (const layer of shot.layers?.subjects ?? []) sources.add(layer.asset);
     if (shot.clip) sources.add(shot.clip.asset);
   }
   for (const source of sources) {
     const [folder, filename, extra] = source.split('/');
-    if (folder !== assetFolder || !(assetName.test(filename ?? '') || /^[a-f0-9]{64}\.mp4$/.test(filename ?? '')) || extra !== undefined) {
+    if (folder !== assetFolder || !(assetName.test(filename ?? '') || /^[a-f0-9]{64}\.(?:mp4|svg)$/.test(filename ?? '')) || extra !== undefined) {
       throw new Error('Invalid cached reel visual path.');
     }
     await fs.mkdir(destination, { recursive: true });

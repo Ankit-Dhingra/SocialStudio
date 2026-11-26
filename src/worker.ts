@@ -13,12 +13,13 @@ process.env.TEMP = diskTmpDir;
 process.env.TMP = diskTmpDir;
 
 import { Worker, Job } from 'bullmq';
-import { pool, connection, queue, patch, StoryboardSchema, type Storyboard } from './core.js';
+import { pool, connection, patch, StoryboardSchema, type Storyboard } from './core.js';
 import { generateHinglishScript } from './modules/ai-script/script-generator.js';
 import { synthesizeStoryboardNarration } from './modules/tts/tts-service.js';
 import { buildVideoTimeline } from './modules/video/timeline.js';
 import { renderStudioShort } from './modules/render/video-renderer.js';
-import { prepareReelVisuals } from './modules/render/reel-visual-assets.js';
+import { prepareStoryboardVisuals } from './modules/render/storyboard-visuals.js';
+import { renderReviewedPreviews } from './modules/render/review-storyboard.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 
 export interface VideoJobData {
@@ -123,15 +124,29 @@ export const worker = new Worker<VideoJobData>(
       console.log(`[Worker:${id}] Timeline: ${timeline.totalDurationInFrames} frames (${timeline.totalDurationSec}s @ 30 fps).`);
       const targetMp4Path = path.resolve('media/runs', id, 'final-short.mp4');
 
+      let visuals = await prepareStoryboardVisuals(storyboard, timeline);
+      await job.updateProgress(50);
+      if (process.env.REEL_VISUAL_REVIEW_MODEL?.trim()) {
+        console.log(`[Worker:${id}] Rendering scene previews for visual review...`);
+        const previews = await renderReviewedPreviews(storyboard, timeline, visuals,
+          path.join(runDir, 'previews'), `/media/runs/${id}/previews`);
+        visuals = previews.visuals;
+      }
+      fs.writeFileSync(path.join(runDir, '.visual-plan.json'), JSON.stringify({ timeline, visuals }, null, 2));
+      if (visuals.schemaVersion === 'semantic-v1' && visuals.unresolvedScenes?.length) {
+        throw new Error(`Resolve visual scenes ${visuals.unresolvedScenes.map(index => index + 1).join(', ')} before exporting.`);
+      }
+      if (process.env.REEL_VISUAL_REVIEW_MODEL?.trim() && visuals.review?.status !== 'passed') {
+        throw new Error('Visual review needs attention. Inspect the saved scene previews and visual plan.');
+      }
       console.log(`[Worker:${id}] Rendering composition StudioShort to ${targetMp4Path}...`);
-      const visuals = await prepareReelVisuals(storyboard, timeline);
       const renderResult = await renderStudioShort({
         storyboard,
         timeline,
         visualPlan: visuals.shots,
         outputFilePath: targetMp4Path,
         onProgress: (p) => {
-          const overallProgress = 45 + Math.round(p.percent * 0.45); // 45% -> 90%
+          const overallProgress = 55 + Math.round(p.percent * 0.35);
           job.updateProgress(overallProgress);
         },
       });

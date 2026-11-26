@@ -58,7 +58,11 @@ export class GeminiProvider {
     this.model = model;
   }
 
-  async generateJSON(prompt: string, systemInstruction?: string, timeoutMs = 25_000, responseJsonSchema?: object): Promise<string> {
+  get modelName() { return this.model; }
+
+  async generateJSON(prompt: string, systemInstruction?: string, timeoutMs = 25_000, responseJsonSchema?: object,
+    referenceImage?: { mimeType: 'image/png'; data: string },
+    options?: { maxOutputTokens: number; onUsage: (usage: unknown, finish?: string) => void }): Promise<string> {
     const model = this.model.replace(/^models\//, '');
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
@@ -66,13 +70,14 @@ export class GeminiProvider {
       contents: [
         {
           role: 'user',
-          parts: [{ text: prompt }],
+          parts: referenceImage ? [{ text: prompt }, { inlineData: referenceImage }] : [{ text: prompt }],
         },
       ],
       generationConfig: {
         responseMimeType: 'application/json',
         temperature: 0.6,
         responseJsonSchema,
+        maxOutputTokens: options?.maxOutputTokens,
       },
     };
 
@@ -87,6 +92,7 @@ export class GeminiProvider {
       throw new GeminiRequestError('Gemini returned an unreadable API response.');
     });
     const candidate = data.candidates?.[0];
+    options?.onUsage(data.usageMetadata, candidate?.finishReason);
     const output = candidate?.content?.parts?.map((part: { text?: string; thought?: boolean }) =>
       part.thought ? '' : part.text ?? '',
     ).join('');

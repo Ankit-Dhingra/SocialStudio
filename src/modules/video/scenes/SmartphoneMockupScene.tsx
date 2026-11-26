@@ -1,4 +1,5 @@
 import React from 'react';
+import { IPhoneMockup } from '../PremiumVisuals.js';
 import { AbsoluteFill, Audio, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from 'remotion';
 import { VideoDesignTokens } from '../design-system.js';
 import { LottieAsset } from '../LottieAsset.js';
@@ -136,23 +137,15 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
   const shockwaveOpacity = interpolate(shockwaveProgress, [0, 0.2, 1], [0, 0.9, 0]);
 
   // Subtle 3D floating perspective tilt
-  const rotY = Math.sin(frame / 35) * 3;
-  const rotX = Math.cos(frame / 30) * 2 + 2;
-  const floatY = Math.sin(frame / 20) * 8;
 
   // Dynamic Island pulse when surge triggers
-  const islandPulse = isSurgeActive
-    ? 1 + Math.sin((frame - fSurgeStart) / 8) * 0.05
-    : 1;
-
-  // Glow pulse for surge card
   const surgePulse = isSurgeActive
     ? 0.5 + Math.sin(frame / 8) * 0.3
     : 0;
 
   // Cinematic Camera Zoom / Punch-In onto the price reveal
-  const phoneZoom = interpolate(surgeSpring, [0, 1], [1.0, 1.14]);
-  const phoneFocusY = interpolate(surgeSpring, [0, 1], [0, -45]);
+  const phoneZoom = interpolate(surgeSpring, [0, 1], [1, 1.035]);
+  const phoneFocusY = interpolate(surgeSpring, [0, 1], [0, -12]);
 
   return (
     <AbsoluteFill
@@ -187,7 +180,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           borderRadius: 999,
           marginBottom: 16,
           boxShadow: isSurgeActive ? '0 0 25px rgba(239, 68, 68, 0.3)' : '0 0 20px rgba(56, 189, 248, 0.2)',
-          transition: 'all 0.3s ease',
+
         }}
       >
         <div
@@ -220,7 +213,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
           transform: `scale(${entrance})`,
           padding: '0 50px',
           opacity: frame >= 170 ? interpolate(frame, [170, 185], [1, 0.15], { extrapolateRight: 'clamp' }) : 1,
-          transition: 'opacity 0.3s ease',
+
         }}
       >
         <h1
@@ -247,76 +240,11 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
         </p>
       </div>
 
-      {/* Realistic iPhone 16 Pro 3D Mockup with Dynamic Camera Punch-In */}
-      <div
-        style={{
-          transform: `perspective(1400px) rotateY(${rotY}deg) rotateX(${rotX}deg) translateY(${floatY + phoneFocusY}px) scale(${entrance * phoneZoom})`,
-          width: 520,
-          height: 1040,
-          background: 'linear-gradient(180deg, #0d1117 0%, #06090e 100%)',
-          borderRadius: 56,
-          border: '4.5px solid rgba(255, 255, 255, 0.18)',
-          boxShadow: `0 40px 90px rgba(0, 0, 0, 0.95), 0 0 70px ${
-            isSurgeActive ? `rgba(239, 68, 68, ${0.25 + surgePulse * 0.2})` : 'rgba(56, 189, 248, 0.15)'
-          }`,
-          position: 'relative',
-          padding: '16px 22px 24px 22px',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* iOS Native Status Bar */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '4px 14px 10px 14px',
-            fontSize: 16,
-            fontWeight: 700,
-            color: '#FFFFFF',
-          }}
-        >
-          <span>9:41</span>
-          {/* Real Dynamic Island */}
-          <div
-            style={{
-              width: isSurgeActive ? 150 : 124,
-              height: 32,
-              background: '#000000',
-              borderRadius: 24,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0 12px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              transform: `scale(${islandPulse})`,
-              transition: 'width 0.3s ease',
-            }}
-          >
-            {/* Camera dot */}
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#1c1c1e' }} />
-            {isSurgeContext && isSurgeActive ? (
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 0.5 }}>
-                ⚡ 1.8X SURGE
-              </span>
-            ) : (
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#10B981', letterSpacing: 0.5 }}>
-                ⚡ 200 OK
-              </span>
-            )}
-            {/* Sensor / Mic indicator */}
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: isSurgeContext && isSurgeActive ? '#EF4444' : '#10B981' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>5G</span>
-            <div style={{ width: 22, height: 12, border: '1.5px solid #FFF', borderRadius: 4, padding: 1.5 }}>
-              <div style={{ width: '80%', height: '100%', background: '#10B981', borderRadius: 2 }} />
-            </div>
-          </div>
-        </div>
-
+      <IPhoneMockup width={520} reveal={false} style={{ position: 'relative', left: 0, top: 0,
+        alignSelf: 'center', flexShrink: 0, scale: Math.min(entrance, 1) * phoneZoom,
+        translate: '0 ' + phoneFocusY + 'px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', boxSizing: 'border-box',
+          height: '100%', padding: '68px 22px 25px' }}>
         {/* In-App Header */}
         <div
           style={{
@@ -486,7 +414,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
               : 'none',
             position: 'relative',
             overflow: 'hidden',
-            transition: 'border 0.3s ease, background 0.3s ease',
+
           }}
         >
           {/* Card Title Row */}
@@ -640,7 +568,7 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
               ? '0 10px 30px rgba(220, 38, 38, 0.5)'
               : '0 10px 25px rgba(16, 185, 129, 0.35)',
             transform: isSurgeActive ? `scale(${1 + Math.sin(frame / 6) * 0.02})` : 'scale(1)',
-            transition: 'background 0.3s ease',
+
           }}
         >
           {ctaText ||
@@ -786,7 +714,8 @@ export const SmartphoneMockupScene: React.FC<SmartphoneMockupSceneProps> = ({
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </IPhoneMockup>
     </AbsoluteFill>
   );
 };

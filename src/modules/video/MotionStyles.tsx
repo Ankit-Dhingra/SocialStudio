@@ -161,61 +161,6 @@ export const AuroraAccentFrame: React.FC<{
 };
 
 /**
- * Premium Deep Black Canvas with Animated Delicate Cyber Grid
- * Zero harsh blue - pure OLED black with subtle scrolling intersection dots & grid lines.
- */
-export const AnimatedBlackCyberGrid: React.FC = () => {
-  const frame = useCurrentFrame();
-  const gridOffsetY = (frame * 0.7) % 64;
-
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        backgroundColor: '#050507',
-        zIndex: 0,
-      }}
-    >
-      {/* Subtle scrolling vector grid */}
-      <svg
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '110%',
-          transform: `translateY(${gridOffsetY}px)`,
-        }}
-      >
-        <defs>
-          <pattern id="darkCyberPattern" width="64" height="64" patternUnits="userSpaceOnUse">
-            <path
-              d="M 64 0 L 0 0 0 64"
-              fill="none"
-              stroke="rgba(255, 255, 255, 0.035)"
-              strokeWidth="1"
-            />
-            <circle cx="0" cy="0" r="1.5" fill="rgba(255, 255, 255, 0.14)" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="110%" y="-10%" fill="url(#darkCyberPattern)" />
-      </svg>
-
-      {/* Radial Vignette: keeps center clear and fades edges into pure black */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(circle at 50% 45%, transparent 30%, #050507 92%)',
-        }}
-      />
-    </div>
-  );
-};
-
-/**
  * Eclipse Style: Cyber Tech HUD Chip that pops in on speech cues
  */
 export const EclipseHUDChip: React.FC<{

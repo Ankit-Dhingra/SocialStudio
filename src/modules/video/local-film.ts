@@ -13,7 +13,7 @@ const physicalBeats: Array<{
   { test: /\b(?:bill|receipt|counter|serves?)\b|चाय के|दुकानदार|बिल/iu, performance: 'serve', title: 'Counter exchange', camera: 'track-left', set: 'counter' },
   { test: /\b(?:tea|chai|coffee|eat\w*|sip\w*|drink\w*|noodles|maggi(?:e)?)\b|चाय(?!वाल)|कॉफ़ी|पीने|खाने|मैगी/iu, performance: 'drink', title: 'At the counter', camera: 'track-right', set: 'counter' },
   { test: /\b(?:rider|driv\w*|scooter|bike|street|road)\b|राइडर|बाइक|सड़क/iu, performance: 'travel', title: 'Travel', camera: 'track-right', set: 'street' },
-  { test: /\b(?:opens?|fridge|refrigerator|cupboard|lid|door|darwaza)\b|फ्रिज|दरवाज़|खोल/iu, performance: 'open', title: 'Open the compartment', camera: 'push-in', set: 'room' },
+  { test: /\b(?:fridge|refrigerator|cupboard|cabinet|compartment)\b|फ्रिज|अलमारी/iu, performance: 'open', title: 'Open the compartment', camera: 'push-in', set: 'room' },
   { test: /\b(?:button|handle|switch|lever|dial|machine)\b|बटन|हैंडल|स्विच/iu, performance: 'operate', title: 'Operate the control', camera: 'push-in', set: 'room' },
 ];
 

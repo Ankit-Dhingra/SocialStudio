@@ -1,6 +1,7 @@
 import React from 'react';
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { VideoDesignTokens } from '../design-system.js';
+import { reelBrand } from '../brand.js';
 import { LayercutWordBehind, SpiralGlassRibbon } from '../MotionStyles.js';
 
 interface TradeoffDecisionHUDSceneProps {
@@ -33,8 +34,6 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
     'Ensure graceful degradation during network partitions and server crashes',
   ],
   callToAction = 'Save this reel for your System Design Interview & follow for more!',
-  channelName = 'Behind The Tech',
-  channelHandle = '@behindthestack',
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -115,7 +114,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
               textTransform: 'uppercase',
             }}
           >
-            {frame >= 350 ? 'Behind The Tech • EXCLUSIVE' : 'SENIOR SDE INTERVIEW MATRIX'}
+            {frame >= 350 ? `${reelBrand.name} • EXCLUSIVE` : 'SENIOR SDE INTERVIEW MATRIX'}
           </span>
         </div>
         <h1 style={{ fontSize: 48, fontWeight: 900, color: '#FFFFFF', margin: '0 0 6px 0' }}>
@@ -322,10 +321,7 @@ export const TradeoffDecisionHUDScene: React.FC<TradeoffDecisionHUDSceneProps> =
             </div>
 
             <div style={{ fontSize: 30, fontWeight: 900, color: '#FFFFFF' }}>
-              {channelName}
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#38BDF8', marginTop: 2 }}>
-              {channelHandle}
+              {reelBrand.name}
             </div>
 
             <div style={{ fontSize: 14, color: '#94A3B8', marginTop: 10, maxWidth: 380 }}>

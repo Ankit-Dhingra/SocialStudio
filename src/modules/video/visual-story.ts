@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { Storyboard } from '../contracts/storyboard.js';
 import type { VideoTimeline } from './timeline.js';
+import { conciseVisualLabel } from './semantic-operation.js';
+
+export const technicalShotKinds: ReadonlySet<string> = new Set(['motion', 'flow', 'state', 'comparison', 'code']);
 
 // Structured responses may use null or whitespace for an unused optional field.
 function optionalVisualField<T extends z.ZodType>(schema: T) {
@@ -15,13 +18,17 @@ const actor = z.object({
   label: z.string().trim().min(1).max(36),
   value: optionalVisualField(z.string().trim().max(40)),
   cue: optionalVisualField(z.string().trim().max(140)),
-  tone: optionalVisualField(z.enum(['neutral', 'success', 'warning'])),
+  tone: optionalVisualField(z.enum(['neutral', 'success', 'warning', 'error'])),
 });
-export const motionIcons = ['person', 'phone', 'server', 'database', 'lock', 'queue', 'map', 'store', 'package', 'service'] as const;
+export const motionIcons = ['person', 'phone', 'server', 'database', 'lock', 'queue', 'map', 'store', 'package', 'service',
+  'document', 'chunks', 'search', 'answer'] as const;
 export const motionEffects = ['change', 'countdown', 'expire', 'offline'] as const;
 export const packetOutcomes = ['arrive', 'blocked'] as const;
+export const screenActions = ['attach', 'input', 'result', 'choose', 'progress', 'status', 'alert'] as const;
 export const cameraMoves = ['locked', 'push-in', 'pull-back', 'track-left', 'track-right', 'rise'] as const;
 export const filmActions = ['drink', 'serve', 'scan', 'confirm', 'travel', 'open', 'operate'] as const;
+export const filmSets = ['counter', 'street', 'room'] as const;
+export const filmFraming = ['wide', 'medium', 'close'] as const;
 export const storyDirectionSchema = z.object({
   action: z.string().trim().min(1).max(240),
   camera: z.enum(cameraMoves),
@@ -40,6 +47,7 @@ const motionEvent = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('send'), source: z.string(), target: z.string(), cue: eventCue,
     outcome: optionalVisualField(z.enum(packetOutcomes)),
+    route: optionalVisualField(z.enum(['straight', 'curve', 'orthogonal'])),
   }),
 ]);
 const transfer = z.object({
@@ -57,12 +65,15 @@ const start = z.object({
 const shot = z.discriminatedUnion('kind', [
   start.extend({
     kind: z.literal('film'), action: storyDirectionSchema.shape.action, camera: storyDirectionSchema.shape.camera,
-    performance: z.enum(filmActions), set: z.enum(['counter', 'street', 'room']),
+    performance: z.enum(filmActions), set: z.enum(filmSets),
+    framing: optionalVisualField(z.enum(filmFraming)),
+    actionCue: optionalVisualField(eventCue),
   }),
   start.extend({
     kind: z.literal('image'), brief: z.string().trim().min(12).max(500), continuity: z.string().trim().min(1).max(70),
     action: optionalVisualField(storyDirectionSchema.shape.action),
     camera: optionalVisualField(storyDirectionSchema.shape.camera),
+    actionCue: optionalVisualField(eventCue),
   }),
   start.extend({
     kind: z.literal('motion'),
@@ -77,6 +88,9 @@ const shot = z.discriminatedUnion('kind', [
   start.extend({
     kind: z.literal('device'), actors: z.array(actor).min(1).max(4),
     backdrop: optionalVisualField(z.boolean()), scanCue: optionalVisualField(eventCue),
+    appName: optionalVisualField(label), openCue: optionalVisualField(eventCue),
+    screenLayout: optionalVisualField(z.enum(['phone', 'desktop'])),
+    screenContent: optionalVisualField(z.enum(['messages', 'feed', 'checkout', 'status', 'document'])),
   }),
   start.extend({ kind: z.literal('code'), code: z.string().trim().min(1).max(300) }),
   start.extend({ kind: z.literal('focus') }),
@@ -89,22 +103,52 @@ export const visualSceneSchema = z.object({
 export const visualStorySchema = z.object({ scenes: z.array(visualSceneSchema).min(1) });
 
 export type VisualStory = z.infer<typeof visualStorySchema>;
+export type NativeScene =
+  | { kind: 'flow' | 'queue'; steps: Array<{ label: string; description: string; from: number }> }
+  | { kind: 'collection'; items: Array<{ label: string; selected: boolean }>; result: string; from: number }
+  | { kind: 'code'; filename?: string; code: string; from: number };
+
 export type TimedShot = z.infer<typeof shot> & {
+  vector?: import('./vector-spec.js').TimedVector;
+  storyBeat?: { label: string; from: number };
+  operation?: import('./semantic-operation.js').SemanticOperation;
+  requiresDirection?: boolean;
   id: string;
   from: number;
   duration: number;
   asset?: string;
+  beatAsset?: string;
+  chartStyle?: 'trend';
+  layers?: {
+    backgroundCredit?: string;
+    subjects: Array<{ asset: string; credit?: string; from: number; duration: number; width: number; height?: number;
+      start: { x: number; y: number }; end: { x: number; y: number } }>;
+  };
   clip?: { asset: string; seconds: number };
   reveals: number[];
   movements: number[];
   eventFrames?: number[];
   codeFrames?: number[];
   scanFrame?: number;
+  openFrame?: number;
+  interactionFrame?: number;
+  publicPostUrl?: string;
+  screenActions?: Array<(typeof screenActions)[number]>;
+  premium?: boolean;
+  nativeScene?: NativeScene;
+  messaging?: {
+    view: 'inbox' | 'timestamp';
+    statusAt?: number; messagesAt?: number; peopleAt?: number;
+    count?: string; people?: string; offlineFor?: string;
+    sender?: string; sent?: string; sentAt?: number; received?: string; receivedAt?: number;
+  };
+  actionFrame?: number;
   takeawayFrame: number;
   focus?: { beats: Array<{ text: string; from: number }>; code?: string };
   checkout?: {
     phase: 'story' | 'scan' | 'alert' | 'banks';
     amount: string;
+    amountAt?: number;
     merchant: string;
     payer: string;
     banks: [string, string];
@@ -113,14 +157,15 @@ export type TimedShot = z.infer<typeof shot> & {
     closeQuestionAt?: number;
   };
   paymentGuide?: {
+    backdrop?: 'black';
     label: string;
     title: string;
     nodes: Array<{
       id: string; label: string; detail: string; at: number; x: number; y: number;
       icon: 'phone' | 'bank' | 'switch' | 'qr' | 'lock' | 'status' | 'ledger';
-      updates?: Array<{ at: number; text: string; tone: 'blue' | 'gold' | 'green' }>;
+      updates?: Array<{ at: number; text: string; tone: 'blue' | 'gold' | 'green' | 'red' }>;
     }>;
-    edges?: Array<{ from: string; to: string; at: number; label: string; tone?: 'blue' | 'gold' | 'green' }>;
+    edges?: Array<{ from: string; to: string; at: number; label: string; tone?: 'blue' | 'gold' | 'green'; blocked?: boolean }>;
     notes?: Array<{ at: number; text: string }>;
     receiptAt?: number;
   };
@@ -281,6 +326,10 @@ export function compileVisualPlan(
         displayed.push({ field: 'code', value: entry.code });
       }
       if ('actors' in entry) {
+        if ((entry.kind === 'motion' || entry.kind === 'flow' || entry.kind === 'state')
+          && entry.actors.some(actor => !conciseVisualLabel(actor.label))) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} needs concise entity labels in its graph.`);
+        }
         if (new Set(entry.actors.map(a => a.entity)).size !== entry.actors.length) {
           throw new Error(`${sceneLabel}, shot ${i + 1} repeats an entity ID.`);
         }
@@ -349,12 +398,32 @@ export function compileVisualPlan(
         ? cleanNarration(entry.code).split(' ').map((_, index) => Math.max(0, frameAt(localCue(entry.code) + index) - startAt.frame))
         : undefined;
       let scanFrame: number | undefined;
+      let openFrame: number | undefined;
+      let actionFrame: number | undefined;
+      if ((entry.kind === 'film' || entry.kind === 'image') && entry.actionCue) {
+        const word = localCue(entry.actionCue);
+        if (word < 0 || frameAt(word) < startAt.frame || frameAt(word) - startAt.frame >= duration) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} needs an action cue within its shot.`);
+        }
+        actionFrame = Math.max(0, frameAt(word) - startAt.frame);
+      }
       if (entry.kind === 'device' && entry.scanCue) {
         const word = localCue(entry.scanCue);
         const frame = word < 0 ? -1 : frameAt(word) - startAt.frame;
         if (frame >= 0 && frame < duration && /\bq[\s.-]*r\b|क्यू\s*आर/iu.test(cueText(entry.scanCue))) {
           scanFrame = frame;
         }
+      }
+      if (entry.kind === 'device' && (entry.appName || entry.openCue)) {
+        if (entry.appName && findCue(scriptWords, entry.appName, 0) < 0) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} names an app absent from the approved script.`);
+        }
+        const word = entry.openCue ? localCue(entry.openCue) : startAt.word;
+        const offset = word < 0 ? -1 : frameAt(word) - startAt.frame;
+        if (offset < 0 || offset >= duration) {
+          throw new Error(`${sceneLabel}, shot ${i + 1} needs an app opening cue within its shot.`);
+        }
+        openFrame = offset;
       }
       let focus: TimedShot['focus'];
       if (entry.kind === 'focus' && duration > timeline.fps * 6) {
@@ -371,7 +440,7 @@ export function compileVisualPlan(
       }
       return {
         ...entry, headline, cue: i === 0 ? '' : entry.cue, id: `${index + 1}-${i + 1}`, from: startAt.frame,
-        duration, reveals, movements, eventFrames, codeFrames, scanFrame, focus, takeaway,
+        duration, reveals, movements, eventFrames, codeFrames, scanFrame, openFrame, actionFrame, focus, takeaway,
         takeawayCue: takeaway ? takeawayCue : undefined,
         takeawayFrame: takeaway ? takeawayFrame : 0,
       };

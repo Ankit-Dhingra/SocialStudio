@@ -21,6 +21,7 @@ export interface QueueTimelineSceneProps {
   technicalKeyPoint?: string;
   visualProps?: Record<string, any>;
   mode?: 'lock' | 'queue' | 'event-loop' | 'timeline';
+  narrationCued?: boolean;
 }
 
 export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
@@ -34,6 +35,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
   technicalKeyPoint,
   visualProps,
   mode,
+  narrationCued = false,
 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
@@ -52,7 +54,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
 
   // 2. Semantic storyboard lock cue detection
   // Apply lock-specific animation ONLY from a semantic storyboard cue, never when event-loop is requested
-  const isLockScene = !hasEventLoopTokens && (
+  const isLockScene = !narrationCued && !hasEventLoopTokens && (
     mode === 'lock' ||
     visualProps?.mode === 'lock' ||
     /distributed\s*lock|mutex|ttl|lease|worker\s*crash|failover/i.test(allContext) ||
@@ -150,7 +152,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
               borderRadius: 30,
               marginBottom: 10,
               boxShadow: isCrashed ? '0 0 25px rgba(239, 68, 68, 0.25)' : '0 0 25px rgba(56, 189, 248, 0.25)',
-              transition: 'all 0.3s ease',
+
             }}
           >
             <div
@@ -274,7 +276,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
                     : 'linear-gradient(90deg, #0284C7, #38BDF8)',
                   borderRadius: 10,
                   boxShadow: `0 0 15px ${isRetrySuccess ? '#10B981' : isCrashed ? '#EF4444' : '#38BDF8'}`,
-                  transition: 'width 0.1s linear',
+
                 }}
               />
             </div>
@@ -294,7 +296,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
               padding: '18px 24px',
               boxShadow: isCrashed ? '0 0 25px rgba(239, 68, 68, 0.25)' : 'none',
               transform: isCrashed ? `scale(${1 + Math.sin(frame / 6) * 0.01})` : 'none',
-              transition: 'all 0.3s ease',
+
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -353,7 +355,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
               padding: '18px 24px',
               boxShadow: isRetrySuccess ? '0 0 35px rgba(16, 185, 129, 0.35)' : 'none',
               transform: isRetrySuccess ? `scale(${retrySpring})` : 'none',
-              transition: 'all 0.3s ease',
+
             }}
           >
             {/* Shockwave on Retry Success */}
@@ -467,35 +469,41 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
     ? defaultEventLoopItems
     : defaultPipelineItems;
 
-  const displayBadge = rawOnScreen || (hasEventLoopTokens ? 'EVENT LOOP EXECUTION QUEUE' : 'PIPELINE CONDUIT FLOW');
-  const displayTitle = rawTitle || (hasEventLoopTokens ? 'Microtask & Macrotask Priority Flow' : 'Execution Flow');
+  const displayBadge = rawOnScreen || (narrationCued ? 'QUEUE' : hasEventLoopTokens ? 'EVENT LOOP EXECUTION QUEUE' : 'PIPELINE CONDUIT FLOW');
+  const displayTitle = narrationCued && rawTitle === displayItems[0]?.name ? '' : rawTitle;
 
-  // Animated laser line traveling down the conduit
-  const laserProgress = (frame % 45) / 45;
+  const active = narrationCued ? (cueFrames ?? []).reduce((last, cue, index) => frame >= cue ? index : last, -1) : activeItemIndex;
+  const nextCue = cueFrames?.[active + 1];
+  const nextNode = narrationCued && active >= 0 && nextCue !== undefined
+    ? interpolate(frame, [nextCue - Math.max(1, Math.round(fps * 0.4)), nextCue], [0, 1],
+      { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }) : 0;
+  const laserProgress = narrationCued ? (Math.max(0, active) + nextNode) / Math.max(1, displayItems.length - 1) : (frame % 45) / 45;
 
   return (
     <AbsoluteFill
       style={{
         paddingTop: 120,
-        paddingBottom: VideoDesignTokens.safeMargin.bottom,
-        paddingLeft: 40,
-        paddingRight: 40,
+        paddingBottom: narrationCued ? 475 : VideoDesignTokens.safeMargin.bottom,
+        paddingLeft: narrationCued ? 72 : 40,
+        paddingRight: narrationCued ? 132 : 40,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
+        justifyContent: narrationCued ? 'center' : 'space-between',
+        background: 'transparent',
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
         color: '#FFFFFF',
         overflow: 'hidden',
       }}
     >
-      <LayercutWordBehind
+      {!narrationCued && <LayercutWordBehind
         word={hasEventLoopTokens ? 'EVENTLOOP' : 'PIPELINE'}
         topPercent={25}
         color="rgba(56, 189, 248, 0.05)"
-      />
+      />}
 
       {/* Header Pill & Title */}
-      <div style={{ transform: `scale(${entrance})`, textAlign: 'center', zIndex: 10 }}>
+      <div style={{ transform: `scale(${entrance})`, textAlign: narrationCued ? 'left' : 'center',
+        marginBottom: narrationCued ? 44 : 0, zIndex: 10 }}>
         <div
           style={{
             display: 'inline-flex',
@@ -514,9 +522,10 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
             {displayBadge}
           </span>
         </div>
-        <h1 style={{ fontSize: 46, fontWeight: 900, color: '#FFFFFF', margin: '0 0 6px 0' }}>
-          {displayTitle}
-        </h1>
+        {(displayTitle || !narrationCued) && <h1 style={{ fontSize: narrationCued ? 56 : 46,
+          fontWeight: 900, color: '#FFFFFF', margin: '0 0 6px 0' }}>
+          {displayTitle || (hasEventLoopTokens ? 'Microtask & Macrotask Priority Flow' : 'Execution Flow')}
+        </h1>}
       </div>
 
       {/* Main Conduit Stream (Preserving authored items faithfully) */}
@@ -526,8 +535,8 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
           style={{
             position: 'absolute',
             left: 28,
-            top: 20,
-            bottom: 20,
+            top: narrationCued ? 51 : 20,
+            bottom: narrationCued ? 51 : 20,
             width: 4,
             background: 'rgba(56, 189, 248, 0.2)',
             borderRadius: 2,
@@ -550,14 +559,14 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
         {/* Steps along Conduit */}
         {displayItems.slice(0, 4).map((item, idx) => {
           const itemSpring = spring({
-            frame: Math.max(0, frame - idx * 7),
+            frame: Math.max(0, frame - (narrationCued ? cueFrames?.[idx] ?? 0 : idx * 7)),
             fps,
             config: { damping: 14, stiffness: 90 },
           });
 
           const isMicrotask = /microtask|nexttick/i.test(`${item.name} ${item.priority} ${item.detail}`);
           const isMacrotask = /macrotask|settimeout|setimmediate/i.test(`${item.name} ${item.priority} ${item.detail}`);
-          const isActive = idx === activeItemIndex;
+          const isActive = idx === active;
 
           const nodeColor = isMicrotask ? '#00F2FE' : isMacrotask ? '#F59E0B' : isActive ? '#10B981' : '#38BDF8';
 
@@ -605,15 +614,18 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
                   backdropFilter: 'blur(16px)',
                   border: `1.5px solid ${isActive ? 'rgba(56, 189, 248, 0.6)' : 'rgba(255, 255, 255, 0.1)'}`,
                   borderRadius: 22,
-                  padding: '16px 22px',
+                  minHeight: narrationCued ? 100 : undefined,
+                  boxSizing: 'border-box',
+                  alignContent: 'center',
+                  padding: narrationCued ? '22px 27px' : '16px 22px',
                   boxShadow: isActive ? '0 10px 30px rgba(0,0,0,0.7), 0 0 25px rgba(56, 189, 248, 0.2)' : '0 10px 30px rgba(0,0,0,0.5)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 22, fontWeight: 900, color: '#FFFFFF' }}>
+                  <span style={{ fontSize: narrationCued ? 37 : 22, fontWeight: 800, color: '#FFFFFF' }}>
                     {item.name}
                   </span>
-                  {isMicrotask ? (
+                  {!narrationCued && (isMicrotask ? (
                     <span
                       style={{
                         background: 'rgba(0, 242, 254, 0.2)',
@@ -655,11 +667,11 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
                     >
                       STAGE {idx + 1}
                     </span>
-                  )}
+                  ))}
                 </div>
-                <div style={{ fontSize: 16, color: '#94A3B8', marginTop: 4, fontWeight: 600 }}>
+                {item.detail && <div style={{ fontSize: narrationCued ? 29 : 16, color: '#a9bad3', marginTop: 4, fontWeight: 600 }}>
                   {item.detail}
-                </div>
+                </div>}
               </div>
             </div>
           );
@@ -667,7 +679,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
       </div>
 
       {/* Conduit Status Pill (Contextual without false guarantees) */}
-      <div style={{ textAlign: 'center', zIndex: 10 }}>
+      {!narrationCued && <div style={{ textAlign: 'center', zIndex: 10 }}>
         <div
           style={{
             display: 'inline-flex',
@@ -687,7 +699,7 @@ export const QueueTimelineScene: React.FC<QueueTimelineSceneProps> = ({
               : 'Queue stages execute in deterministic priority order.'}
           </span>
         </div>
-      </div>
+      </div>}
     </AbsoluteFill>
   );
 };

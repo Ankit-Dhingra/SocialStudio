@@ -8,6 +8,12 @@ import type { cameraMoves } from '../video/visual-story.js';
 const exec = promisify(execFile);
 const endpoint = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 
+export class StoryClipRequestError extends Error {
+  constructor(readonly status: number, detail: string) {
+    super(`Motion clip provider returned HTTP ${status}.${detail}`);
+  }
+}
+
 async function videoDuration(file: string): Promise<number> {
   const localProbe = path.resolve(`node_modules/@remotion/compositor-${process.platform}-${process.arch}${process.platform === 'win32' ? '-msvc/ffprobe.exe' : process.platform === 'linux' ? '-gnu/ffprobe' : '/ffprobe'}`);
   const probe = await fs.access(localProbe).then(() => localProbe, () => 'ffprobe');
@@ -29,6 +35,7 @@ type ClipOptions = {
   action: string;
   camera: typeof cameraMoves[number];
   seconds: number;
+  actionAtSec?: number;
 };
 
 export async function prepareStoryClip(options: ClipOptions): Promise<{ asset: string; seconds: number }> {
@@ -37,6 +44,7 @@ export async function prepareStoryClip(options: ClipOptions): Promise<{ asset: s
     'Use the supplied image as the opening frame of one continuous portrait shot in the same stylized animated film.',
     'Preserve the cast, costumes, objects, lighting, geography and visual style throughout.',
     `Action: ${options.action}. Camera move: ${options.camera}.`,
+    ...(options.actionAtSec === undefined ? [] : [`Begin the main action about ${options.actionAtSec.toFixed(2)} seconds into the shot.`]),
     `Complete the key action within the first ${Math.min(duration, options.seconds).toFixed(1)} seconds.`,
     'Keep the action clearly readable and preserve the framing until the final moment.',
     'No edits, captions, readable screen text, new characters, dialogue, or additional story events.',
@@ -63,7 +71,15 @@ export async function prepareStoryClip(options: ClipOptions): Promise<{ asset: s
       response_format: { type: 'video', aspect_ratio: '9:16', resolution: '720p', duration: `${duration}s`, delivery: 'inline' },
     }),
   });
-  if (!response.ok) throw new Error(`Motion clip provider returned HTTP ${response.status}.`);
+  if (!response.ok) {
+    const error = await response.json().then(body => body.error, () => undefined) as {
+      status?: string; details?: Array<{ violations?: Array<{ quotaId?: string; quotaValue?: string }> }>
+    } | undefined;
+    const limits = error?.details?.flatMap(detail => detail.violations ?? []).map(violation =>
+      [violation.quotaId, violation.quotaValue].filter(Boolean).join(' ')).filter(Boolean);
+    const detail = limits?.length ? ` Quota: ${limits.join(', ')}.` : error?.status ? ` ${error.status}.` : '';
+    throw new StoryClipRequestError(response.status, detail);
+  }
   type VideoContent = { type?: string; data?: string };
   const result = await response.json() as {
     output_video?: VideoContent;

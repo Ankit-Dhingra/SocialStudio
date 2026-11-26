@@ -372,7 +372,7 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
               boxShadow: isAmanResolved
                 ? '0 0 35px rgba(16, 185, 129, 0.45)'
                 : '0 10px 25px rgba(0, 0, 0, 0.5)',
-              transition: 'all 0.2s',
+
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -433,7 +433,7 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
                     ? '0 0 15px #0284C7'
                     : '0 0 15px rgba(250, 204, 21, 0.5)',
                   transform: isAmanClicked && !isAmanResolved ? 'scale(0.95)' : 'scale(1.0)',
-                  transition: 'all 0.15s',
+
                 }}
               >
                 {isAmanResolved
@@ -479,7 +479,7 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
               boxShadow: isRiyaResolved
                 ? '0 0 35px rgba(239, 68, 68, 0.45)'
                 : '0 10px 25px rgba(0, 0, 0, 0.5)',
-              transition: 'all 0.2s',
+
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -540,7 +540,7 @@ export const RaceConditionSimulatorScene: React.FC<RaceConditionSimulatorProps> 
                     ? '0 0 15px #D97706'
                     : '0 0 15px rgba(250, 204, 21, 0.5)',
                   transform: isRiyaClicked && !isRiyaResolved ? 'scale(0.95)' : 'scale(1.0)',
-                  transition: 'all 0.15s',
+
                 }}
               >
                 {isRiyaResolved

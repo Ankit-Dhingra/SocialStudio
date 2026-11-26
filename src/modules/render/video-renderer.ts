@@ -124,6 +124,11 @@ export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string
 
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
   const { storyboard, timeline, outputFilePath, visualPlan, onProgress, previewRange } = options;
+  validateRenderPlan(storyboard, timeline, visualPlan);
+  const incomplete = visualPlan?.flatMap((shots, index) => shots.some(shot => shot.requiresDirection) ? [index + 1] : []);
+  if (!previewRange && incomplete?.length) {
+    throw new Error(`Scenes ${incomplete.join(', ')} need a usable visual plan. Revise them in the visual preview before exporting.`);
+  }
 
   const outputDir = path.dirname(outputFilePath);
   if (!fs.existsSync(outputDir)) {
@@ -172,6 +177,8 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     frameRange: previewRange,
     scale,
     pixelFormat: 'yuv420p',
+    licenseKey: process.env.REMOTION_PRIVATE_LICENSE_KEY?.trim() || undefined,
+    isProduction: previewRange || process.env.REMOTION_PRODUCTION_RENDER === 'false' ? false : undefined,
     outputLocation: outputFilePath,
     concurrency,
     disallowParallelEncoding: true,
@@ -210,18 +217,47 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     },
   });
 
-  const renderTimeMs = Date.now() - startTime;
+  const output = inspectReelOutput(outputFilePath, scale);
+  if ((output.totalFrames && output.totalFrames !== totalFrames)
+    || !Number.isFinite(output.durationSec) || Math.abs(output.durationSec - totalFrames / timeline.fps) > 2 / timeline.fps) {
+    throw new Error('Rendered video duration does not match the compiled timeline.');
+  }
+  return { ...output, totalFrames, renderTimeMs: Date.now() - startTime };
+}
 
+function validateRenderPlan(storyboard: Storyboard, timeline: VideoTimeline, visualPlan?: VisualPlan) {
+  if (!visualPlan) return;
+  if (visualPlan.length !== storyboard.scenes.length || timeline.segments.length !== visualPlan.length) {
+    throw new Error('The visual plan does not cover the finalized storyboard and audio.');
+  }
+  const ids = new Set<string>();
+  for (const [index, shots] of visualPlan.entries()) {
+    const segment = timeline.segments[index];
+    let frame = 0;
+    if (segment.sceneId !== storyboard.scenes[index].id) throw new Error(`Scene ${index + 1} has mismatched narration.`);
+    for (const shot of shots) {
+      if (ids.has(shot.id) || shot.from !== frame || !Number.isInteger(shot.duration) || shot.duration <= 0) {
+        throw new Error(`Scene ${index + 1} has invalid shot coverage.`);
+      }
+      ids.add(shot.id);
+      frame += shot.duration;
+    }
+    if (frame !== segment.durationInFrames) throw new Error(`Scene ${index + 1} does not fill its audio segment.`);
+  }
+}
+
+function inspectReelOutput(outputFilePath: string, scale = 1): RenderResult {
   if (!fs.existsSync(outputFilePath)) {
     throw new Error(`Render failed: Output file was not created at ${outputFilePath}`);
   }
 
   const ffprobeBin = findFfprobe();
   const probe = JSON.parse(execFileSync(ffprobeBin, ['-v', 'error', '-show_entries',
-    'format=duration:stream=codec_type,width,height,duration', '-of', 'json', outputFilePath], {encoding: 'utf8'}));
+    'format=duration:stream=codec_type,codec_name,width,height,duration,nb_frames', '-of', 'json', outputFilePath], {encoding: 'utf8'}));
   const video = probe.streams.find((stream: {codec_type: string}) => stream.codec_type === 'video');
-  if (video?.width !== 1080 * scale || video?.height !== 1920 * scale || !probe.streams.some((s: {codec_type: string}) => s.codec_type === 'audio')) {
-    throw new Error(`Render must contain a ${1080 * scale}x${1920 * scale} video stream and an audio stream.`);
+  const audio = probe.streams.find((stream: {codec_type: string}) => stream.codec_type === 'audio');
+  if (video?.width !== 1080 * scale || video?.height !== 1920 * scale || video.codec_name !== 'h264' || audio?.codec_name !== 'aac') {
+    throw new Error(`Render must contain ${1080 * scale}x${1920 * scale} H.264 video and AAC audio.`);
   }
   const stats = fs.statSync(outputFilePath);
   const fileBuffer = fs.readFileSync(outputFilePath);
@@ -231,9 +267,9 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
     outputFilePath,
     fileSizeBytes: stats.size,
     durationSec: Number(video.duration || probe.format.duration),
-    totalFrames,
+    totalFrames: Number(video.nb_frames) || 0,
     sha256: hash,
-    renderTimeMs,
+    renderTimeMs: 0,
   };
 }
 
@@ -247,7 +283,7 @@ export interface StillPreviewResult {
   label?: string;
   shotId?: string;
   evidence?: string;
-  motionFrames?: Array<{ frame: number; label: string; url: string }>;
+  motionFrames?: Array<{ frame: number; label: string; url: string; filePath?: string }>;
 }
 type PreviewTarget = Omit<StillPreviewResult, 'url' | 'filePath' | 'motionFrames'> & {
   filename: string;
@@ -260,29 +296,49 @@ export async function renderStillPreviews(
   outputDir: string,
   urlPrefix = '/previews',
   visualPlan?: VisualPlan,
+  sceneIndices?: ReadonlySet<number>,
 ): Promise<StillPreviewResult[]> {
+  validateRenderPlan(storyboard, timeline, visualPlan);
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
   const targets = storyboard.scenes.flatMap<PreviewTarget>((scene, idx) => {
+    if (sceneIndices && !sceneIndices.has(idx)) return [];
     const seg = timeline.segments[idx];
     if (!seg) return [];
     const metadata = { sceneIndex: idx, sceneId: scene.id, type: scene.type };
     return visualPlan ? visualPlan[idx].map(shot => {
       const start = seg.startFrame + shot.from;
-      const event = shot.kind === 'film' ? Math.min(shot.duration - 1, Math.round(timeline.fps * 0.65))
-        : shot.scanFrame ?? (shot.eventFrames?.length ? Math.max(...shot.eventFrames) : undefined);
+      const event = shot.messaging?.statusAt ?? (shot.kind === 'film' ? shot.actionFrame ?? Math.min(shot.duration - 1, Math.round(timeline.fps * 0.65))
+        : shot.scanFrame ?? shot.openFrame ?? shot.actionFrame ?? (shot.eventFrames?.length ? Math.max(...shot.eventFrames) : undefined));
       const finalFrame = start + shot.duration - 1;
       const nextScreen = shot.scanFrame !== undefined ? shot.reveals.find(at => at > shot.scanFrame!) : undefined;
+      const layerEnd = shot.layers?.subjects.length
+        ? Math.max(...shot.layers.subjects.map(subject => subject.from + subject.duration - 1)) : undefined;
+      const operation = shot.operation;
+      const operationEnd = operation?.kind === 'group' ? Math.max(...operation.measures.map(measure => measure.from))
+        : operation?.kind === 'expiry' ? operation.replaces : operation?.kind === 'selection' ? operation.ends
+          : operation?.steps.at(-1)?.from;
+      const vectorEnds = shot.vector && [...shot.vector.tracks.map(track => track.start + track.frames),
+        ...(shot.vector.connectors ?? []).map(route => route.start + route.frames), ...shot.vector.layers.map(layer => layer.start),
+        ...(shot.vector.states ?? []).map(state => state.frame)]
+        .map(frame => frame - (shot.vector!.sequenceOffset ?? 0)).filter(frame => frame > 0 && frame < shot.duration);
+      const vectorEnd = vectorEnds?.length ? Math.max(...vectorEnds) : undefined;
+      const result = vectorEnd ?? operationEnd ?? layerEnd ?? shot.messaging?.messagesAt ?? shot.messaging?.receivedAt ?? nextScreen
+        ?? (shot.openFrame === undefined ? event : Math.max(shot.openFrame, ...shot.reveals));
       const motion = event !== undefined ? [
-        { label: 'Before', frame: Math.max(0, start + event - Math.round(timeline.fps * 0.15)) },
+        { label: 'Before', frame: Math.max(start, start + event - Math.round(timeline.fps * 0.15)) },
         { label: 'Action', frame: Math.min(finalFrame, start + event + Math.round(timeline.fps * 0.30), start + (nextScreen ?? shot.duration) - 1) },
-        { label: 'After', frame: Math.min(finalFrame, start + (nextScreen ?? event) + Math.round(timeline.fps * 0.93)) },
+        { label: 'After', frame: Math.min(finalFrame, start + (result ?? event) + Math.round(timeline.fps * 0.93)) },
+      ] : process.env.REEL_VISUAL_REVIEW_MODEL?.trim() ? [
+        { label: 'Beginning', frame: start },
+        { label: 'Middle', frame: start + Math.floor((shot.duration - 1) / 2) },
+        { label: 'End', frame: finalFrame },
       ] : undefined;
       return {
         ...metadata, label: shot.headline, shotId: shot.id, evidence: shot.evidence, filename: `shot-${shot.id}.jpg`, motion,
-        frame: motion?.at(-1)?.frame ?? start + Math.min(shot.duration - 1, Math.max(
+        frame: (event === undefined ? undefined : motion?.at(-1)?.frame) ?? start + Math.min(shot.duration - 1, Math.max(
           Math.floor(shot.duration * 0.6), Math.max(shot.takeawayFrame, ...shot.reveals, ...shot.movements, shot.scanFrame ?? 0, ...(shot.focus?.beats.map(beat => beat.from) ?? [])) + Math.round(timeline.fps * 0.23),
         )),
       };
@@ -315,6 +371,8 @@ export async function renderStillPreviews(
         output: path.join(outputDir, filename),
         imageFormat: 'jpeg',
         jpegQuality: 93,
+        licenseKey: process.env.REMOTION_PRIVATE_LICENSE_KEY?.trim() || undefined,
+        isProduction: false,
         timeoutInMilliseconds: 120000,
         puppeteerInstance,
         inputProps,
@@ -324,12 +382,12 @@ export async function renderStillPreviews(
     for (const { filename, motion, ...target } of targets) {
       const url = await renderFrame(target.frame, filename);
       const motionFrames: StillPreviewResult['motionFrames'] = [];
-      const rendered = new Map([[target.frame, url]]);
+      const rendered = new Map([[target.frame, { url, filePath: path.join(outputDir, filename) }]]);
       for (const beat of motion ?? []) {
-        const beatUrl = rendered.get(beat.frame) ??
-          await renderFrame(beat.frame, `shot-${target.shotId}-${beat.label.toLowerCase()}.jpg`);
-        rendered.set(beat.frame, beatUrl);
-        motionFrames.push({ ...beat, url: beatUrl });
+        const beatName = `shot-${target.shotId}-${beat.label.toLowerCase()}.jpg`;
+        const image = rendered.get(beat.frame) ?? { url: await renderFrame(beat.frame, beatName), filePath: path.join(outputDir, beatName) };
+        rendered.set(beat.frame, image);
+        motionFrames.push({ ...beat, ...image });
       }
       results.push({
         ...target,

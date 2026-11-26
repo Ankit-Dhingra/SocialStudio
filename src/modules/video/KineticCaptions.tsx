@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useCurrentFrame } from 'remotion';
+import { toHinglish } from './hinglish-text.js';
+import { VideoDesignTokens as design } from './design-system.js';
 
 interface KineticCaptionsProps {
   narration: string;
@@ -13,14 +15,14 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
   narration,
   wordFrames,
   durationInFrames,
-  highlightColor = '#64E99A',
+  highlightColor = design.colors.cyan,
   useBackdrop = false,
 }) => {
   const frame = useCurrentFrame();
 
   // Strip any SSML tags (e.g. <break time="0.4s"/>) so only spoken words are displayed
-  const cleanNarration = narration.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  const words = cleanNarration.split(/\s+/).filter(Boolean);
+  const words = useMemo(() => narration.replace(/<[^>]+>/g, ' ').trim().split(/\s+/)
+    .filter(Boolean).map(toHinglish), [narration]);
   if (!words.length) return null;
 
   // Group into chunks of 3-4 words for optimal mobile reading speed
@@ -39,9 +41,9 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
     <div
       style={{
         position: 'absolute',
-        top: 1400,
-        left: 80,
-        right: 140,
+        top: 1920 - design.safeMargin.bottom,
+        left: design.safeMargin.left + 20,
+        right: design.safeMargin.right,
         display: 'flex',
         justifyContent: 'center',
         flexWrap: 'wrap',
@@ -49,7 +51,7 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
         gap: '8px 10px',
         pointerEvents: 'none',
         zIndex: 50,
-        ...(useBackdrop ? { background: '#050608e8', borderRadius: 24, padding: '8px 14px' } : {}),
+        ...(useBackdrop ? { background: `${design.colors.canvas}eb`, borderRadius: design.radius.card, padding: '8px 14px' } : {}),
       }}
     >
       {activeChunk.map((word, idx) => {
@@ -58,14 +60,12 @@ export const KineticCaptions: React.FC<KineticCaptionsProps> = ({
           <span
             key={idx}
             style={{
-              fontFamily: 'Inter, Nirmala UI, system-ui, sans-serif',
-              fontSize: 47,
+              fontFamily: design.typography.fontFamilySans,
+              fontSize: design.typography.caption,
               fontWeight: 750,
               lineHeight: 1.2,
               padding: '3px 7px',
-              color: isActive ? highlightColor : '#f5f5f5',
-              textShadow: isActive ? '0 0 16px #00f2fe70' : undefined,
-              transform: isActive ? 'translateY(-3px)' : undefined,
+              color: isActive ? highlightColor : design.colors.ink,
               overflowWrap: 'anywhere',
               maxWidth: '100%',
             }}

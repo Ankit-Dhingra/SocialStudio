@@ -2,7 +2,6 @@ import 'dotenv/config';
 import { Pool } from 'pg';
 import { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
-import { z } from 'zod';
 import { StoryboardSchema, type Storyboard } from './modules/contracts/storyboard.js';
 
 const dbUrl = process.env.DATABASE_URL;
@@ -25,7 +24,7 @@ export const connection = new Redis(redisUrl, {
   enableOfflineQueue: false,
   tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
 });
-connection.on('error', (err) => {
+connection.on('error', () => {
   // Log once to keep console clean during local standalone development
   if (!hasLoggedRedisWarning) {
     console.log('[Redis] Local Redis offline (running in standalone file-storage mode).');
@@ -35,20 +34,6 @@ connection.on('error', (err) => {
 export const queue = new Queue('shorts', { connection });
 
 export { StoryboardSchema, type Storyboard };
-
-export const sceneSchema = z.object({
-  type: z.enum(['hook', 'diagram', 'code', 'summary']),
-  headline: z.string().min(1).max(115),
-  narration: z.string().min(1).max(500),
-  code: z.string().max(250),
-  label: z.string().max(70),
-});
-export const shortSchema = z.object({
-  title: z.string().min(5).max(100),
-  description: z.string().min(5).max(500),
-  scenes: z.array(sceneSchema).min(4).max(6),
-});
-export type Short = z.infer<typeof shortSchema>;
 
 export async function patch(id: string, fields: Record<string, unknown>) {
   const keys = Object.keys(fields);

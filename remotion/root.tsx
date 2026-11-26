@@ -1,7 +1,6 @@
 import React from 'react';
 import { Composition } from 'remotion';
-import { StudioShortComposition, StudioShortProps } from '../src/modules/video/StudioShortComposition.js';
-import { TechShort } from './tech-short.js';
+import { StudioShortComposition } from '../src/modules/video/StudioShortComposition.js';
 
 // Default preview fixture for Remotion Studio
 const defaultPreviewProps = {
@@ -128,18 +127,6 @@ const defaultPreviewProps = {
     ],
     bgmVolumeDucked: 0.12,
   },
-};
-
-const legacyDemo = {
-  short: {
-    title: 'Node.js concurrency',
-    description: 'Tech explainer',
-    scenes: [
-      { type: 'hook', headline: 'One thread, many requests', narration: 'Node.js handles many connections.', code: '', label: 'Event loop' },
-    ],
-  },
-  audioSrc: 'audio/test.mp3',
-  durations: [90],
 };
 
 export const Root: React.FC = () => {

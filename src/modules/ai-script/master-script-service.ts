@@ -35,6 +35,7 @@ export interface RenderState {
 
 export interface ScriptSession {
   id: string;
+  ownerDigest?: string;
   jobId?: string;
   topic: string;
   angle?: string;
@@ -60,12 +61,15 @@ export interface ScriptSession {
   visualAssets?: ReelVisualAssets;
   storyDirections?: StoryDirectionOverrides;
   motionPreview?: {
+    visualRevision?: string;
     mediaUrl: string;
     sceneIndex: number;
-    scope?: 'scene' | 'sequence';
+    scope?: 'scene' | 'sequence' | 'hook' | 'transition' | 'ending';
     durationSec: number;
+    direction?: ReelVisualAssets['direction'];
     shots: Array<{
       id: string; title: string; kind: string; fromSec: number; action?: string; camera?: string; footage?: boolean;
+      appName?: string; hasScreenCapture?: boolean;
     }>;
   };
   renderState?: RenderState;
@@ -83,18 +87,22 @@ if (!fs.existsSync(SESSIONS_DIR)) {
 const sessions = new Map<string, ScriptSession>();
 
 function getMasterPromptTemplate(): string {
-  const masterPath = path.resolve('MASTER_SCRIPT_PROMPT.md');
-  if (fs.existsSync(masterPath)) {
-    return fs.readFileSync(masterPath, 'utf8');
-  }
-  throw new Error('MASTER_SCRIPT_PROMPT.md not found in workspace root.');
+  return fs.readFileSync(new URL('./master-script-prompt.txt', import.meta.url), 'utf8');
 }
 
-function saveSessionToDisk(session: ScriptSession): void {
+function saveSessionToDisk(session: ScriptSession, required = false): void {
   try {
     const file = path.join(SESSIONS_DIR, `${session.id}.json`);
-    fs.writeFileSync(file, JSON.stringify(session, null, 2), 'utf8');
+    const serialized = JSON.stringify(session, null, 2);
+    if (required) {
+      const temporary = `${file}.${randomUUID()}.tmp`;
+      try {
+        fs.writeFileSync(temporary, serialized, { flag: 'wx', encoding: 'utf8' });
+        fs.renameSync(temporary, file);
+      } finally { fs.rmSync(temporary, { force: true }); }
+    } else fs.writeFileSync(file, serialized, 'utf8');
   } catch (err) {
+    if (required) throw err;
     console.warn(`[MasterScript] Warning: failed to save session ${session.id} to disk:`, err);
   }
 }
@@ -912,10 +920,11 @@ Always return the full updated 7 sections so the script remains complete and sel
     session.renderState = {status: 'idle', progress: 0};
   }
 
-  updateSession(session: ScriptSession): void {
+  updateSession(session: ScriptSession, requirePersistence = false): void {
     session.updatedAt = Date.now();
+    if (requirePersistence) saveSessionToDisk(session, true);
     sessions.set(session.id, session);
-    saveSessionToDisk(session);
+    if (!requirePersistence) saveSessionToDisk(session);
   }
 
   getSession(sessionId: string): ScriptSession | undefined {

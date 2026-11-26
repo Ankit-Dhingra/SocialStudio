@@ -122,15 +122,19 @@ function phonePaint(ctx: CanvasRenderingContext2D, mode: 'scan' | 'review' | 'pa
   text(ctx, mode === 'paid' ? '✓' : '₹', 270, 360, '700 100px Segoe UI', mode === 'paid' ? '#27765b' : '#146080');
   text(ctx, data.merchant, 270, 503, '700 48px Segoe UI', '#152535');
   text(ctx, data.amount, 270, 637, '800 103px Segoe UI', '#102532');
-  text(ctx, mode === 'paid' ? 'Paid successfully' : 'Bank account selected', 270, 729, '600 34px Segoe UI', '#3f6570');
+  if (mode === 'paid' || data.amountAt === undefined) {
+    text(ctx, mode === 'paid' ? 'Paid successfully' : 'Bank account selected', 270, 729, '600 34px Segoe UI', '#3f6570');
+  }
   rounded(ctx, 49, 843, 442, 105, 28, mode === 'paid' ? '#e3efec' : '#13719e');
   text(ctx, mode === 'paid' ? 'Done' : 'Authorize payment', 270, 911, '700 36px Segoe UI', mode === 'paid' ? '#356353' : '#f5fbfd');
 }
 
 function Phone({ data, second, frame, fps }: { data: Checkout; second: number; frame: number; fps: number }) {
   const relative = frame - data.cues.scan;
-  const mode = frame >= data.cues.confirm ? 'paid' : relative >= Math.round(0.15 * fps) ? 'review' : 'scan';
-  const display = usePaint(540, 1070, ctx => phonePaint(ctx, mode, data), JSON.stringify([mode, data.amount, data.merchant]));
+  const reviewAt = Math.max(data.cues.scan + Math.round(0.15 * fps), data.amountAt ?? 0);
+  const mode = frame >= data.cues.confirm ? 'paid' : frame >= reviewAt ? 'review' : 'scan';
+  const visibleAmount = frame >= (data.amountAt ?? 0) ? data.amount : '';
+  const display = usePaint(540, 1070, ctx => phonePaint(ctx, mode, { ...data, amount: visibleAmount }), JSON.stringify([mode, visibleAmount, data.merchant]));
   const scannedFace = usePaint(600, 600, SoundboxFace, 'scanner-view');
   const raise = interpolate(second, [0, 0.75], [0, 1], clamp);
   const align = interpolate(relative, [-1.15 * fps, 0], [0, 1], clamp);
@@ -221,8 +225,22 @@ function CheckoutFilm({ shot, frame }: { shot: TimedShot & { checkout: Checkout 
   const data = shot.checkout;
   const progress = interpolate(frame, [0, Math.max(1, shot.duration - 1)], [0, 1], clamp);
   const alert = data.phase === 'alert';
+  const alertFrame = data.amountAt === undefined ? 0 : data.cues.alert;
+  const showReceiptAt = Math.max(alertFrame, data.amountAt ?? 0);
   const position: Vector = alert ? [0.87 - progress * 0.31, 1.84 - progress * 0.15, 2.93 - progress * 0.33]
     : [0.12 + progress * 0.08, 1.79 - progress * 0.08, 4.45 - progress * 0.29];
+  if (data.amountAt !== undefined && shot.kind === 'film') {
+    if (shot.camera === 'locked') {
+      position[0] = alert ? 0.87 : 0.12;
+      position[1] = alert ? 1.84 : 1.79;
+      position[2] = alert ? 2.93 : 4.45;
+    }
+    if (shot.camera === 'track-left') position[0] += (0.5 - progress) * 0.72;
+    if (shot.camera === 'track-right') position[0] += (progress - 0.5) * 0.72;
+    if (shot.camera === 'pull-back') position[2] += progress * 0.85;
+    if (shot.camera === 'rise') position[1] += progress * 0.58;
+    position[2] += shot.framing === 'wide' ? 0.46 : shot.framing === 'close' ? -0.17 : 0;
+  }
   const target: Vector = alert ? [0.42, 1.43, 0.07] : [0.05 - progress * 0.07, 1.42, 0.32];
   return <AbsoluteFill style={{ background: '#17232e' }}>
     <ThreeCanvas width={width} height={height} dpr={1} camera={{ fov: alert ? 38 : 42, near: 0.04, far: 25 }}>
@@ -234,14 +252,14 @@ function CheckoutFilm({ shot, frame }: { shot: TimedShot & { checkout: Checkout 
       <pointLight position={[-1, 2.05, 0.1]} intensity={7} decay={2} color="#eec497" />
       <Camera position={position} target={target} />
       <CounterSurface />
-      <Soundbox active={alert} second={frame / fps} />
+      <Soundbox active={alert && frame >= alertFrame} second={Math.max(0, frame - (alert ? alertFrame : 0)) / fps} />
       {!alert && <Phone data={data} second={frame / fps} frame={frame + data.offset} fps={fps} />}
     </ThreeCanvas>
     <AbsoluteFill style={{ pointerEvents: 'none', background: 'radial-gradient(ellipse at 49% 48%, transparent 35%, #12202c78 100%)' }} />
     {alert && <div style={{
       position: 'absolute', top: 1160, left: 163, padding: '16px 29px', borderRadius: 12, color: '#f4fafc',
       background: '#123042ec', border: '1px solid #76bdd4aa', font: '600 43px Segoe UI',
-      opacity: interpolate(frame, [0, 14], [0, 1], clamp),
+      opacity: interpolate(frame, [showReceiptAt, showReceiptAt + 14], [0, 1], clamp),
     }}>{data.amount} received</div>}
   </AbsoluteFill>;
 }
@@ -252,7 +270,7 @@ function CheckoutBanks({ shot }: { shot: TimedShot & { checkout: Checkout } }) {
   const { checkout: data } = shot;
   const now = frame + data.offset;
   const fade = (start: number) => interpolate(now, [start, start + fps * 0.34], [0, 1], clamp);
-  return <AbsoluteFill style={{ background: 'radial-gradient(ellipse at 48% 47%, #152c3a, #09141e 68%)', color: '#edf7f7', fontFamily: 'Segoe UI, sans-serif' }}>
+  return <AbsoluteFill style={{ color: 'inherit' }}>
     <div style={{ position: 'absolute', top: 412, left: 104, width: 872, textAlign: 'center', fontWeight: 740, fontSize: 61, letterSpacing: -1.8 }}>
       How did the payment get there?
     </div>
@@ -261,8 +279,8 @@ function CheckoutBanks({ shot }: { shot: TimedShot & { checkout: Checkout } }) {
         { title: data.payer, role: 'Payer', bank: data.banks[0], at: data.cues.payer, bankAt: data.cues.payerBank },
         { title: data.merchant, role: 'Merchant', bank: data.banks[1], at: data.cues.merchant, bankAt: data.cues.merchantBank },
       ].map(account => <div key={account.role} style={{
-        boxSizing: 'border-box', width: 328, padding: '38px 30px', borderRadius: 21, background: '#142a38',
-        border: '2px solid #426d7b', minHeight: 272, opacity: fade(account.at),
+        boxSizing: 'border-box', width: 328, padding: '38px 30px', borderRadius: 21, background: '#111827',
+        border: '1.5px solid rgba(255,255,255,0.12)', minHeight: 272, opacity: fade(account.at),
         translate: `0px ${(1 - fade(account.at)) * 20}px`,
       }}>
         <div style={{ color: '#a0cad0', fontSize: 25, fontWeight: 680 }}>{account.role}</div>
@@ -330,6 +348,7 @@ export function CheckoutPilotShot({ shot }: { shot: TimedShot & { checkout: Chec
   const { fps } = useVideoConfig();
   const data = shot.checkout;
   if (data.phase === 'banks') return <CheckoutBanks shot={shot} />;
+  if (data.phase === 'scan' || data.phase === 'alert') return <CheckoutFilm shot={shot} frame={frame} />;
 
   const now = frame + data.offset;
   const begin = data.cues.begin ?? data.offset;

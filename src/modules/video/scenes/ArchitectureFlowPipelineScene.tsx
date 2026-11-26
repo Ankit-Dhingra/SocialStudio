@@ -94,7 +94,7 @@ export const ArchitectureFlowPipelineScene: React.FC<ArchitectureFlowPipelineSce
         style={{
           overflow: 'hidden',
           background: 'transparent',
-          fontFamily: 'Inter, system-ui, sans-serif',
+          fontFamily: 'inherit',
         }}
       >
         {/* Universal Top HUD for Scene 3 */}

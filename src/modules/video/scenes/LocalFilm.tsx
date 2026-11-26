@@ -1,9 +1,10 @@
-import React, { useLayoutEffect } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import { ThreeCanvas } from '@remotion/three';
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig } from 'remotion';
-import { Quaternion, Vector3 } from 'three';
+import { CanvasTexture, NearestFilter, Quaternion, Vector3 } from 'three';
 import type { TimedShot } from '../visual-story.js';
+import { demoQr } from './demo-qr.js';
 
 export type FilmShot = Extract<TimedShot, { kind: 'film' }>;
 type Point = [number, number, number];
@@ -116,10 +117,31 @@ function Counter({ t, serving, drinking }: { t: number; serving: boolean; drinki
   </>;
 }
 
+function ScanCode() {
+  const texture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = demoQr.length + 8;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#172531';
+    demoQr.forEach((row, y) => Array.from(row).forEach((cell, x) => {
+      if (cell === '1') ctx.fillRect(x + 4, y + 4, 1, 1);
+    }));
+    const result = new CanvasTexture(canvas);
+    result.magFilter = result.minFilter = NearestFilter;
+    return result;
+  }, []);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return <mesh position={[0, 0, 0.057]}>
+    <planeGeometry args={[0.29, 0.29]} />
+    <meshBasicMaterial map={texture} toneMapped={false} />
+  </mesh>;
+}
+
 function DeviceAction({ t, confirm, scanCode }: { t: number; confirm: boolean; scanCode: boolean }) {
   const lift = interpolate(t, [0, 0.65], [0, 1], easing);
   const scan = (t * 0.7) % 1;
-  const success = t > 1.25;
   return <group position={[0, 1.1, 0.69]}>
     {confirm ? <>
       <Block size={[0.66, 0.61, 0.34]} at={[0, 0.06, 0]} color="#315961" />
@@ -140,15 +162,9 @@ function DeviceAction({ t, confirm, scanCode }: { t: number; confirm: boolean; s
     </> : <group position={[0, lift * 0.18, lift * 0.14]} rotation={[0.18 * (1 - lift), -0.24 + lift * 0.25, -0.12 + lift * 0.10]}>
       <Ball at={[-0.22, -0.22, 0.04]} size={[0.14, 0.21, 0.09]} color="#bf815e" />
       <Block size={[0.44, 0.84, 0.053]} at={[0, 0, 0]} color="#10202b" />
-      <Block size={[0.385, 0.75, 0.02]} at={[0, 0.005, 0.035]} color={success ? '#29574c' : '#ecdfbd'} />
-      {success ? <>
-        <Ball at={[0, 0.05, 0.059]} size={[0.109, 0.109, 0.013]} color="#8be2b2" />
-        <Limb from={[-0.05, 0.047, 0.076]} to={[-0.015, 0.008, 0.076]} color="#224a40" radius={0.014} />
-        <Limb from={[-0.015, 0.008, 0.076]} to={[0.061, 0.093, 0.076]} color="#224a40" radius={0.014} />
-      </> : scanCode ? <>
-        {Array.from({ length: 9 }, (_, row) => Array.from({ length: 9 }, (_cell, column) =>
-          (row * 19 + column * 37 + row * column * 13) % 7 < 3 &&
-          <Block key={`${row}-${column}`} size={[0.021, 0.021, 0.011]} at={[-0.10 + column * 0.025, -0.082 + row * 0.025, 0.057]} color="#24363e" />))}
+      <Block size={[0.385, 0.75, 0.02]} at={[0, 0.005, 0.035]} color={scanCode ? '#233b44' : '#ecdfbd'} />
+      {scanCode ? <>
+        <ScanCode />
         <Block size={[0.29, 0.012, 0.014]} at={[0, 0.14 - scan * 0.27, 0.075]} color="#57cda3" />
       </> : <>
         <Block at={[0, 0.14, 0.057]} size={[0.27, 0.045, 0.01]} color="#52797c" />
@@ -226,7 +242,12 @@ export function Camera({ position, target }: { position: Point; target: Point })
 export function LocalFilm({ shot }: { shot: FilmShot }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
-  const t = frame / fps;
+  const actionFrame = shot.actionFrame ?? 0;
+  const elapsed = Math.max(0, frame - actionFrame) / fps;
+  const remaining = Math.max(1, shot.duration - 1 - actionFrame) / fps;
+  const actionSeconds = shot.performance === 'serve' ? 1.75
+    : shot.performance === 'open' || shot.performance === 'operate' ? 1.25 : 0;
+  const t = elapsed * Math.max(1, actionSeconds / remaining);
   const progress = interpolate(frame, [0, Math.max(1, shot.duration - 1)], [0, 1], easing);
   const close = shot.performance === 'scan' || shot.performance === 'confirm';
   const exchange = shot.performance === 'serve';
@@ -244,7 +265,8 @@ export function LocalFilm({ shot }: { shot: FilmShot }) {
       <hemisphereLight args={['#ffe9c6', '#456678', 2.25]} />
       <directionalLight position={[3, 6, 4]} color="#ffd39b" intensity={2.15} />
       <directionalLight position={[-4, 2, -4]} color="#83c5e2" intensity={1.05} />
-      <Camera position={[x, y, (close ? 3.08 : street ? 3.95 : exchange ? 4.62 : 5.35) - move]} target={target} />
+      <Camera position={[x, y, (close ? 3.08 : street ? 3.95 : exchange ? 4.62 : 5.35) - move +
+        (shot.framing === 'wide' ? 0.62 : shot.framing === 'close' && !close ? -0.55 : 0)]} target={target} />
       {counter && <Counter t={t} serving={shot.performance === 'serve'} drinking={shot.performance === 'drink'} />}
       {close && <DeviceAction t={t} confirm={shot.performance === 'confirm'} scanCode={/\b(?:qr|scan\w*)\b|स्कैन/iu.test(shot.action)} />}
       {street && <Street t={t} />}

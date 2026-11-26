@@ -12,11 +12,12 @@ import { VideoTimeline } from './timeline.js';
 import { VideoDesignTokens } from './design-system.js';
 import { renderRegisteredScene } from './SceneRegistry.js';
 import { KineticCaptions } from './KineticCaptions.js';
-import { AnimatedBlackCyberGrid } from './MotionStyles.js';
+import { EditorialFonts, PremiumGridBackground } from './PremiumVisuals.js';
 import { DirectedShot } from './scenes/DirectedShot.js';
 import type { StoryHandoffShot } from './scenes/StoryFootage.js';
-import type { TimedShot, VisualPlan } from './visual-story.js';
+import { technicalShotKinds, type TimedShot, type VisualPlan } from './visual-story.js';
 import { buildMotionStages, type MotionStage } from './motion-stage.js';
+import { localizeVideoText } from './hinglish-text.js';
 
 export interface StudioShortProps {
   storyboard: Storyboard;
@@ -49,10 +50,11 @@ const SceneSequenceRenderer: React.FC<{
   isFirst: boolean;
   shots?: TimedShot[];
   stages?: Map<string, MotionStage>;
-  artwork?: Map<string, string>;
   handoffs?: Map<string, StoryHandoffShot>;
-}> = ({ scene, seg, fps, isFirst, shots, stages, artwork, handoffs }) => {
+}> = ({ scene, seg, fps, isFirst, shots, stages, handoffs }) => {
   const sceneFrame = useCurrentFrame();
+  const premium = shots?.some(shot => shot.premium);
+  const displayScene = useMemo(() => localizeVideoText(scene), [scene]);
 
   // Continuous Cinematic Push / Drift (1.00 -> 1.036 scale, -14px subtle upward drift)
   const cameraScale = interpolate(sceneFrame, [0, seg.durationInFrames], [1.0, 1.036], {
@@ -70,11 +72,11 @@ const SceneSequenceRenderer: React.FC<{
           transformOrigin: '50% 45%',
         }}
       >
-        {renderRegisteredScene(scene, seg.cueFrames, seg.wordFrames, Math.ceil(seg.audioDurationMs * fps / 1000))}
+        {renderRegisteredScene(displayScene, seg.cueFrames, seg.wordFrames, Math.ceil(seg.audioDurationMs * fps / 1000))}
       </AbsoluteFill>}
       {shots?.map(shot => (
         <Sequence key={shot.id} name={shot.headline} from={shot.from} durationInFrames={shot.duration}>
-          <DirectedShot shot={shot} stage={stages?.get(shot.id)} artwork={artwork?.get(shot.id)} handoff={handoffs?.get(shot.id)} />
+          <DirectedShot shot={shot} stage={stages?.get(shot.id)} handoff={handoffs?.get(shot.id)} />
         </Sequence>
       ))}
 
@@ -82,11 +84,16 @@ const SceneSequenceRenderer: React.FC<{
       {seg.audioSrc && <Audio src={resolveAudioSource(seg.audioSrc)} />}
 
       {/* Cinematic Transition UI SFX */}
-      <Audio src={resolveAudioSource('sfx/whoosh.wav')} volume={0.15} />
-      {isFirst && <Audio src={resolveAudioSource('sfx/pop.wav')} volume={0.16} />}
+      {!premium && <Audio src={resolveAudioSource('sfx/whoosh.wav')} volume={0.15} />}
+      {!premium && isFirst && <Audio src={resolveAudioSource('sfx/pop.wav')} volume={0.16} />}
+      {premium && shots?.filter(shot => handoffs?.has(shot.id)).map(shot => (
+        <Sequence key={`handoff-${shot.id}`} from={shot.from} durationInFrames={Math.min(shot.duration, Math.round(fps * 0.8))}>
+          <Audio src={resolveAudioSource('sfx/whoosh.wav')} volume={0.10} />
+        </Sequence>
+      ))}
 
       {/* Semantic Cue-Synchronized Sound Effects (Ding / Buzzer / Pop) */}
-      {seg.cueFrames?.map((cueF, cIdx) => {
+      {!premium && seg.cueFrames?.map((cueF, cIdx) => {
         if (cueF <= 5 || cueF >= seg.durationInFrames - 5) return null;
         const isError = /reject|fail|crash|bottleneck|slow|error|drop|deadlock|stale|timeout|nahi/i.test(scene.narration);
         const sfxTrack = isError ? 'sfx/buzzer.wav' : 'sfx/ding.wav';
@@ -103,8 +110,7 @@ const SceneSequenceRenderer: React.FC<{
         wordFrames={seg.wordFrames}
         narration={scene.narration}
         durationInFrames={Math.max(1, Math.ceil(seg.audioDurationMs * fps / 1000))}
-        highlightColor={shots ? '#ffd2a6' : '#00F2FE'}
-        useBackdrop={Boolean(shots)}
+        useBackdrop
       />
     </>
   );
@@ -127,27 +133,22 @@ export function musicVolumeAtFrame(timeline: VideoTimeline, frame: number) {
 
 export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard, timeline, visualPlan }) => {
   const frame = useCurrentFrame();
-  const stages = useMemo(() => visualPlan && buildMotionStages(visualPlan, timeline), [visualPlan, timeline]);
-  const { artwork, handoffs } = useMemo(() => {
-    const backgrounds = new Map<string, string>();
+  const displayPlan = useMemo(() => localizeVideoText(visualPlan), [visualPlan]);
+  const stages = useMemo(() => displayPlan && buildMotionStages(displayPlan, timeline), [displayPlan, timeline]);
+  const handoffs = useMemo(() => {
     const transitions = new Map<string, StoryHandoffShot>();
-    let opening: string | undefined;
-    let recent: string | undefined;
     let previous: TimedShot | undefined;
-    for (const shot of visualPlan?.flat() ?? []) {
-      if (shot.kind === 'image' && shot.asset) {
-        opening ??= shot.asset;
-        recent = shot.asset;
+    for (const shot of displayPlan?.flat() ?? []) {
+      if (shot.kind === 'device' || technicalShotKinds.has(shot.kind)) {
+        const carry = ('backdrop' in shot && shot.backdrop) || (shot.premium && technicalShotKinds.has(shot.kind)
+          && (previous?.kind === 'image' || previous?.kind === 'device'));
+        if (carry && (previous?.kind === 'film' || (previous?.kind === 'image' && (previous.camera || previous.clip)) ||
+            (shot.premium && previous?.kind === 'device' && (previous.appName || previous.screenContent || previous.screenLayout === 'desktop') && previous.scanFrame === undefined))) transitions.set(shot.id, previous);
       }
-      if ((shot.kind === 'motion' || shot.kind === 'device') && shot.backdrop) {
-        if (previous?.kind === 'film' || (previous?.kind === 'image' && (previous.camera || previous.clip))) transitions.set(shot.id, previous);
-        else if (recent) backgrounds.set(shot.id, recent);
-      }
-      if (shot.kind === 'cta' && opening) backgrounds.set(shot.id, opening);
       previous = shot;
     }
-    return { artwork: backgrounds, handoffs: transitions };
-  }, [visualPlan]);
+    return transitions;
+  }, [displayPlan]);
 
   // Background music source (defaults to our synthesized ambient tech track)
   const bgmTrack = timeline.bgmSrc || 'music/tech-ambient.wav';
@@ -155,14 +156,14 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: '#050507',
+        backgroundColor: VideoDesignTokens.colors.canvas,
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
         color: VideoDesignTokens.colors.textPrimary,
         overflow: 'hidden',
       }}
     >
-      {/* Root Animated Black Cyber Grid Background */}
-      {!visualPlan && <AnimatedBlackCyberGrid />}
+      <EditorialFonts />
+      <PremiumGridBackground />
 
       {/* Ultra-sleek Instagram-Story Style Progress Bar (Top Edge Only) */}
       {!visualPlan && <div
@@ -198,8 +199,7 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
                 style={{
                   height: '100%',
                   width: isCompleted ? '100%' : isCurrent ? `${currentProgress * 100}%` : '0%',
-                  background: isCurrent ? 'linear-gradient(90deg, #38BDF8, #FACC15)' : '#38BDF8',
-                  boxShadow: isCurrent ? '0 0 8px #38BDF8' : 'none',
+                  background: VideoDesignTokens.colors.cyan,
                 }}
               />
             </div>
@@ -223,9 +223,8 @@ export const StudioShortComposition: React.FC<StudioShortProps> = ({ storyboard,
               seg={seg}
               fps={timeline.fps}
               isFirst={i === 0}
-              shots={visualPlan?.[i]}
+              shots={displayPlan?.[i]}
               stages={stages}
-              artwork={artwork}
               handoffs={handoffs}
             />
           </Sequence>

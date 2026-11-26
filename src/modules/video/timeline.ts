@@ -28,6 +28,44 @@ function tokenize(text: string): string[] {
   return text.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).filter(Boolean);
 }
 
+/** Restore the opening cues when an incomplete transcript put a long spoken prefix at frame zero. */
+export function repairOpeningWordFrames(storyboard: Storyboard, timeline: VideoTimeline): VideoTimeline {
+  let changed = false;
+  const segments = timeline.segments.map((segment, index) => {
+    const frames = segment.wordFrames;
+    const words = tokenize(storyboard.scenes[index]?.narration ?? '');
+    if (!frames || frames.length !== words.length || frames[0] !== 0) return segment;
+    const firstPositive = frames.findIndex(frame => frame > 0);
+    if (firstPositive < 3) return segment;
+    let anchor = firstPositive;
+    if (frames[anchor + 1] - frames[anchor] > timeline.fps) anchor += 1;
+    if (frames[anchor] < timeline.fps * 0.7) return segment;
+    const end = frames[anchor];
+    const pauses = (segment.speechRanges ?? []).map(range => Math.round(range.start * timeline.fps)).filter(frame => frame > 0 && frame < end);
+    const boundaries = [{ word: 0, frame: 0 }];
+    for (let i = 1; i < anchor; i++) {
+      if (!/[.!?।]["'’”]?$/u.test(words[i - 1])) continue;
+      const target = end * i / anchor;
+      const previous = boundaries.at(-1)!.frame;
+      const nearest = pauses.filter(frame => frame > previous && Math.abs(frame - target) <= timeline.fps * 1.3)
+        .sort((a, b) => Math.abs(a - target) - Math.abs(b - target))[0];
+      boundaries.push({ word: i, frame: nearest ?? Math.max(previous, Math.round(target)) });
+    }
+    boundaries.push({ word: anchor, frame: end });
+    const repaired = [...frames];
+    for (let i = 1; i < boundaries.length; i++) {
+      const left = boundaries[i - 1];
+      const right = boundaries[i];
+      for (let j = left.word; j < right.word; j++) {
+        repaired[j] = Math.round(left.frame + (right.frame - left.frame) * (j - left.word) / (right.word - left.word));
+      }
+    }
+    changed = true;
+    return { ...segment, wordFrames: repaired };
+  });
+  return changed ? { ...timeline, segments } : timeline;
+}
+
 function normalize(word: string): string {
   return word.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '');
 }
@@ -266,12 +304,12 @@ export function buildVideoTimeline(
     currentFrame += durationInFrames;
   }
 
-  return {
+  return repairOpeningWordFrames(storyboard, {
     fps,
     totalDurationInFrames: currentFrame,
     totalDurationSec: Number((currentFrame / fps).toFixed(2)),
     segments,
     bgmSrc,
     bgmVolumeDucked: 0.12,
-  };
+  });
 }

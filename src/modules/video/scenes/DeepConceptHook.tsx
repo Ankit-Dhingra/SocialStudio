@@ -15,7 +15,6 @@ export const DeepConceptHook: React.FC<DeepConceptHookProps> = ({
   headline,
   questionKicker = 'Most developers get the output wrong!',
   badgeText = 'JS INTERNALS DEEP DIVE',
-  accentColor = VideoDesignTokens.colors.accentCyan,
   misconceptionAlert,
   onScreenText,
 }) => {
@@ -25,11 +24,10 @@ export const DeepConceptHook: React.FC<DeepConceptHookProps> = ({
   const scale = spring({
     frame,
     fps,
-    config: { damping: 12, stiffness: 100 },
+    config: { damping: 22, stiffness: 100 },
   });
 
-  const ringPulse1 = 1 + Math.sin(frame / 8) * 0.12;
-  const ringPulse2 = 1 + Math.cos(frame / 8) * 0.12;
+  const accentColor = VideoDesignTokens.colors.cyan;
 
   return (
     <AbsoluteFill
@@ -45,34 +43,6 @@ export const DeepConceptHook: React.FC<DeepConceptHookProps> = ({
         overflow: 'hidden',
       }}
     >
-      {/* Background Neon Energy Rings */}
-      <div
-        style={{
-          position: 'absolute',
-          right: -80,
-          top: '30%',
-          width: 380,
-          height: 380,
-          borderRadius: '50%',
-          border: '2px solid rgba(0, 242, 254, 0.2)',
-          transform: `scale(${ringPulse1})`,
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          right: -40,
-          top: '35%',
-          width: 280,
-          height: 280,
-          borderRadius: '50%',
-          border: '2px dashed rgba(168, 85, 247, 0.3)',
-          transform: `scale(${ringPulse2})`,
-          pointerEvents: 'none',
-        }}
-      />
-
       {/* Category Pill with Glowing Dot */}
       <div
         style={{
@@ -80,10 +50,9 @@ export const DeepConceptHook: React.FC<DeepConceptHookProps> = ({
           alignItems: 'center',
           gap: 12,
           padding: '10px 24px',
-          background: 'rgba(0, 242, 254, 0.12)',
+          background: 'rgba(103, 232, 249, 0.08)',
           border: `2px solid ${accentColor}`,
           borderRadius: 40,
-          boxShadow: `0 0 30px ${accentColor}40`,
           marginBottom: 32,
           width: 'fit-content',
         }}
@@ -94,7 +63,6 @@ export const DeepConceptHook: React.FC<DeepConceptHookProps> = ({
             height: 12,
             borderRadius: '50%',
             background: accentColor,
-            boxShadow: `0 0 14px ${accentColor}`,
           }}
         />
         <span
@@ -142,7 +110,6 @@ export const DeepConceptHook: React.FC<DeepConceptHookProps> = ({
             background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(15, 23, 42, 0.8))',
             border: '2px solid rgba(239, 68, 68, 0.5)',
             borderRadius: 18,
-            boxShadow: '0 10px 30px rgba(239, 68, 68, 0.15)',
           }}
         >
           <div style={{ fontSize: 18, fontWeight: 900, color: '#EF4444', letterSpacing: 2, marginBottom: 4 }}>

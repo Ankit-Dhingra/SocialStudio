@@ -2,7 +2,7 @@ import type { VideoTimeline } from './timeline.js';
 import type { motionIcons, motionEffects, TimedShot, VisualPlan } from './visual-story.js';
 
 type Icon = (typeof motionIcons)[number];
-type Tone = 'neutral' | 'warning' | 'success';
+type Tone = 'neutral' | 'warning' | 'success' | 'error';
 type Effect = (typeof motionEffects)[number];
 type MotionShot = Extract<TimedShot, { kind: 'motion' | 'flow' | 'state' }>;
 
@@ -31,6 +31,8 @@ export interface StagePacket {
   target: string;
   frame: number;
   blocked: boolean;
+  shape?: import('./AnimatedConnector.js').RouteShape;
+  label?: string;
 }
 
 export interface MotionStage {
@@ -50,8 +52,9 @@ export function buildMotionStages(plan: VisualPlan, timeline: VideoTimeline) {
   const previousValues = new Map<string, StageStatus>();
 
   plan.forEach((shots, index) => {
-    for (const shot of shots) {
-      if (!isGraph(shot)) continue;
+    for (const entry of shots) {
+      if (!isGraph(entry)) continue;
+      const shot = entry;
       const start = timeline.segments[index].startFrame + shot.from;
       const continues = !(shot.kind === 'motion' && shot.reset) &&
         shot.actors.some(actor => previous?.nodes.some(node => node.entity === actor.entity));
@@ -62,6 +65,8 @@ export function buildMotionStages(plan: VisualPlan, timeline: VideoTimeline) {
       const earlierNodes = new Map(previous?.nodes.map(node => [node.entity, node]));
       const reserved = new Set(shot.actors.map(actor => earlierNodes.get(actor.entity)?.slot));
       const slotOrder = shot.actors.length === 1 ? [4, 0, 3, 1, 2] : [0, 3, 1, 2, 4];
+      const firstActor = shot.actors.reduce((best, _, index) =>
+        (shot.reveals[index] ?? 0) < (shot.reveals[best] ?? 0) ? index : best, 0);
       const nodes: StageNode[] = shot.actors.map((actor, actorIndex) => {
         const earlier = earlierNodes.get(actor.entity);
         const slot = earlier?.slot ?? slotOrder.find(position => !reserved.has(position))!;
@@ -71,7 +76,7 @@ export function buildMotionStages(plan: VisualPlan, timeline: VideoTimeline) {
           entity: actor.entity, label: actor.label, slot, context: false,
           icon: 'icon' in actor ? actor.icon : earlier?.icon ?? 'service',
           brand: 'brand' in actor ? actor.brand : earlier?.brand,
-          entrance: earlier ? -1 : reveal,
+          entrance: earlier || actorIndex === firstActor ? -1 : reveal,
           previous: previousValues.get(actor.entity),
           updates: [],
         };
@@ -90,7 +95,9 @@ export function buildMotionStages(plan: VisualPlan, timeline: VideoTimeline) {
         shot.events.forEach((event, eventIndex) => {
           const frame = start + (shot.eventFrames?.[eventIndex] ?? 0);
           if (event.kind === 'send') {
-            packets.push({ source: event.source, target: event.target, frame, blocked: event.outcome === 'blocked' });
+            const label = event.cue.match(/\b(?:HTTP request|API response|cache hit|cache miss|database query|payment request|200 OK|event published)\b/i)?.[0];
+            packets.push({ source: event.source, target: event.target, frame, blocked: event.outcome === 'blocked',
+              ...(event.route ? { shape: event.route } : {}), ...(label ? { label } : {}) });
           } else {
             nodesById.get(event.entity)?.updates.push({
               value: event.value, tone: event.tone ?? 'neutral', effect: event.effect, frame,

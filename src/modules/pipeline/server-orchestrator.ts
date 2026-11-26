@@ -4,8 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { masterScriptService, ScriptSession } from '../ai-script/master-script-service.js';
 import { getTTSProvider, synthesizeStoryboardNarration } from '../tts/tts-service.js';
 import { buildVideoTimeline } from '../video/timeline.js';
-import { renderStillPreviews, renderStudioShort } from '../render/video-renderer.js';
-import { prepareReelVisuals } from '../render/reel-visual-assets.js';
+import { renderStudioShort } from '../render/video-renderer.js';
+import { renderReviewedPreviews } from '../render/review-storyboard.js';
+import { prepareStoryboardVisuals } from '../render/storyboard-visuals.js';
 import { performMediaQA } from '../qa/media-qa.js';
 
 export interface PipelineJob {
@@ -126,30 +127,35 @@ export async function runServerPipeline(sessionId: string): Promise<ScriptSessio
     const needsRender = session.renderState?.status !== 'completed' || !session.renderState?.mediaUrl;
     // Validate the visual revision before resuming an unfinished export.
     if (needsRender || !session.visualAssets?.shots || !session.stillPreviews?.length) {
-      updateJob('stills', 60, 'Creating scene artwork and rendering previews...');
+      updateJob('stills', 60, 'Planning narration-timed scenes and rendering previews...');
       const previous = session.visualAssets;
-      const visuals = await prepareReelVisuals(storyboard, timeline, previous);
+      const visuals = await prepareStoryboardVisuals(storyboard, timeline, previous);
       if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while preparing visuals. Start the reel again.');
-      if (visuals !== previous || !session.stillPreviews?.length) {
+      if (visuals !== previous || !session.stillPreviews?.length
+        || (process.env.REEL_VISUAL_REVIEW_MODEL?.trim() && visuals.review?.status !== 'passed')) {
         const previewRun = randomUUID();
         const previewDir = path.resolve('remotion/public/previews', session.id, previewRun);
 
-        const stills = await renderStillPreviews(
+        const reviewed = await renderReviewedPreviews(
           storyboard,
           timeline,
+          visuals,
           previewDir,
           `/previews/${session.id}/${previewRun}`,
-          visuals.shots,
         );
         if (!isCurrentRevision()) throw new Error('The finalized script or audio changed while preparing previews. Start the reel again.');
-        session.visualAssets = visuals;
-        session.stillPreviews = stills;
+        session.visualAssets = reviewed.visuals;
+        session.stillPreviews = reviewed.stills;
         masterScriptService.updateSession(session);
       }
     }
 
     // 5. Video Rendering Stage (1080x1920 MP4)
     if (needsRender) {
+      const review = session.visualAssets?.review;
+      if (process.env.REEL_VISUAL_REVIEW_MODEL?.trim() && review?.status !== 'passed') {
+        throw new Error('Visual review needs attention. Open the rendered scene previews and review the flagged scenes before export.');
+      }
       updateJob('rendering', 70, 'Starting Remotion 1080x1920 MP4 Video render...');
 
       const renderFilename = `final-${randomUUID()}.mp4`;

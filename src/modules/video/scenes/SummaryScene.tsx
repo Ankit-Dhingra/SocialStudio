@@ -46,7 +46,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
         flexDirection: 'column',
         justifyContent: 'space-between',
         fontFamily: VideoDesignTokens.typography.fontFamilySans,
-        color: '#FFFFFF',
+        color: VideoDesignTokens.colors.ink,
         overflow: 'hidden',
       }}
     >
@@ -62,7 +62,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
             alignItems: 'center',
             gap: 10,
             padding: '8px 24px',
-            background: isOutro ? 'rgba(245, 158, 11, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+            background: VideoDesignTokens.colors.elevated,
             border: `1.5px solid ${isOutro ? 'rgba(245, 158, 11, 0.5)' : 'rgba(56, 189, 248, 0.5)'}`,
             borderRadius: 30,
             marginBottom: 10,
@@ -74,7 +74,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
               width: 10,
               height: 10,
               borderRadius: '50%',
-              background: isOutro ? '#F59E0B' : '#38BDF8',
+              background: VideoDesignTokens.colors.cyan,
               boxShadow: `0 0 10px ${isOutro ? '#F59E0B' : '#38BDF8'}`,
             }}
           />
@@ -83,14 +83,14 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
               fontSize: 18,
               fontWeight: 900,
               letterSpacing: 3,
-              color: isOutro ? '#FDE047' : '#38BDF8',
+              color: VideoDesignTokens.colors.ink,
               textTransform: 'uppercase',
             }}
           >
             {onScreenText || (isOutro ? 'FOLLOW FOR DEEP TECH' : 'MENTAL MODEL RECAP')}
           </span>
         </div>
-        <h1 style={{ fontSize: 48, fontWeight: 900, color: '#FFFFFF', margin: '0 0 6px 0' }}>
+        <h1 style={{ fontSize: 48, fontWeight: 900, color: VideoDesignTokens.colors.ink, margin: '0 0 6px 0' }}>
           {headline}
         </h1>
       </div>
@@ -106,7 +106,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
               width: 130,
               height: 130,
               borderRadius: 40,
-              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(168, 85, 247, 0.2) 100%)',
+              background: VideoDesignTokens.colors.surface,
               backdropFilter: 'blur(20px)',
               border: '2px solid rgba(245, 158, 11, 0.6)',
               display: 'flex',
@@ -159,8 +159,8 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
           <div
             style={{
               transform: `scale(${pulseBtn})`,
-              background: 'linear-gradient(135deg, #F59E0B 0%, #EF4444 100%)',
-              color: '#FFFFFF',
+              background: VideoDesignTokens.colors.elevated,
+              color: VideoDesignTokens.colors.ink,
               borderRadius: 30,
               padding: '20px 54px',
               fontSize: 32,
@@ -192,7 +192,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
                 style={{
                   transform: `translateX(${(1 - itemSpring) * 60}px)`,
                   opacity: itemSpring,
-                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(15, 23, 42, 0.85) 100%)',
+                  background: VideoDesignTokens.colors.surface,
                   backdropFilter: 'blur(20px)',
                   border: '1.5px solid rgba(56, 189, 248, 0.35)',
                   borderRadius: 22,
@@ -210,7 +210,7 @@ export const SummaryScene: React.FC<SummarySceneProps> = ({
                     borderRadius: 14,
                     background: 'rgba(56, 189, 248, 0.2)',
                     border: '1.5px solid #38BDF8',
-                    color: '#38BDF8',
+                    color: VideoDesignTokens.colors.cyan,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

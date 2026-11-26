@@ -164,7 +164,7 @@ export const InteractiveConsoleScene: React.FC<InteractiveConsoleSceneProps> = (
                       marginLeft: 12,
                       fontSize: 16,
                       color: VideoDesignTokens.colors.accentCyan,
-                      animation: 'pulse 1s infinite',
+
                     }}
                   >
                     ◀
