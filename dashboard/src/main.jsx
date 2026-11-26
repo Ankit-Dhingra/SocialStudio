@@ -282,6 +282,8 @@ function App() {
   const [stills, setStills] = useState([]);
   const [reviewedVisualRevision, setReviewedVisualRevision] = useState(null);
   const [generatingStills, setGeneratingStills] = useState(false);
+  const [automaticVisualJob, setAutomaticVisualJob] = useState('');
+  const [automaticVisualProgress, setAutomaticVisualProgress] = useState(null);
   const [visualMode, setVisualMode] = useState('automatic');
   const [visualPreviewError, setVisualPreviewError] = useState(null);
   const [selectedStill, setSelectedStill] = useState(null);
@@ -775,6 +777,8 @@ function App() {
   async function handleGenerateStills(editorFeedback, sceneIndex) {
     if (!session?.id) return;
     setGeneratingStills(true);
+    setAutomaticVisualJob(session.id);
+    setAutomaticVisualProgress(null);
     setVisualPreviewError(null);
     try {
       const res = await pipelineFetch(toApiUrl('/api/pipeline/stills'), {
@@ -782,12 +786,38 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: session.id, editorFeedback, sceneIndex, visualMode: 'automatic' }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate visual stills');
+      let data = await res.json();
+      let status = res.status;
+      if (status === 202) {
+        setAutomaticVisualProgress(data.automaticProgress);
+        const endpoint = toApiUrl(`/api/pipeline/stills/${session.id}`);
+        for (;;) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          const poll = await pipelineFetch(endpoint);
+          const snapshot = await poll.json();
+          if (!poll.ok) throw new Error(snapshot.error || 'Could not check Automatic Groq progress.');
+          if (snapshot.automaticResult) {
+            ({ status, body: data } = snapshot.automaticResult);
+            break;
+          }
+          if (!snapshot.automaticProgress) throw new Error('Automatic Groq lost its job status. Click Generate Visuals to resume.');
+          setAutomaticVisualProgress(snapshot.automaticProgress);
+        }
+      }
+      if (status >= 400) {
+        const details = data.issues?.slice(0, 3).map(issue => {
+          const scenes = issue.scenes?.map(index => index + 1).join(', ');
+          return [issue.message, scenes ? `Scenes ${scenes}` : '', issue.path, issue.resolution].filter(Boolean).join(' · ');
+        });
+        throw new Error((details?.length ? details : [data.error || 'Failed to generate visual stills']).join(' | '));
+      }
       acceptVisualPreviews(data);
+      setRenderedMediaUrl('');
     } catch (err) {
       setVisualPreviewError({ sessionId: session.id, message: err.message });
     } finally {
+      setAutomaticVisualJob('');
+      setAutomaticVisualProgress(null);
       setGeneratingStills(false);
     }
   }
@@ -2329,7 +2359,7 @@ function App() {
                             ) : (
                               <Camera size={13} />
                             )}
-                            <span>{generatingStills ? 'Preparing stills…' : 'Generate Stills'}</span>
+                            <span>{generatingStills ? 'Generating Visuals…' : 'Generate Visuals'}</span>
                           </button>}
 
                           <button
@@ -2353,6 +2383,13 @@ function App() {
                             <ArrowRight size={13} />
                           </button>
                         </div>
+                        {visualMode === 'automatic' && automaticVisualJob === session?.id && (
+                          <p role="status" style={{ marginTop: -12, marginBottom: 20, color: 'var(--text-secondary)' }}>
+                            {automaticVisualProgress
+                              ? `${automaticVisualProgress.message} ${automaticVisualProgress.completed}/${automaticVisualProgress.total} scenes validated.`
+                              : 'Preparing the saved visual context…'}
+                          </p>
+                        )}
                       </div>
 
                       {visualPreviewError && visualPreviewError.sessionId === session?.id && (

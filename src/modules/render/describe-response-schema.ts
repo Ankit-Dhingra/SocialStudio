@@ -1,8 +1,10 @@
 import type { JSONSchema } from 'zod/v4/core';
 
 // Compact prompt guidance for JSON-object mode. The full Zod validator still checks every reply.
-export function describeResponseSchema(schema: JSONSchema.JSONSchema): string {
+export function describeResponseSchema(schema: JSONSchema.JSONSchema, includeBounds = false): string {
   const alias = (name: string) => name.replace(/^__schema/, 'S');
+  const bounds = (min?: number, max?: number) => includeBounds && (min !== undefined || max !== undefined)
+    ? `[${min ?? ''}..${max ?? ''}]` : '';
   const describe = (shape: JSONSchema.JSONSchema | boolean): string => {
     if (typeof shape === 'boolean') return shape ? 'unknown' : 'never';
     if (shape.$ref) return alias(shape.$ref.split('/').at(-1)!);
@@ -15,13 +17,15 @@ export function describeResponseSchema(schema: JSONSchema.JSONSchema): string {
       if (shape.items === false) return '[]';
       if (Array.isArray(shape.items)) return `[${shape.items.map(describe).join(',')}]`;
       const item = typeof shape.items === 'object' ? describe(shape.items) : 'unknown';
-      return `Array<${item}>`;
+      return `Array<${item}>${bounds(shape.minItems, shape.maxItems)}`;
     }
     if (shape.type === 'object') {
       const required = new Set(shape.required);
       return '{' + Object.entries(shape.properties ?? {}).map(([key, value]) =>
         `${key}${required.has(key) ? '' : '?'}:${describe(value)}`).join(',') + '}';
     }
+    if (shape.type === 'number' || shape.type === 'integer') return shape.type + bounds(shape.minimum, shape.maximum);
+    if (shape.type === 'string') return shape.type + bounds(shape.minLength, shape.maxLength);
     return Array.isArray(shape.type) ? shape.type.join('|') : shape.type ?? 'unknown';
   };
   return [`Reply=${describe(schema)}`, ...Object.entries(schema.$defs ?? {}).map(([name, shape]) =>

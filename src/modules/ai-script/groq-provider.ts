@@ -31,7 +31,8 @@ export class GroqProvider {
 
   async generateJSON(prompt: string, systemInstruction?: string, timeoutMs?: number, responseJsonSchema?: object,
     options?: { jsonObjectMode?: boolean; maxCompletionTokens?: number; reasoningEffort?: 'low';
-      onUsage?: (usage: unknown, finish?: string) => void }): Promise<string> {
+      onUsage?: (usage: unknown, finish?: string) => void; onResponse?: (status: number, headers: Headers) => void;
+      failFastOnTransportError?: boolean }): Promise<string> {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     const responseFormat = responseJsonSchema && !options?.jsonObjectMode && structuredOutputModels.has(this.model)
       ? { type: 'json_schema', json_schema: { name: 'reel_shot_plan', strict: true, schema: responseJsonSchema } }
@@ -77,6 +78,7 @@ export class GroqProvider {
           }),
           signal: timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs),
         });
+        options?.onResponse?.(res.status, res.headers);
 
         if (!res.ok) {
           const details = await res.json().catch(() => undefined);
@@ -110,6 +112,7 @@ export class GroqProvider {
         if (options?.onUsage) responsiveVisualKeys.set(this.model, key);
         return content;
       } catch (err: any) {
+        if (options?.failFastOnTransportError && !(err instanceof GroqRateLimitError) && !(err instanceof GroqRequestError)) throw err;
         if (options?.onUsage && err instanceof GroqRequestError && [413, 422].includes(err.status)) throw err;
         lastError = err;
         if (options?.onUsage && err instanceof GroqRateLimitError) {

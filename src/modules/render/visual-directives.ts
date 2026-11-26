@@ -135,14 +135,16 @@ export async function visualJobContext(session: ScriptSession) {
     scenes: timeline.segments.map((segment, index) => ({ sceneIndex: index, sceneId: segment.sceneId,
       narration: session.storyboard.scenes[index].narration, startFrame: segment.startFrame,
       endFrameExclusive: segment.startFrame + segment.durationInFrames, audioDurationMs: segment.audioDurationMs,
-      cues: cues[index], whisper: clips[index].wordTimestamps.map(({ word, start, end }: { word: string; start: number; end: number }) => [word, start, end]) })) };
+      cues: cues[index], whisper: clips[index].wordTimestamps.map(
+        ({ word, start, end }: { word: string; start: number; end: number }): [string, number, number] => [word, start, end],
+      ) as [string, number, number][] })) };
 }
 
 export function visualArtifactRevision(session: ScriptSession) {
   return digest([session.id, session.storyboard, session.sevenKeyScript, session.timeline, session.audioResult]);
 }
 
-function parseDirective(raw: string, revision: string) {
+export function readVisualDirectiveJson(raw: string) {
   if (typeof raw !== 'string' || Buffer.byteLength(raw) > visualDirectiveMaxBytes) {
     throw new DirectiveError([{ path: '$', message: 'Paste a JSON document no larger than 256 KB.' }], 413);
   }
@@ -177,27 +179,36 @@ function parseDirective(raw: string, revision: string) {
       keys.add(key);
     }
   }
+  return { value, strippedFence: Boolean(fenced) };
+}
+
+function parseDirective(raw: string, revision: string) {
+  const { value, strippedFence } = readVisualDirectiveJson(raw);
   const result = envelope.safeParse(value);
   if (!result.success) throw new DirectiveError(result.error.issues.slice(0, 24).map(issue => ({ path: `$.${issue.path.join('.')}`, message: issue.message })));
   if (result.data.schemaHash !== visualSchemaHash) throw new DirectiveError([{ path: '$.schemaHash', message: 'Schema hash is stale. Copy a new visual prompt.' }], 409);
   if (result.data.inputRevision !== revision) throw new DirectiveError([{ path: '$.inputRevision', message: 'This JSON belongs to a different or older script and audio revision. Copy a new visual prompt.' }], 409);
-  return { normalized: result.data, strippedFence: Boolean(fenced) };
+  return { normalized: result.data, strippedFence };
 }
 
-export async function prepareVisualImport(session: ScriptSession, raw: string, dryRun = true) {
+export async function prepareVisualImport(session: ScriptSession, raw: string, dryRun = true,
+  validationRange?: { from: number; through: number }) {
   const job = await visualJobContext(session);
   const parsed = parseDirective(raw, job.inputRevision);
   const timeline = session.timeline as VideoTimeline;
   const { normalized } = parsed;
-  let next = 0;
+  if (validationRange && (!dryRun || validationRange.from < 0 || validationRange.through >= timeline.segments.length
+    || validationRange.from > validationRange.through)) throw new Error('Invalid directive validation range.');
+  let next = validationRange?.from ?? 0;
+  const end = validationRange ? validationRange.through + 1 : timeline.segments.length;
   for (const [index, sequence] of normalized.sequences.entries()) {
     const { from, through } = directiveRange(sequence);
-    if (from !== next || through < from || through >= timeline.segments.length || through - from > 3) {
+    if (from !== next || through < from || through >= end || through - from > 3) {
       throw new DirectiveError([{ path: `$.sequences.${index}`, message: `Expected an ordered sequence starting at scene index ${next}, with a range of 1–4 existing scenes.`, scenes: [from, through] }]);
     }
     next = through + 1;
   }
-  if (next !== timeline.segments.length) throw new DirectiveError([{ path: '$.sequences', message: `Missing timeline coverage beginning at scene index ${next}.` }]);
+  if (next !== end) throw new DirectiveError([{ path: '$.sequences', message: `Missing timeline coverage beginning at scene index ${next}.` }]);
 
   const catalog = await loadApprovedVisualAssets();
   const illustrationEnabled = process.env.REEL_IMAGE_GENERATION === 'on';

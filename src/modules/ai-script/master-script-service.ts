@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { Storyboard, StoryboardSchema, SceneTypeEnum } from '../contracts/storyboard.js';
 import { convertCreatorScriptToStoryboard, decodePastedScript, isCreatorScript, parseCustomScriptToStoryboard } from './custom-script-parser.js';
 import type { ReelVisualAssets } from '../render/reel-visual-assets.js';
+import type { AutomaticVisualDraft } from '../render/automatic-visual-directives.js';
 import type { StoryDirectionOverrides } from '../video/visual-story.js';
 
 dotenv.config();
@@ -59,6 +60,7 @@ export interface ScriptSession {
   timeline?: any;
   stillPreviews?: any[];
   visualAssets?: ReelVisualAssets;
+  automaticVisualDraft?: AutomaticVisualDraft;
   storyDirections?: StoryDirectionOverrides;
   motionPreview?: {
     visualRevision?: string;
@@ -148,6 +150,7 @@ export function restoreLegacyNarration(session: ScriptSession): boolean {
     delete session.timeline;
     delete session.stillPreviews;
     delete session.visualAssets;
+    delete session.automaticVisualDraft;
     delete session.motionPreview;
     delete session.storyDirections;
     if (session.renderState?.status !== 'completed') session.renderState = { status: 'idle', progress: 0 };
@@ -915,6 +918,7 @@ Always return the full updated 7 sections so the script remains complete and sel
     delete session.timeline;
     delete session.stillPreviews;
     delete session.visualAssets;
+    delete session.automaticVisualDraft;
     delete session.motionPreview;
     delete session.storyDirections;
     session.renderState = {status: 'idle', progress: 0};

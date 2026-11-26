@@ -24,6 +24,7 @@ export interface ReelVisualAssets {
   schemaVersion?: string;
   source?: 'manual' | 'automatic';
   manualImport?: import('./visual-directives.js').SavedVisualImport;
+  automaticImport?: import('./visual-directives.js').SavedVisualImport;
   fingerprint: string;
   shots: VisualPlan;
   status: 'ready';

@@ -38,6 +38,7 @@ import { performMediaQA } from './modules/qa/media-qa.js';
 import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
 import { canAdoptLocalSession, canProvisionLegacySession, ownerFor, ownsSession, sessionIdPattern } from './modules/pipeline/session-owner.js';
 import { DirectiveError, prepareVisualImport, visualArtifactRevision, visualDirectiveMaxBytes, visualPromptContext } from './modules/render/visual-directives.js';
+import { AutomaticVisualError, prepareAutomaticVisuals, type AutomaticProgress } from './modules/render/automatic-visual-directives.js';
 import { verifiedDirectiveExample, visualSourcePack } from './modules/render/visual-source-pack.js';
 import { execFileSync } from 'node:child_process';
 import express from 'express';
@@ -400,6 +401,11 @@ app.post('/api/pipeline/audio/synthesize', async (req, res) => {
 });
 
 const stillPreviewJobs = new Set<string>();
+type AutomaticVisualJob = {
+  progress: AutomaticProgress;
+  result?: { status: number; body: object };
+};
+const automaticVisualJobs = new Map<string, AutomaticVisualJob>();
 
 // 6.5. Generate Still Previews (fast 3-4s visual verification without full render)
 app.post('/api/pipeline/stills', async (req, res) => {
@@ -418,7 +424,8 @@ app.post('/api/pipeline/stills', async (req, res) => {
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
-  const leavingManual = session.visualAssets?.source === 'manual' && visualMode === 'automatic';
+  const automatic = visualMode === 'automatic';
+  const leavingManual = session.visualAssets?.source === 'manual' && automatic;
   if (session.visualAssets?.source === 'manual' && !leavingManual) {
     return res.status(409).json({ error: 'Use the accepted manual revision, import corrected JSON, or explicitly choose Automatic.' });
   }
@@ -435,95 +442,150 @@ app.post('/api/pipeline/stills', async (req, res) => {
     });
   }
   const motion = motionPreviewJobs.get(sessionId);
+  const activeAutomatic = automaticVisualJobs.get(sessionId);
+  if (automatic && stillPreviewJobs.has(sessionId) && activeAutomatic && !activeAutomatic.result
+    && !editorFeedback && scope === undefined && !useSavedDirection && !recompileSavedVisuals) {
+    return res.status(202).json({ ok: true, automaticProgress: activeAutomatic.progress });
+  }
   if (stillPreviewJobs.has(sessionId) || (motion && motion.status !== 'failed')) {
     return res.status(409).json({ error: 'A visual preview is already running.' });
   }
   if (session.renderState?.status === 'rendering') return res.status(409).json({ error: 'Wait for the current video export to finish.' });
 
+  const job: AutomaticVisualJob | undefined = automatic ? {
+    progress: { completed: 0, total: session.storyboard.scenes.length, message: 'Preparing the saved visual context…' },
+  } : undefined;
+  if (job) automaticVisualJobs.set(sessionId, job);
+  const reply = (status: number, body: object) => {
+    if (job) job.result = { status, body };
+    else res.status(status).json(body);
+  };
   stillPreviewJobs.add(sessionId);
-  try {
-    if (!session.timeline) {
-      session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
-        fps: 30,
-        audioSrcPrefix: `audio/runs/${sessionId}`,
+  const run = async () => {
+    try {
+      if (automatic && !session.timeline) {
+        return reply(409, { error: 'The saved narration timeline is required for automatic visual generation.' });
+      }
+      if (!session.timeline) {
+        session.timeline = buildVideoTimeline(session.storyboard, session.audioResult?.clips || [], {
+          fps: 30,
+          audioSrcPrefix: `audio/runs/${sessionId}`,
+        });
+        masterScriptService.updateSession(session);
+      }
+
+      const storyboard = session.storyboard;
+      const timeline = !automatic && process.env.REEL_VISUAL_PLANNER === 'legacy'
+        ? repairOpeningWordFrames(storyboard, session.timeline) : session.timeline;
+      session.timeline = timeline;
+      const directions = session.storyDirections;
+      const isCurrentRevision = () => {
+        const current = masterScriptService.getSession(sessionId);
+        return current?.storyboard === storyboard && current.timeline === timeline && current.storyDirections === directions;
+      };
+      const previous = leavingManual ? undefined : session.visualAssets;
+      if (scope !== undefined && (previous?.inputRevision !== storyboardVisualInputRevision(storyboard, timeline) ||
+        (automatic && previous?.automaticImport?.artifactRevision !== visualArtifactRevision(session)))) {
+        return reply(409, { error: 'Generate a visual preview for this script and audio before editing a single scene.' });
+      }
+      const generated = job ? await prepareAutomaticVisuals(session, {
+        scope, feedback: editorFeedback, recompile: recompileSavedVisuals === true || useSavedDirection === true,
+        current: isCurrentRevision, progress: progress => { job.progress = progress; },
+        saveDraft: draft => {
+          session.automaticVisualDraft = draft;
+          masterScriptService.updateSession(session);
+        },
+      }) : undefined;
+      const planned = generated?.visuals ?? await prepareStoryboardVisuals(storyboard, timeline, previous, {
+        editorFeedback, sceneIndices: scope, recompileSavedVisuals: recompileSavedVisuals === true,
+        retryUnresolved: useSavedDirection !== true && !editorFeedback,
       });
+      if (!isCurrentRevision()) {
+        return reply(409, { error: 'The script or audio changed while preparing visuals.' });
+      }
+      const previewRun = randomUUID();
+      const previewDir = path.resolve('remotion/public/previews', sessionId, previewRun);
+      console.log(`[Pipeline] Generating still previews for session ${sessionId}...`);
+      const refresh = previous?.inputRevision === planned.inputRevision && session.stillPreviews?.length &&
+        (scope ?? (!editorFeedback && useSavedDirection !== true ? previous?.unresolvedScenes : undefined));
+      const selected = !automatic && Array.isArray(refresh) && refresh.length
+        ? new Set<number>([...refresh, ...planned.shots.flatMap((group, index) => group !== previous?.shots[index] ? [index] : [])]) : undefined;
+      const previousStills = session.stillPreviews ?? [];
+      if (!automatic && !leavingManual && previous?.fingerprint !== planned.fingerprint) {
+        delete session.motionPreview;
+        session.stillPreviews = previousStills.filter(still => planned.shots[still.sceneIndex] === previous?.shots[still.sceneIndex]);
+      }
+      if (!automatic && !leavingManual) {
+        session.visualAssets = planned;
+        masterScriptService.updateSession(session);
+      }
+      if (job) job.progress = {
+        completed: storyboard.scenes.length, total: storyboard.scenes.length, message: 'Rendering still previews…',
+      };
+      const { stills: newStills, visuals } = automatic ? {
+        stills: await renderStillPreviews(storyboard, timeline, previewDir, `/previews/${sessionId}/${previewRun}`, planned.shots),
+        visuals: planned,
+      } : await renderReviewedPreviews(
+        storyboard,
+        timeline,
+        planned,
+        previewDir,
+        `/previews/${sessionId}/${previewRun}`,
+        selected,
+      );
+      const replacedScenes = new Set(newStills.map(still => still.sceneIndex));
+      const stills = selected ? [...previousStills.filter(still => !replacedScenes.has(still.sceneIndex)), ...newStills]
+        .sort((a, b) => a.sceneIndex - b.sceneIndex || a.frame - b.frame) : newStills;
+
+      if (!isCurrentRevision()) {
+        return reply(409, { error: 'The script or audio changed while rendering visual previews.' });
+      }
+      if (leavingManual && visuals.unresolvedScenes?.length) {
+        return reply(422, { error: 'Automatic planning did not complete. The accepted manual preview is still available.',
+          planningErrors: visuals.visualPlanningErrors });
+      }
+      if (previous?.fingerprint !== visuals.fingerprint) delete session.motionPreview;
+      if (editorFeedback) delete session.storyDirections;
+      session.visualAssets = visuals;
+      session.stillPreviews = stills;
+      if (automatic) {
+        delete session.automaticVisualDraft;
+        if (previous?.fingerprint !== visuals.fingerprint) session.renderState = { status: 'idle', progress: 0 };
+      }
       masterScriptService.updateSession(session);
-    }
 
-    const storyboard = session.storyboard;
-    const timeline = process.env.REEL_VISUAL_PLANNER === 'legacy'
-      ? repairOpeningWordFrames(storyboard, session.timeline) : session.timeline;
-    session.timeline = timeline;
-    const directions = session.storyDirections;
-    const isCurrentRevision = () => {
-      const current = masterScriptService.getSession(sessionId);
-      return current?.storyboard === storyboard && current.timeline === timeline && current.storyDirections === directions;
-    };
-    const previous = leavingManual ? undefined : session.visualAssets;
-    if (scope !== undefined && previous?.inputRevision !== storyboardVisualInputRevision(storyboard, timeline)) {
-      return res.status(409).json({ error: 'Generate a visual preview for this script and audio before editing a single scene.' });
+      reply(200, {
+        ok: true,
+        stills,
+        ...(generated && { automaticReport: generated.report }),
+        visuals: { fingerprint: visuals.fingerprint, source: 'automatic', status: visuals.status, direction: visuals.direction, shotCount: visuals.shots.flat().length,
+          visualThread: visuals.visualThread, unresolvedScenes: visuals.unresolvedScenes, review: visuals.review,
+          planningErrors: visuals.visualPlanningErrors },
+      });
+    } catch (err: any) {
+      if (err instanceof AutomaticVisualError) return reply(err.status, {
+        error: err.message, issues: err.issues, automaticReport: err.report,
+      });
+      if (err instanceof DirectiveError) return reply(err.status, { error: err.message,
+        issues: automatic ? err.issues.map(issue => ({ ...issue,
+          resolution: issue.resolution?.replace('reopen Manual mode', 'retry Automatic Groq')
+            .replace('use Refresh Context in Advanced Settings', 'retry Automatic Groq'),
+        })) : err.issues,
+      });
+      console.error(`[Pipeline Stills Error]:`, err);
+      reply(500, { error: err.message });
+    } finally {
+      stillPreviewJobs.delete(sessionId);
+      if (job) setTimeout(() => {
+        if (automaticVisualJobs.get(sessionId) === job) automaticVisualJobs.delete(sessionId);
+      }, 15 * 60 * 1000).unref();
     }
-    const planned = await prepareStoryboardVisuals(storyboard, timeline, previous, {
-      editorFeedback, sceneIndices: scope, recompileSavedVisuals: recompileSavedVisuals === true,
-      retryUnresolved: useSavedDirection !== true && !editorFeedback,
-    });
-    if (!isCurrentRevision()) {
-      return res.status(409).json({ error: 'The script or audio changed while preparing visuals.' });
-    }
-    const previewRun = randomUUID();
-    const previewDir = path.resolve('remotion/public/previews', sessionId, previewRun);
-    console.log(`[Pipeline] Generating still previews for session ${sessionId}...`);
-    const refresh = previous?.inputRevision === planned.inputRevision && session.stillPreviews?.length &&
-      (scope ?? (!editorFeedback && useSavedDirection !== true ? previous?.unresolvedScenes : undefined));
-    const selected = Array.isArray(refresh) && refresh.length
-      ? new Set<number>([...refresh, ...planned.shots.flatMap((group, index) => group !== previous?.shots[index] ? [index] : [])]) : undefined;
-    const previousStills = session.stillPreviews ?? [];
-    if (!leavingManual && previous?.fingerprint !== planned.fingerprint) {
-      delete session.motionPreview;
-      session.stillPreviews = previousStills.filter(still => planned.shots[still.sceneIndex] === previous?.shots[still.sceneIndex]);
-    }
-    if (!leavingManual) {
-      session.visualAssets = planned;
-      masterScriptService.updateSession(session);
-    }
-    const { stills: newStills, visuals } = await renderReviewedPreviews(
-      storyboard,
-      timeline,
-      planned,
-      previewDir,
-      `/previews/${sessionId}/${previewRun}`,
-      selected,
-    );
-    const replacedScenes = new Set(newStills.map(still => still.sceneIndex));
-    const stills = selected ? [...previousStills.filter(still => !replacedScenes.has(still.sceneIndex)), ...newStills]
-      .sort((a, b) => a.sceneIndex - b.sceneIndex || a.frame - b.frame) : newStills;
-
-    if (!isCurrentRevision()) {
-      return res.status(409).json({ error: 'The script or audio changed while rendering visual previews.' });
-    }
-    if (leavingManual && visuals.unresolvedScenes?.length) {
-      return res.status(422).json({ error: 'Automatic planning did not complete. The accepted manual preview is still available.',
-        planningErrors: visuals.visualPlanningErrors });
-    }
-    if (previous?.fingerprint !== visuals.fingerprint) delete session.motionPreview;
-    if (editorFeedback) delete session.storyDirections;
-    session.visualAssets = visuals;
-    session.stillPreviews = stills;
-    masterScriptService.updateSession(session);
-
-    res.json({
-      ok: true,
-      stills,
-      visuals: { fingerprint: visuals.fingerprint, source: 'automatic', status: visuals.status, direction: visuals.direction, shotCount: visuals.shots.flat().length,
-        visualThread: visuals.visualThread, unresolvedScenes: visuals.unresolvedScenes, review: visuals.review,
-        planningErrors: visuals.visualPlanningErrors },
-    });
-  } catch (err: any) {
-    console.error(`[Pipeline Stills Error]:`, err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    stillPreviewJobs.delete(sessionId);
+  };
+  if (job) {
+    void run();
+    return res.status(202).json({ ok: true, automaticProgress: job.progress });
   }
+  await run();
 });
 
 app.get('/api/pipeline/stills/:sessionId', (req, res) => {
@@ -531,8 +593,11 @@ app.get('/api/pipeline/stills/:sessionId', (req, res) => {
   if (!session) {
     return res.status(404).json({ error: 'Session not found' });
   }
+  const automatic = automaticVisualJobs.get(session.id);
   res.json({
     stills: session.stillPreviews || [],
+    automaticProgress: automatic?.progress,
+    automaticResult: automatic?.result,
   });
 });
 
@@ -686,7 +751,12 @@ app.post('/api/pipeline/motion-preview', (req, res) => {
     || manual.manualImport?.artifactRevision !== visualArtifactRevision(session))) {
     return res.status(409).json({ error: 'Select the current accepted manual preview revision.' });
   }
-  const timeline = !manual && session.timeline && process.env.REEL_VISUAL_PLANNER === 'legacy'
+  const automatic = session.visualAssets?.automaticImport ? session.visualAssets : undefined;
+  if (automatic && (automatic.fingerprint !== visualRevision || Object.keys(directions).length
+    || automatic.automaticImport?.artifactRevision !== visualArtifactRevision(session))) {
+    return res.status(409).json({ error: 'Select the current accepted Automatic Groq preview revision.' });
+  }
+  const timeline = !manual && !automatic && session.timeline && process.env.REEL_VISUAL_PLANNER === 'legacy'
     ? repairOpeningWordFrames(storyboard, session.timeline) : session.timeline;
   const sceneStart = timeline?.segments[sceneIndex]?.startFrame;
   if (!timeline || !session.audioResult || sceneStart === undefined) {
@@ -713,7 +783,7 @@ app.post('/api/pipeline/motion-preview', (req, res) => {
   void (async () => {
     try {
       const previous = session.visualAssets;
-      const visuals = manual ?? await prepareStoryboardVisuals(storyboard, timeline, previous, { directions });
+      const visuals = manual ?? automatic ?? await prepareStoryboardVisuals(storyboard, timeline, previous, { directions });
       if (!currentRevision()) return;
       let startFrame = sceneStart;
       let seconds = 24;
@@ -793,7 +863,11 @@ app.post('/api/pipeline/render', async (req, res) => {
   if (manual && (manual.fingerprint !== visualRevision || manual.manualImport?.artifactRevision !== visualArtifactRevision(session))) {
     return res.status(409).json({ error: 'Select the current accepted manual preview revision before exporting.' });
   }
-  const renderTimeline = !manual && process.env.REEL_VISUAL_PLANNER === 'legacy'
+  const automatic = session.visualAssets?.automaticImport ? session.visualAssets : undefined;
+  if (automatic && (automatic.fingerprint !== visualRevision || automatic.automaticImport?.artifactRevision !== visualArtifactRevision(session))) {
+    return res.status(409).json({ error: 'Select the current accepted Automatic Groq preview revision before exporting.' });
+  }
+  const renderTimeline = !manual && !automatic && process.env.REEL_VISUAL_PLANNER === 'legacy'
     ? repairOpeningWordFrames(storyboard, session.timeline) : session.timeline;
   const saved = session.visualAssets;
   if (visualRevision !== undefined && (!saved || saved.fingerprint !== visualRevision ||

@@ -309,3 +309,62 @@ test('automatic Groq semantic planning still reaches the shared compiler with mo
     process.env = originalEnv;
   }
 });
+
+test('automatic Groq retains accepted ranges and compiles through the canonical importer', {
+  skip: audit !== 'session_e9ca863a-a3ee-4345-9e58-4d4860631836' || exportMedia,
+}, async () => {
+  const { masterScriptService } = await import('../src/modules/ai-script/master-script-service.js');
+  const { prepareAutomaticVisuals } = await import('../src/modules/render/automatic-visual-directives.js');
+  const { prepareVisualImport } = await import('../src/modules/render/visual-directives.js');
+  const { directiveRange } = await import('../src/modules/render/visual-directive-compiler.js');
+  const saved = masterScriptService.getSession(audit!);
+  assert(saved?.timeline);
+  const fixture = JSON.parse(await readFile('output/whatsapp-visual-directive-validated.json', 'utf8'));
+  const previous = await prepareVisualImport(saved, JSON.stringify(fixture), false);
+  const initial = { ...saved, visualAssets: undefined };
+  const { version, schemaHash, inputRevision, sequences } = fixture;
+  const missing = sequences.find((sequence: Parameters<typeof directiveRange>[0]) => {
+    const range = directiveRange(sequence);
+    return range.from === range.through && range.from > 0;
+  });
+  assert(missing);
+  const originalEnv = { ...process.env };
+  const nativeFetch = globalThis.fetch;
+  const ranges: number[][] = [];
+  try {
+    process.env.GROQ_API_KEYS = 'mock-only-visual';
+    process.env.REEL_GROQ_VISUAL_TPM = '90000';
+    process.env.REEL_IMAGE_GENERATION = 'off';
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), 'https://api.groq.com/openai/v1/chat/completions');
+      const payload = JSON.parse(String(init?.body));
+      assert.equal(payload.model, 'openai/gpt-oss-120b');
+      assert.equal(payload.response_format.type, 'json_object');
+      const prompt = payload.messages.at(-1).content;
+      assert(prompt.includes('<svg'));
+      assert(prompt.includes('Behind The Tech'));
+      assert(prompt.includes('whisper'));
+      const [from, through] = prompt.match(/inclusive zero-based range (\d+)–(\d+)/).slice(1).map(Number);
+      ranges.push([from, through]);
+      if (ranges.length === 2) return new Response(null, { status: 429, headers: { 'Retry-After': '1' } });
+      const wanted = ranges.length === 1 ? sequences.filter((sequence: unknown) => sequence !== missing) :
+        sequences.filter((sequence: Parameters<typeof directiveRange>[0]) => {
+        const span = directiveRange(sequence);
+        return span.from >= from && span.through <= through;
+      });
+      return Response.json({ choices: [{ finish_reason: 'stop', message: {
+        content: JSON.stringify({ version, schemaHash, inputRevision, sequences: wanted }),
+      } }], usage: { prompt_tokens: 1500, completion_tokens: 550 } });
+    };
+    const collected = await prepareAutomaticVisuals(initial);
+    assert.equal(collected.visuals.source, 'automatic');
+    assert.deepEqual(collected.visuals.shots, previous.visuals?.shots);
+    assert.deepEqual(collected.visuals.automaticImport?.normalized, previous.normalized);
+    const target = [directiveRange(missing).from, directiveRange(missing).through];
+    assert.deepEqual(ranges, [[0, saved.timeline.segments.length - 1], target, target]);
+    assert.deepEqual(collected.report.attempts.flatMap(attempt => attempt.responses), [200, 429, 200]);
+  } finally {
+    globalThis.fetch = nativeFetch;
+    process.env = originalEnv;
+  }
+});
