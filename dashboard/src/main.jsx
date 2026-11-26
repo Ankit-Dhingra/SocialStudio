@@ -257,7 +257,7 @@ function App() {
 
   // Script Mode: 'ai' (Generate AI) or 'paste' (Paste Script)
   const [scriptMode, setScriptMode] = useState('ai');
-  const [customScriptText, setCustomScriptText] = useState(SAMPLE_6KEY_JSON);
+  const [customScriptText, setCustomScriptText] = useState('');
   const [pasteSuccess, setPasteSuccess] = useState(false);
 
   // Script Viewer & Edit States
@@ -268,8 +268,8 @@ function App() {
   const [savingEdits, setSavingEdits] = useState(false);
 
   // Studio Pipeline State
-  const [topic, setTopic] = useState(VIRAL_TECH_PRESETS[0].topic);
-  const [angle, setAngle] = useState(VIRAL_TECH_PRESETS[0].angle);
+  const [topic, setTopic] = useState('');
+  const [angle, setAngle] = useState('');
   const [session, setSession] = useState(null);
   const [sessionsList, setSessionsList] = useState([]);
   const [studioLoading, setStudioLoading] = useState(false);
@@ -296,8 +296,13 @@ function App() {
   const [previewModalUrl, setPreviewModalUrl] = useState('');
 
   // Save as Draft Notification Toast
-  const [saveDraftToast, setSaveDraftToast] = useState(false);
-  const [draftToastMsg, setDraftToastMsg] = useState('Draft saved successfully!');
+  const [draftToast, setDraftToast] = useState(null);
+
+  useEffect(() => {
+    if (!draftToast) return;
+    const timer = setTimeout(() => setDraftToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [draftToast]);
 
   const chatScrollRef = useRef(null);
 
@@ -367,34 +372,31 @@ function App() {
 
   // Handle Save as Draft
   async function handleSaveDraft() {
-    if (!session?.id) {
-      if (scriptMode === 'paste' && customScriptText.trim()) {
-        await handleParseCustomScript();
-      } else if (topic.trim()) {
-        await handleGenerateScript();
-      }
-      setDraftToastMsg('Draft saved! Find it anytime in the Drafts tab.');
-      setSaveDraftToast(true);
-      setTimeout(() => setSaveDraftToast(false), 3500);
-      return;
-    }
+    setDraftToast(null);
     try {
-      await pipelineFetch(toApiUrl('/api/pipeline/script/finalize'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: session.id,
-          customMarkdown: session.currentMarkdown || JSON.stringify(session.sevenKeyScript || {}),
-        }),
-      });
-      localStorage.setItem('socialstudio_active_session', session.id);
-      localStorage.setItem('socialstudio_active_stage', String(stage));
-      await loadSessions();
-      setDraftToastMsg('Draft saved! You can resume it anytime from the Drafts tab.');
-      setSaveDraftToast(true);
-      setTimeout(() => setSaveDraftToast(false), 3500);
+      if (!session?.id) {
+        const draft = scriptMode === 'paste' ? await handleParseCustomScript() : await handleGenerateScript();
+        if (!draft?.id) return;
+      } else {
+        const response = await pipelineFetch(toApiUrl('/api/pipeline/script/finalize'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: session.id,
+            customMarkdown: session.currentMarkdown || JSON.stringify(session.sevenKeyScript || {}),
+          }),
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.error || `Server returned HTTP ${response.status}.`);
+        }
+        localStorage.setItem('socialstudio_active_session', session.id);
+        localStorage.setItem('socialstudio_active_stage', String(stage));
+        await loadSessions();
+      }
+      setDraftToast({ message: 'Draft saved! You can resume it anytime from the Drafts tab.' });
     } catch (e) {
-      console.warn('Failed to save draft:', e);
+      setDraftToast({ error: true, message: `Could not save draft. ${e.message}` });
     }
   }
 
@@ -488,7 +490,9 @@ function App() {
     setIsEditingScript(false);
     setPasteSuccess(false);
     setEditForm({});
-    setCustomScriptText(SAMPLE_6KEY_JSON);
+    setCustomScriptText('');
+    setTopic('');
+    setAngle('');
     localStorage.removeItem('socialstudio_active_session');
     localStorage.removeItem('socialstudio_active_stage');
   }
@@ -593,6 +597,7 @@ function App() {
       clearRenderPreview();
       setStage(1);
       loadSessions();
+      return data;
     } catch (err) {
       alert(`Script Generation Error: ${err.message}`);
     } finally {
@@ -626,6 +631,7 @@ function App() {
       clearRenderPreview();
       setPasteSuccess(true);
       loadSessions();
+      return data;
     } catch (err) {
       alert(`Script Parsing Error: ${err.message}`);
     } finally {
@@ -1455,6 +1461,7 @@ function App() {
                       type="button"
                       onClick={handleSaveDraft}
                       className="btn btn-secondary"
+                      disabled={studioLoading || (!session?.id && !(scriptMode === 'paste' ? customScriptText.trim() : topic.trim()))}
                       title="Save Current State as Draft"
                     >
                       <Bookmark size={13} />
@@ -1705,7 +1712,7 @@ function App() {
                               setCustomScriptText(e.target.value);
                               setPasteSuccess(false);
                             }}
-                            placeholder={`{\n  "title": "Topic Name",\n  "hook": "...",\n  "problem": "...",\n  "solution": "...",\n  "tech_explained": "...",\n  "conclusion": "...",\n  "cta": "..."\n}`}
+                            placeholder="Paste your script here…"
                           />
 
                           {/* ACTION BUTTON */}
@@ -2689,10 +2696,10 @@ function App() {
         </div>
       )}
       {/* FLOATING TOAST NOTIFICATION */}
-      {saveDraftToast && (
-        <div className="toast-notification">
-          <Bookmark size={15} color="#4ade80" />
-          <span>{draftToastMsg || 'Draft saved successfully!'}</span>
+      {draftToast && (
+        <div className="toast-notification" role={draftToast.error ? 'alert' : 'status'}>
+          <Bookmark size={15} color={draftToast.error ? '#fb7185' : '#4ade80'} aria-hidden="true" />
+          <span>{draftToast.message}</span>
         </div>
       )}
     </div>
