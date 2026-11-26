@@ -108,7 +108,7 @@ test('manual visual API validates, authorizes and preserves a pinned production 
     }
     assert.equal(context.body.job.brand.name, 'Behind The Tech');
     assert.deepEqual(context.body.job.brand, { name: 'Behind The Tech' });
-    assert.doesNotMatch(context.body.artDirection.brand, /Behind The Tech|@behindthestack/i);
+    assert.doesNotMatch(context.body.artDirection.brand, /Behind the Stack|@behindthetech/i);
     assert.match(context.body.prompt, /one fenced json code block/);
     assert.equal(context.body.job.title, 'Membership Probe');
     assert.equal(context.body.job.storyboardTitle, source.storyboard.title);

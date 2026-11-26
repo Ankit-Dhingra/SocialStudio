@@ -211,7 +211,7 @@ test('video captions and nested scene text use Roman Hinglish with the original 
   const legacyBrand = 'Follow Behind The Tech abhi';
   assert.equal(canonicalBrandText(legacyBrand), `Follow ${reelBrand.name} abhi`);
   assert.equal(canonicalBrandText(legacyBrand).split(' ').length, legacyBrand.split(' ').length);
-  assert.equal(canonicalBrandText('Behind The Tech @behindthestack'), 'Behind The Tech');
+  assert.equal(canonicalBrandText('Behind The Tech @behindthetech'), 'Behind The Tech');
 });
 
 test('an authored queue renders its real stages at spoken cues and pins the previewed plan for export', async (t) => {
