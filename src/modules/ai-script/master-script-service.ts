@@ -784,6 +784,13 @@ export class MasterScriptService {
       throw new Error(`Session ${sessionId} not found. Please start a new script session.`);
     }
 
+    const refined = await this.buildRefinedSession(session, userInstruction);
+    sessions.set(sessionId, refined);
+    saveSessionToDisk(refined);
+    return refined;
+  }
+
+  async buildRefinedSession(session: ScriptSession, userInstruction: string): Promise<ScriptSession> {
     if (session.sevenKeyScript) {
       const systemPrompt =
         getMasterPromptTemplate() +
@@ -804,11 +811,11 @@ Output ONLY the raw valid JSON object.`;
 
       const prompt = `Current 7-Key Script JSON:\n${JSON.stringify(session.sevenKeyScript, null, 2)}\n\nUser Revision Request:\n${userInstruction}\n\nDeliver the updated complete 7-key JSON script:`;
 
-      console.log(`[MasterScript] Refining 7-key script for session ${sessionId}...`);
+      console.log(`[MasterScript] Refining 7-key script for session ${session.id}...`);
       const responseText = await this.callLLM(prompt, systemPrompt);
       const updatedObj = tryParseSevenKeyJson(responseText);
       if (updatedObj) {
-        return this.createCustomSession(updatedObj, session.topic, sessionId, session.angle);
+        return this.buildCustomSession(updatedObj, session.topic, session, session.angle);
       }
     }
 
@@ -822,7 +829,7 @@ Always return the full updated 7 sections so the script remains complete and sel
 
     const chatContext = `Current Script:\n${session.currentMarkdown}\n\nUser Revision Request:\n${userInstruction}\n\nProvide the complete updated script reflecting these changes:`;
 
-    console.log(`[MasterScript] Refining session ${sessionId} with user instruction: "${userInstruction.slice(0, 50)}..."`);
+    console.log(`[MasterScript] Refining session ${session.id}...`);
     const updatedResponse = await this.callLLM(chatContext, systemPrompt);
 
     const sections = parseSectionsFromMarkdown(updatedResponse);
@@ -836,8 +843,6 @@ Always return the full updated 7 sections so the script remains complete and sel
     session.finalized = false;
     session.updatedAt = Date.now();
 
-    sessions.set(sessionId, session);
-    saveSessionToDisk(session);
     return session;
   }
 

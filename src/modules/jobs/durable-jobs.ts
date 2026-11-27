@@ -2,18 +2,19 @@ import { createHash, randomUUID } from 'node:crypto';
 import mongoose, { Schema, type ClientSession } from 'mongoose';
 import type { Queue } from 'bullmq';
 
-export type StudioOperation = 'script' | 'audio' | 'visuals' | 'stills' | 'motion' | 'render';
+export type StudioOperation = 'script' | 'refine' | 'audio' | 'visuals' | 'stills' | 'motion' | 'render';
+export type MotionScope = 'scene' | 'sequence' | 'hook' | 'transition' | 'ending';
 export type Provider = 'gemini' | 'groq' | 'sarvam' | 'elevenlabs' | 'cloudflare' | 'story-video';
 export type ProviderQuote = { attempts: number; microsPerCall: number; microsPerMillionUnits?: Record<string, number> };
 export type ExecutionQuote = { providers: Partial<Record<Provider, ProviderQuote>>; computeMicros: number };
-export type ExecutionInput = { feedback?: string; sceneIndex?: number };
+export type ExecutionInput = { feedback?: string; sceneIndex?: number; instruction?: string; scope?: MotionScope };
 const leaseMs = 60_000;
 const maxAttempts = 3;
 const jobs = mongoose.model('StudioJob', new Schema({
   _id: { type: String, required: true },
   ownerId: { type: String, required: true },
   projectId: { type: String, required: true },
-  operation: { type: String, enum: ['script', 'audio', 'visuals', 'stills', 'motion', 'render'], required: true },
+  operation: { type: String, enum: ['script', 'refine', 'audio', 'visuals', 'stills', 'motion', 'render'], required: true },
   revision: { type: Number, required: true },
   status: { type: String, enum: ['queued', 'running', 'completed', 'failed', 'needs_review'], default: 'queued', required: true },
   attempts: { type: Number, default: 0, required: true },
@@ -103,8 +104,8 @@ export async function permitJobSettlement(id: string, success: boolean, transact
   return result.matchedCount === 1;
 }
 
-export async function reconcileJobs(queue: Pick<Queue, 'add'>, now = new Date(), hostedOnly = false) {
-  const mode = hostedOnly ? { quote: { $exists: true } } : {};
+export async function reconcileJobs(queue: Pick<Queue, 'add'>, now = new Date(), hostedOnly = false, operations?: StudioOperation[]) {
+  const mode = { ...(hostedOnly && { quote: { $exists: true } }), ...(operations && { operation: { $in: operations } }) };
   const expired = { ...mode, status: 'running' as const, leaseUntil: { $lte: now } };
   const clearLease = { leaseId: 1 as const, leaseUntil: 1 as const };
   await jobs.updateMany({ ...expired, providerInFlight: true }, { $set: { status: 'needs_review' }, $unset: clearLease });
@@ -121,8 +122,9 @@ export async function reconcileJobs(queue: Pick<Queue, 'add'>, now = new Date(),
   return pending.length;
 }
 
-export function claimJob(id: string, now = new Date()) {
-  return jobs.findOneAndUpdate({ _id: id, status: 'queued', attempts: { $lt: maxAttempts } }, {
+export function claimJob(id: string, now = new Date(), operations?: StudioOperation[]) {
+  return jobs.findOneAndUpdate({ _id: id, status: 'queued', attempts: { $lt: maxAttempts },
+    ...(operations && { operation: { $in: operations } }) }, {
     $set: { status: 'running', leaseId: randomUUID(), leaseUntil: new Date(now.getTime() + leaseMs) }, $inc: { attempts: 1 },
   }, { returnDocument: 'after' }).lean().exec();
 }

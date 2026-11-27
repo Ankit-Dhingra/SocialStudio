@@ -10,7 +10,7 @@ export function signedSessions() {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   const config: ClerkConfig = {
     frontendOrigin: fixtureFrontendOrigin, publishableKey: `pk_test_${Buffer.from(`${clerkHostname}$`).toString('base64')}`,
-    secretKey: 'sk_test_mock', jwtKey: publicKey.export({ format: 'pem', type: 'spki' }),
+    secretKey: 'sk_test_mock', jwtKey: publicKey.export({ format: 'pem', type: 'spki' }).toString(),
     mongodbUri: 'unused', ownerEmail: fixtureOwnerEmail, ownerClerkUserId: fixtureOwnerId, requireOwnerMfa: true,
   };
   const token = (sub: string, secondFactorAge = -1, azp = fixtureFrontendOrigin) => {

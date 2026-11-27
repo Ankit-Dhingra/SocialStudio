@@ -1,7 +1,22 @@
-FROM node:22-slim
+FROM node:22-slim AS app
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --include=dev
+COPY . .
+RUN mkdir -p /app/media/tmp
+ENV TMPDIR=/app/media/tmp
+
+FROM app AS generation
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production
+CMD ["node", "--import", "tsx", "src/studio-worker.ts", "generation"]
+
+FROM app AS renderer
 
 # Install system libraries for headless browser, FFmpeg, and TrueType fonts
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libdbus-1-3 \
     libatk1.0-0 \
@@ -22,32 +37,17 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-ENV PORT=4000
-
-WORKDIR /app
-
-# Copy package manifests & install
-COPY package*.json ./
-RUN npm ci --include=dev
-
 # Pre-download and cache Remotion headless browser binary at build time
 RUN node -e "require('@remotion/renderer').ensureBrowser().then(r => console.log('✔ [Build] Browser ensured:', r))"
-
-# Copy codebase
-COPY . .
 
 # Pre-bundle Remotion composition at build time so runtime has 0% Webpack CPU load
 RUN npm run bundle:remotion
 
-# Create media directories
-RUN mkdir -p /app/media/tmp /app/media/runs
-
 ENV NODE_ENV=production
+CMD ["node", "--import", "tsx", "src/studio-worker.ts", "render"]
+
+FROM app AS api
+ENV NODE_ENV=production PORT=4000
 ENV NODE_OPTIONS="--max-old-space-size=320"
-ENV TMPDIR=/app/media/tmp
-
-# Expose API port
 EXPOSE 4000
-
-# Start the hosted API. Run npm run worker:studio in the dedicated worker.
-CMD ["npm", "start"]
+CMD ["node", "--import", "tsx", "src/api.ts"]

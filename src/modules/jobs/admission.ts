@@ -22,6 +22,7 @@ const reservations = mongoose.model('GenerationReservation', new Schema({
   .index({ ownerId: 1 }, { unique: true, partialFilterExpression: { state: 'held' } }));
 
 export const initAdmission = () => Promise.all([grants.init(), budgets.init(), reservations.init()]);
+export const hasHeldGeneration = (ownerId: string) => reservations.exists({ ownerId, state: 'held' });
 const boundedInteger = (value: number, minimum = 1) => Number.isSafeInteger(value) && value >= minimum && value <= 1_000_000_000_000;
 
 export async function grantGenerationCredits(ownerId: string, reference: string, credits: number, expiresAt: Date,

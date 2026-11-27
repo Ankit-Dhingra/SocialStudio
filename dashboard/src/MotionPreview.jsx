@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Play } from 'lucide-react';
-import { pipelineFetch } from './pipeline-api.js';
+import { clerkEnabled, hostedProject, pipelineFetch, runHostedJob } from './pipeline-api.js';
 
 const cameras = ['locked', 'push-in', 'pull-back', 'track-left', 'track-right', 'rise'];
 const reviewNames = { hook: 'Opening', transition: 'Into the explanation', ending: 'Ending' };
 
-export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision, visualRevision }) {
+export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision, visualRevision, onProject }) {
   const [sceneIndex, setSceneIndex] = useState(0);
   const [scope, setScope] = useState('hook');
   const [preview, setPreview] = useState(null);
@@ -24,9 +24,15 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
     let failures = 0;
     async function readStatus() {
       try {
-        const response = await pipelineFetch(toApiUrl(`/api/pipeline/motion-preview/${sessionId}`), { signal: controller.signal });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Could not load motion preview.');
+        let data;
+        if (clerkEnabled) {
+          const current = await hostedProject(toApiUrl, sessionId);
+          data = { preview: current.motionPreview?.visualRevision === visualRevision ? current.motionPreview : null };
+        } else {
+          const response = await pipelineFetch(toApiUrl(`/api/pipeline/motion-preview/${sessionId}`), { signal: controller.signal });
+          data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Could not load motion preview.');
+        }
         if (controller.signal.aborted) return;
         failures = 0;
         setJob(data.job ?? null);
@@ -36,7 +42,7 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
           ? current : { sessionId, fingerprint });
         if (data.job?.status === 'failed') setError(data.job.error);
         else if (data.job) setError('');
-        timer = setTimeout(readStatus, data.job && data.job.status !== 'failed' ? 1600 : 7000);
+        if (!clerkEnabled) timer = setTimeout(readStatus, data.job && data.job.status !== 'failed' ? 1600 : 7000);
       } catch (err) {
         if (controller.signal.aborted) return;
         if (++failures < 4) timer = setTimeout(readStatus, 1600);
@@ -51,12 +57,24 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
       controller.abort();
       clearTimeout(timer);
     };
-  }, [sessionId, requestCount, toApiUrl, onReviewedRevision]);
+  }, [sessionId, requestCount, toApiUrl, onReviewedRevision, visualRevision]);
 
   async function generate(startScene = sceneIndex, directions = {}, previewScope = scope) {
     setError('');
     setSubmitting(true);
     try {
+      if (clerkEnabled) {
+        const current = await hostedProject(toApiUrl, sessionId);
+        const updated = await runHostedJob(toApiUrl, { operation: 'motion', projectId: sessionId, revision: current.revision,
+          scope: previewScope, sceneIndex: startScene, visualRevision }, status => setJob({
+          status: status.status === 'queued' ? 'planning' : 'rendering', progress: status.checkpoint === 'artifacts-stored' ? 95 : 0,
+        }));
+        onProject?.(updated);
+        setPreview(updated.motionPreview);
+        onReviewedRevision({ sessionId, fingerprint: updated.motionPreview.visualRevision });
+        setJob(null);
+        return;
+      }
       const response = await pipelineFetch(toApiUrl('/api/pipeline/motion-preview'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +154,7 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
                     <time>{shot.fromSec.toFixed(1)}s</time> {shot.title}
                   </button>
                   {shot.action && <p>{shot.action}</p>}
-                  {shot.appName && <label className="motion-shot-edit">
+                  {!clerkEnabled && shot.appName && <label className="motion-shot-edit">
                     {shot.hasScreenCapture ? `Replace ${shot.appName} screenshot` : `Add ${shot.appName} screenshot`}
                     <input type="file" accept="image/png,image/jpeg" disabled={busy} onChange={event => {
                       const file = event.target.files?.[0];
@@ -146,9 +164,9 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
                   </label>}
                   {shot.action && <div className="motion-shot-meta">
                     <small>{shot.camera?.replaceAll('-', ' ') || 'Camera move'} · {shot.kind === 'film' ? '3D animation' : shot.footage ? 'Animated footage' : 'Framed artwork'}</small>
-                    <button type="button" disabled={busy} onClick={() => setEditing({
+                    {!clerkEnabled && <button type="button" disabled={busy} onClick={() => setEditing({
                       id: shot.id, action: shot.action, camera: shot.camera || 'push-in',
-                    })}>{shot.kind === 'film' ? 'Edit camera' : 'Edit direction'}</button>
+                    })}>{shot.kind === 'film' ? 'Edit camera' : 'Edit direction'}</button>}
                   </div>}
                   {editing?.id === shot.id && <form className="motion-shot-edit" onSubmit={event => {
                     event.preventDefault();

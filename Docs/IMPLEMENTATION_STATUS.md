@@ -153,3 +153,25 @@ Real synthetic smoke calls succeeded with Gemini 2.5 Flash, Groq Qwen 3.8 27B, G
 Native Windows production startup reproduced a V8 heap failure with the Dockerfile’s former 160 MiB old-space limit. With the new 320 MiB limit, Node 22.18 started against loopback TLS MongoDB with certificate validation and synthetic Clerk production-format settings. `GET /health` returned 200 and an anonymous `GET /api/account` returned 401. The startup API working set was 307 MiB. The machine has no Docker executable or installed WSL distribution, so the Linux image and current Render startup remain unverified. The fresh native heap failure does not identify the expired Render deploy exception.
 
 Release remains gated on real Clerk backend authentication and MFA, the pinned owner and Atlas migration, managed Render Key Value, R2 private delivery and five public demos, and Razorpay test mode. Existing Vercel and Render deployments remain in service. Public paid generation, live payments and free trials remain disabled.
+
+## Release verification follow-up
+
+Hosted refinement uses the existing script editor through the reservation and provider gateway. Hosted motion preview uses the accepted visual revision and stored narration, with the same frame ranges and shot metadata as the creator workflow. The two worker roles claim separate operation sets. The default Docker target is the lightweight API, with separate generation and renderer targets. Paid illustrations and the legacy motion direction and screenshot upload endpoints remain unavailable to hosted requests.
+
+The full local suite passed 72 tests, and the eight focused integration checks passed after the readiness and admission changes. These checks covered signed account isolation, stale visual revisions, simultaneous submissions against one credit reservation, trial limits, payment webhook signatures and disputes, and recovery from ambiguous provider outcomes. The fixture refinement recorded one bounded Groq call. The motion preview fetched persisted audio, recorded no provider calls, and played through the signed range endpoint. The broader suite retained the Redis lost-entry recovery and malicious visual JSON checks. TypeScript and the Clerk-enabled frontend build passed.
+
+The Windows production-mode API reported 200 for health and readiness, 401 for anonymous account access, and 325 MiB RSS at the check. Readiness verified MongoDB and Redis with loopback TLS fixtures. The shutdown handler closed the listener and connections after an in-process SIGTERM signal. Both worker roles booted separately without Clerk credentials. These are native diagnostics. No Docker runtime or installed WSL Linux distribution was found, so a Linux image build, real container signal delivery, and Render runtime memory still need staging verification.
+
+| Local traffic benchmark | Requests | Concurrent clients | p95 | Throughput |
+| --- | ---: | ---: | ---: | ---: |
+| Public catalog | 250 | 20 | 228 ms | 157 requests/s |
+| Public 64 KiB video range | 250 | 20 | 235 ms | 117 requests/s |
+| Signed dashboard listing 25 projects | 250 | 20 | 779 ms | 51 requests/s |
+| Direct MongoDB project reads | 250 | 20 | 178 ms | 268 reads/s |
+| Isolated Redis enqueue fixture | 100 | 10 | 29 ms | 1,323 enqueues/s |
+
+The benchmark shared a Windows host with the render verification, and the load client ran in the API process. Combined sampled RSS peaked at 382 MiB. The 100 waiting Redis jobs used 67,567 bytes in queue keys. Public catalog and media reads added zero durable generation jobs. The five video and thumbnail pairs total 26,376,764 bytes. These figures do not establish cloud load limits or simultaneous generation capacity for 1,000 registered accounts. Each configured worker processes one job at a time. Renderer elapsed times this run were 136 seconds cold and 84 seconds warm for the two 17.5-second exports, and 55 seconds for the 15-second motion preview. The motion worker’s Node RSS peaked around 396 MiB, excluding Chromium and FFmpeg. Sustained live generation throughput and cloud renderer capacity remain unmeasured.
+
+The current Vercel frontend and Render health endpoint returned HTTP 200. The deployed Render demo catalog returned 404, so there was no published catalog to verify for guest playback. Browser automation could not initialize on the host. The staging R2 and Razorpay test checkout gates remain as documented in [staging setup](SAAS_INTEGRATIONS.md).
+
+Automatic approval review blocked sending the saved WhatsApp V2 visual-planning payload to Groq. No saved-project data or additional live provider requests were sent during this verification. The opt-in verification script reserves at most US$0.056 across eight requests and keeps source audio local. The previously recorded five synthetic provider smokes remain the live provider evidence. Actual scene acceptance, repairs, usage, cost and MP4 quality for the saved-project live run remain pending explicit approval.

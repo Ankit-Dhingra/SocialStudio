@@ -1,3 +1,5 @@
+import { motionFrameRange, motionPreviewMetadata } from './modules/render/motion-preview.js';
+import mongoose from 'mongoose';
 import 'dotenv/config';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -33,7 +35,7 @@ import { renderStillPreviews, renderStudioShort } from './modules/render/video-r
 import { renderReviewedPreviews } from './modules/render/review-storyboard.js';
 import { saveAppScreen } from './modules/render/reel-visual-assets.js';
 import { prepareStoryboardVisuals, reviseVisualAssets, storyboardVisualInputRevision } from './modules/render/storyboard-visuals.js';
-import { storyDirectionSchema, technicalShotKinds } from './modules/video/visual-story.js';
+import { storyDirectionSchema } from './modules/video/visual-story.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
 import { canAdoptLocalSession, canProvisionLegacySession, ownerFor, ownsSession, sessionIdPattern, validLegacyAutomation } from './modules/pipeline/session-owner.js';
@@ -70,6 +72,7 @@ const testBilling = authConfig ? razorpayTestConfig() : undefined;
 const generation = authConfig ? executionConfig() : undefined;
 const trial = privateMedia && generation?.caps.trialDailyMicros ? trialPolicy() : undefined;
 let redisHealth: ReturnType<typeof monitorRedis> | undefined;
+let draining = false;
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: authConfig?.frontendOrigin ?? '*' }));
@@ -132,6 +135,19 @@ app.get(['/health', '/ping'], (_req, res) => {
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
+});
+
+if (authConfig) app.get('/ready', async (_req, res) => {
+  if (draining) return res.status(503).json({ status: 'draining' });
+  try {
+    if (!mongoose.connection.db) throw new Error('Database is unavailable.');
+    await mongoose.connection.db.command({ ping: 1 }, { timeoutMS: 2_000 });
+    const redis = redisHealth?.read().status ?? (generation ? 'unavailable' : 'disabled');
+    if (redis !== 'disabled' && redis !== 'ok') return res.status(503).json({ status: 'unavailable', database: 'ok', redis });
+    return res.json({ status: 'ready', database: 'ok', redis });
+  } catch {
+    return res.status(503).json({ status: 'unavailable', database: 'unavailable' });
+  }
 });
 
 // Deep health check endpoint (validates Postgres & Redis connectivity)
@@ -825,7 +841,6 @@ app.post('/api/pipeline/motion-preview', (req, res) => {
     return res.status(400).json({ error: 'Edit a story shot from the current motion preview.' });
   }
   session.timeline = timeline;
-  const sceneEnd = sceneStart + timeline.segments[sceneIndex].durationInFrames - 1;
   const mediaUrl = `/media/runs/${sessionId}/motion-${randomUUID()}.mp4`;
   const job: MotionPreviewJob = { status: 'planning', progress: 0 };
   motionPreviewJobs.set(sessionId, job);
@@ -839,44 +854,17 @@ app.post('/api/pipeline/motion-preview', (req, res) => {
       const previous = session.visualAssets;
       const visuals = manual ?? automatic ?? await prepareStoryboardVisuals(storyboard, timeline, previous, { directions });
       if (!currentRevision()) return;
-      let startFrame = sceneStart;
-      let seconds = 24;
-      if (scope === 'hook') { startFrame = 0; seconds = 15; }
-      if (scope === 'ending') { seconds = 12; startFrame = Math.max(0, timeline.totalDurationInFrames - seconds * timeline.fps); }
-      if (scope === 'transition') {
-        const cuts = visuals.shots.flatMap((group, index) => group.map(shot => ({ shot, frame: timeline.segments[index].startFrame + shot.from })));
-        const change = cuts.find(entry => entry.frame > 0 && (entry.shot.nativeScene || technicalShotKinds.has(entry.shot.kind)));
-        startFrame = Math.max(0, (change?.frame ?? 0) - 3 * timeline.fps);
-        seconds = 15;
-      }
-      const endFrame = Math.min(timeline.totalDurationInFrames - 1, startFrame + seconds * timeline.fps - 1,
-        scope === 'scene' ? sceneEnd : Number.POSITIVE_INFINITY);
+      const range = motionFrameRange(timeline, visuals.shots, sceneIndex, scope);
       job.status = 'rendering';
       const rendered = await renderStudioShort({
         storyboard, timeline, visualPlan: visuals.shots,
-        outputFilePath: path.resolve(mediaUrl.slice(1)), previewRange: [startFrame, endFrame],
+        outputFilePath: path.resolve(mediaUrl.slice(1)), previewRange: range,
         onProgress: progress => { job.progress = progress.percent; },
       });
       if (!currentRevision()) return;
       session.visualAssets = visuals;
       if (previous?.fingerprint !== visuals.fingerprint) delete session.stillPreviews;
-      session.motionPreview = {
-        visualRevision: visuals.fingerprint,
-        mediaUrl, sceneIndex, scope, durationSec: rendered.durationSec, direction: visuals.direction,
-        shots: visuals.shots.flatMap((shots, index) => shots.flatMap(shot => {
-          const firstFrame = timeline.segments[index].startFrame + shot.from;
-          if (firstFrame > endFrame || firstFrame + shot.duration <= startFrame) return [];
-          return [{
-            id: shot.id, title: shot.headline || storyboard.scenes[index].onScreenText || `Scene ${index + 1}`,
-            kind: shot.nativeScene?.kind ?? shot.kind, fromSec: Math.max(0, firstFrame - startFrame) / timeline.fps,
-            ...(shot.kind === 'image' && { action: shot.action || shot.brief, camera: shot.camera, footage: Boolean(shot.clip) }),
-            ...(shot.kind === 'film' && { action: shot.action, camera: shot.camera }),
-            ...(shot.kind === 'device' && shot.appName && shot.scanFrame === undefined && {
-              appName: shot.appName, hasScreenCapture: Boolean(shot.asset || shot.clip),
-            }),
-          }];
-        })),
-      };
+      session.motionPreview = motionPreviewMetadata(storyboard, timeline, visuals, sceneIndex, scope, range, mediaUrl, rendered.durationSec);
       masterScriptService.updateSession(session);
     } catch (error) {
       if (!currentRevision()) return;
@@ -1442,7 +1430,7 @@ export const server =
     ? null
     : app.listen(port, process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', () => {
         console.log(`🚀 SocialStudio API running at http://localhost:${port}`);
-        if (process.env.REDIS_HEALTH_CHECK === 'true' && process.env.REDIS_URL) redisHealth = monitorRedis(connection);
+        if (process.env.REDIS_URL && (generation || process.env.REDIS_HEALTH_CHECK === 'true')) redisHealth = monitorRedis(connection);
         if (authConfig) return;
 
         // Auto-initialize DB schema if needed on startup
@@ -1465,5 +1453,23 @@ export const server =
             .catch((err) => console.error('❌ [Worker] Failed to start worker:', err));
         }
       });
+
+if (authConfig && server) {
+  const stop = () => {
+    if (draining) return;
+    draining = true;
+    redisHealth?.stop();
+    const deadline = setTimeout(() => server.closeAllConnections(), 10_000);
+    deadline.unref();
+    server.close(async () => {
+      clearTimeout(deadline);
+      connection.disconnect();
+      await Promise.allSettled([queue.close(), pool.end(), mongoose.disconnect()]);
+      console.log('[API] Shutdown complete.');
+    });
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+}
 
 export default app;

@@ -12,8 +12,8 @@ const operation = z.object({ credits: size, computeMicros: size.or(z.literal(0))
 const configuration = z.object({
   caps: z.object({ dailyMicros: size, monthlyMicros: size, userDailyMicros: size, providerDailyMicros: size,
     trialDailyMicros: size.optional() }).strict(),
-  operations: z.object({ script: operation.optional(), audio: operation.optional(), visuals: operation.optional(),
-    stills: operation.optional(), render: operation.optional() }).strict(),
+  operations: z.object({ script: operation.optional(), refine: operation.optional(), audio: operation.optional(), visuals: operation.optional(),
+    stills: operation.optional(), motion: operation.optional(), render: operation.optional() }).strict(),
 }).strict();
 
 export type ExecutionConfig = { caps: Caps; operations: z.infer<typeof configuration>['operations'] };
@@ -23,15 +23,15 @@ export function executionConfig(env = process.env): ExecutionConfig | undefined 
   if (env.STUDIO_GENERATION_ENABLED !== 'true') return undefined;
   const parsed = configuration.parse(JSON.parse(env.STUDIO_GENERATION_CONFIG ?? '{}'));
   const permitted: Record<HostedOperation, Provider[]> = {
-    script: ['gemini', 'groq'], audio: ['sarvam', 'groq', 'elevenlabs'], visuals: ['groq'],
-    stills: [], render: [],
+    script: ['gemini', 'groq'], refine: ['gemini', 'groq'], audio: ['sarvam', 'groq', 'elevenlabs'], visuals: ['groq'],
+    stills: [], motion: [], render: [],
   };
   for (const [name, quote] of Object.entries(parsed.operations)) {
     const allowed = permitted[name as HostedOperation];
     const selected = Object.keys(quote.providers);
     if (quoteBound(quote) < 1 || quoteBound(quote) > 1_000_000_000_000 ||
       selected.some(provider => !allowed.includes(provider as Provider)) ||
-      (name === 'script' && !selected.length) || (name === 'visuals' && !quote.providers.groq) ||
+      ((name === 'script' || name === 'refine') && !selected.length) || (name === 'visuals' && !quote.providers.groq) ||
       (name === 'audio' && (!quote.providers.groq || !(quote.providers.sarvam || quote.providers.elevenlabs)))) {
       throw new Error('Invalid hosted generation quote.');
     }

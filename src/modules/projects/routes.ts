@@ -7,7 +7,7 @@ import { DirectiveError, prepareVisualImport, visualArtifactRevision, visualDire
 import { verifiedDirectiveExample, visualSourcePack } from '../render/visual-source-pack.js';
 import { archiveProject, createProject, getProject, listProjects, replaceProject } from './repository.js';
 import type { PrivateMedia } from '../storage/private-media.js';
-import { admitGeneration } from '../jobs/admission.js';
+import { admitGeneration, hasHeldGeneration } from '../jobs/admission.js';
 import { quoteBound, type ExecutionConfig } from '../jobs/execution-config.js';
 import { narrationBindings } from '../jobs/project-media.js';
 import { getOwnedJob, studioJobId } from '../jobs/durable-jobs.js';
@@ -46,6 +46,11 @@ export function projectRouter(storage?: PrivateMedia, generation?: ExecutionConf
 
   const executionInput = z.discriminatedUnion('operation', [
     z.object({ operation: z.literal('script'), topic: z.string().trim().min(1).max(300), angle: z.string().trim().max(300).optional() }).strict(),
+    z.object({ operation: z.literal('refine'), projectId: z.string().regex(sessionIdPattern), revision: z.number().int().nonnegative(),
+      instruction: z.string().trim().min(1).max(700) }).strict(),
+    z.object({ operation: z.literal('motion'), projectId: z.string().regex(sessionIdPattern), revision: z.number().int().nonnegative(),
+      visualRevision: z.string().max(128), sceneIndex: z.number().int().nonnegative(),
+      scope: z.enum(['scene', 'sequence', 'hook', 'transition', 'ending']) }).strict(),
     z.object({ operation: z.literal('visuals'), projectId: z.string().regex(sessionIdPattern), revision: z.number().int().nonnegative(),
       feedback: z.string().trim().min(1).max(500).optional(), sceneIndex: z.number().int().nonnegative().optional() }).strict(),
     z.object({ operation: z.enum(['audio', 'stills', 'render']), projectId: z.string().regex(sessionIdPattern),
@@ -70,6 +75,10 @@ export function projectRouter(storage?: PrivateMedia, generation?: ExecutionConf
     const id = studioJobId(ownerId, projectId, operation, revision, requestId);
     if (await getOwnedJob(ownerId, id)) return res.status(202).json({ id, projectId });
     if (await generationPaused()) return res.status(503).json({ error: 'Generation is paused.' });
+    if (await hasHeldGeneration(ownerId)) {
+      if (await getOwnedJob(ownerId, id)) return res.status(202).json({ id, projectId });
+      return res.status(409).json({ error: 'Another generation is pending.' });
+    }
     const project = await getProject(ownerId, projectId);
     let draft: ScriptSession | undefined;
     if (!project && input.operation === 'script') {
@@ -87,7 +96,10 @@ export function projectRouter(storage?: PrivateMedia, generation?: ExecutionConf
     if (input.operation === 'visuals' && input.sceneIndex !== undefined && input.sceneIndex >= (project?.scenesCount ?? 0)) {
       return res.status(400).json({ error: 'The requested scene does not exist.' });
     }
-    if (input.operation === 'stills' || input.operation === 'render') {
+    if (input.operation === 'motion' && input.sceneIndex >= (project?.scenesCount ?? 0)) {
+      return res.status(400).json({ error: 'The requested scene does not exist.' });
+    }
+    if (input.operation === 'stills' || input.operation === 'render' || input.operation === 'motion') {
       const visuals = project?.session.visualAssets;
       if (!visuals?.shots || visuals.fingerprint !== input.visualRevision) {
         return res.status(409).json({ error: 'Review the current visual revision before rendering.' });
@@ -96,7 +108,9 @@ export function projectRouter(storage?: PrivateMedia, generation?: ExecutionConf
     try {
       await admitGeneration({ ownerId, projectId, operation, revision, requestId, credits: quote.credits,
         provider: 'compute', boundMicros: quoteBound(quote), quote, draft,
-        input: input.operation === 'visuals' ? { feedback: input.feedback, sceneIndex: input.sceneIndex } : undefined }, generation.caps);
+        input: input.operation === 'visuals' ? { feedback: input.feedback, sceneIndex: input.sceneIndex }
+          : input.operation === 'refine' ? { instruction: input.instruction }
+          : input.operation === 'motion' ? { sceneIndex: input.sceneIndex, scope: input.scope } : undefined }, generation.caps);
     } catch (error) {
       const message = (error as Error).message;
       if (/^Insufficient generation credits/.test(message)) return res.status(402).json({ error: message });

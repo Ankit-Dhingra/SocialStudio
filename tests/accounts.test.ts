@@ -142,6 +142,9 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
     let createdSessionId: string | undefined;
     try {
       assert.equal((await request('/api/pipeline/sessions')).status, 401);
+      const ready = await request('/ready');
+      assert.equal(ready.status, 200);
+      assert.equal((await ready.json()).database, 'ok');
       assert.equal((await request('/api/videos', undefined, { method: 'POST' })).status, 401);
       assert.equal((await request('/api/pipeline/audio/synthesize', ownerId, { method: 'POST' })).status, 403);
       assert.equal((await request('/output/old-video.mp4')).status, 404);

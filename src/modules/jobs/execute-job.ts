@@ -8,6 +8,7 @@ import { masterScriptService, type ScriptSession } from '../ai-script/master-scr
 import { getProject, replaceProject } from '../projects/repository.js';
 import { performMediaQA } from '../qa/media-qa.js';
 import { prepareAutomaticVisuals } from '../render/automatic-visual-directives.js';
+import { motionFrameRange, motionPreviewMetadata } from '../render/motion-preview.js';
 import { removeHostedBundleNarration, renderStillPreviews, renderStudioShort } from '../render/video-renderer.js';
 import type { PrivateMedia } from '../storage/private-media.js';
 import { getTTSProvider, synthesizeStoryboardNarration } from '../tts/tts-service.js';
@@ -28,6 +29,10 @@ type Inputs = {
 async function executeStage({ session, operation, root, storage, media, publish, input }: Inputs) {
   if (operation === 'script') {
     return masterScriptService.buildGeneratedSession(session.topic, session.angle, session);
+  }
+  if (operation === 'refine') {
+    if (!input?.instruction) throw new Error('Provide a refinement instruction.');
+    return masterScriptService.buildRefinedSession(session, input.instruction);
   }
   if (operation === 'audio') {
     if (!session.finalized) throw new Error('Approve the script before generating narration.');
@@ -69,12 +74,13 @@ async function executeStage({ session, operation, root, storage, media, publish,
     delete session.stillPreviews;
     delete session.motionPreview;
     session.renderState = { status: 'idle', progress: 0 };
-  } else if (operation === 'stills' || operation === 'render') {
+  } else if (operation === 'stills' || operation === 'render' || operation === 'motion') {
     const timeline = session.timeline as VideoTimeline | undefined;
-    const visualPlan = session.visualAssets?.shots;
-    if (!timeline || !visualPlan || session.voiceoverNeedsRefresh || !storage.get) {
+    const visuals = session.visualAssets;
+    if (!timeline || !visuals?.shots || session.voiceoverNeedsRefresh || !storage.get) {
       throw new Error('Save narration and validated visuals before rendering.');
     }
+    const visualPlan = visuals.shots;
     const keys = new Map(media.map(binding => [binding.source, binding.key]));
     // Use a lease-local directory and fresh bundle paths, including for legacy audio imported from storage.
     const audioPrefix = `audio/runs/hosted-${path.basename(root)}`;
@@ -100,6 +106,14 @@ async function executeStage({ session, operation, root, storage, media, publish,
           return frame;
         })) };
       }));
+    } else if (operation === 'motion') {
+      if (input?.sceneIndex === undefined || !input.scope) throw new Error('Choose a preview scope and start scene.');
+      const range = motionFrameRange(hydrated, visualPlan, input.sceneIndex, input.scope);
+      const rendered = await renderStudioShort({ storyboard: session.storyboard, timeline: hydrated, visualPlan,
+        narrationRoot: root, previewRange: range, outputFilePath: path.join(root, 'motion.mp4') });
+      const mediaUrl = `/media/runs/${session.id}/${path.basename(root)}-motion.mp4`;
+      await publish(mediaUrl, rendered.outputFilePath);
+      session.motionPreview = motionPreviewMetadata(session.storyboard, hydrated, visuals, input.sceneIndex, input.scope, range, mediaUrl, rendered.durationSec);
     } else {
       const result = await renderStudioShort({ storyboard: session.storyboard, timeline: hydrated,
         visualPlan, narrationRoot: root, outputFilePath: path.join(root, 'final.mp4') });
@@ -116,10 +130,10 @@ async function executeStage({ session, operation, root, storage, media, publish,
 }
 
 export async function executeStudioJob(id: string, storage: PrivateMedia, options?: {
-  transport?: typeof fetch; authorized?: (ownerId: string, operation: StudioOperation) => Promise<boolean>;
+  transport?: typeof fetch; authorized?: (ownerId: string, operation: StudioOperation) => Promise<boolean>; operations?: StudioOperation[];
 }) {
   if (await generationPaused()) return;
-  const job = await claimJob(id);
+  const job = await claimJob(id, new Date(), options?.operations);
   if (!job?.leaseId || !job.quote) return;
   const { leaseId } = job;
   const quote = job.quote as ExecutionQuote;
@@ -175,7 +189,7 @@ export async function executeStudioJob(id: string, storage: PrivateMedia, option
     clearInterval(heartbeat);
     clearInterval(memorySample);
     if (root) {
-      if (job.operation === 'stills' || job.operation === 'render') {
+      if (job.operation === 'stills' || job.operation === 'render' || job.operation === 'motion') {
         await removeHostedBundleNarration(`hosted-${path.basename(root)}`).catch(() => console.warn('[Studio worker] Could not clean staged narration.'));
       }
       await rm(root, { recursive: true, force: true });

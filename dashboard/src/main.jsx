@@ -691,17 +691,25 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   }
 
   // 1d. AI Refine from within Script Viewer
+  async function refineScript(text) {
+    if (clerkEnabled) {
+      const current = session.revision === undefined ? await hostedProject(toApiUrl, session.id) : session;
+      return runHostedJob(toApiUrl, { operation: 'refine', projectId: session.id, revision: current.revision, instruction: text });
+    }
+    const response = await pipelineFetch(toApiUrl('/api/pipeline/script/chat'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: session.id, message: text }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Refinement failed');
+    return result;
+  }
+
   async function handleAiRefine() {
     if (!aiRefinePrompt.trim() || !session?.id) return;
     setRefiningAi(true);
     try {
-      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id, message: aiRefinePrompt.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Refinement failed');
+      const data = await refineScript(aiRefinePrompt.trim());
       setSession(data);
       setAudioResult(null);
       clearRenderPreview();
@@ -723,13 +731,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     setChatSending(true);
     setChatInput('');
     try {
-      const res = await pipelineFetch(toApiUrl('/api/pipeline/script/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: session.id, message: text.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Refinement failed');
+      const data = await refineScript(text.trim());
       setSession(data);
       setAudioResult(null);
       clearRenderPreview();
@@ -2515,10 +2517,11 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                           <button type="submit" disabled={generatingStills} className="btn btn-secondary">Regenerate with feedback</button>
                         </form>
                       </details>}
-                      {!clerkEnabled && session?.id && !awaitingManualVisuals && <MotionPreview
+                      {session?.id && !awaitingManualVisuals && (!clerkEnabled || session.visualAssets?.fingerprint) && <MotionPreview
                         key={`${session.id}:${audioResult?.fullAudioUrl || session.audioResult?.fullAudioUrl || ''}:${session.visualAssets?.fingerprint || ''}`}
                         sessionId={session.id} scenes={session.storyboard?.scenes ?? []} toApiUrl={toApiUrl}
                         visualRevision={session.visualAssets?.fingerprint}
+                        onProject={setSession}
                         onReviewedRevision={setReviewedVisualRevision}
                       />}
 

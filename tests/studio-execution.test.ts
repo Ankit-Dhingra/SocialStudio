@@ -54,6 +54,8 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
       caps: { dailyMicros: 10_000, monthlyMicros: 50_000, userDailyMicros: 5000, providerDailyMicros: 4000, trialDailyMicros: 1 },
       operations: { visuals: { credits: 2, computeMicros: 10, providers: { groq: { attempts: 2, microsPerCall: 50,
         microsPerMillionUnits: { inputTokens: 1000, outputTokens: 2000 } } } },
+        refine: { credits: 2, computeMicros: 0, providers: { groq: { attempts: 1, microsPerCall: 100 } } },
+        motion: { credits: 1, computeMicros: 15, providers: {} },
         render: { credits: 3, computeMicros: 50, providers: {} } },
     }));
     const server = app.listen(0, '127.0.0.1');
@@ -62,6 +64,9 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
     const queueName = `studio-test-${suffix}`;
     const connection = { host: '127.0.0.1', port: redis, maxRetriesPerRequest: null };
     const queue = new Queue(queueName, { connection });
+    const renderQueue = new Queue(`${queueName}-render`, { connection });
+    const generationOperations = ['visuals', 'refine'] as const;
+    const renderOperations = ['motion', 'render'] as const;
     const fixture = JSON.parse(await readFile('output/whatsapp-visual-directive-validated.json', 'utf8'));
     let reply: typeof fixture;
     let failTransport = false;
@@ -69,16 +74,23 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
     const transport: typeof fetch = async (url, init) => {
       assert.equal(String(url), 'https://api.groq.com/openai/v1/chat/completions');
       const body = JSON.parse(String(init?.body));
+      if (body.messages.at(-1).content.includes('User Revision Request:')) {
+        return Response.json({ choices: [{ message: { content: JSON.stringify(reply) } }] });
+      }
       assert.equal(body.model, 'openai/gpt-oss-120b');
       calls++;
       if (failTransport) throw new Error('fixture transport timeout');
       return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(reply) } }],
         usage: { prompt_tokens: 1500, completion_tokens: 550 } });
     };
-    const worker = new Worker<{ id: string }>(queueName, message => executeStudioJob(message.data.id, storage, { transport }),
+    const worker = new Worker<{ id: string }>(queueName, message => executeStudioJob(message.data.id, storage, { transport, operations: [...generationOperations] }),
       { connection, lockDuration: 180_000 });
+    const renderer = new Worker<{ id: string }>(renderQueue.name, message => executeStudioJob(message.data.id, storage, {
+      operations: [...renderOperations], transport: async () => { throw new Error('Render queue attempted provider egress.'); },
+    }), { connection, lockDuration: 180_000 });
     let workerError: Error | undefined;
     worker.on('error', error => { workerError = error; });
+    renderer.on('error', error => { workerError = error; });
     const request = (route: string, init: RequestInit = {}, identity = 'owner') => {
       const headers = new Headers(init.headers);
       headers.set('Origin', signed.config.frontendOrigin);
@@ -92,7 +104,10 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
         'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey,
       }, body: JSON.stringify(body) }, identity);
     const waitForJob = async (id: string, terminal: string) => {
-      await reconcileJobs(queue, new Date(), true);
+      await Promise.all([
+        reconcileJobs(queue, new Date(), true, [...generationOperations]),
+        reconcileJobs(renderQueue, new Date(), true, [...renderOperations]),
+      ]);
       for (let attempt = 0; attempt < 2700; attempt++) {
         if (workerError) throw workerError;
         const job = await getOwnedJob(owner, id);
@@ -104,7 +119,8 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
       }
       throw new Error('The queued generation did not reach a terminal state.');
     };
-    const original = { GROQ_API_KEYS: process.env.GROQ_API_KEYS, REEL_GROQ_VISUAL_TPM: process.env.REEL_GROQ_VISUAL_TPM };
+    const original = { GROQ_API_KEY: process.env.GROQ_API_KEY, GROQ_API_KEYS: process.env.GROQ_API_KEYS, REEL_GROQ_VISUAL_TPM: process.env.REEL_GROQ_VISUAL_TPM };
+    process.env.GROQ_API_KEY = 'fixture-key-never-sent';
     process.env.GROQ_API_KEYS = 'fixture-key-never-sent';
     process.env.REEL_GROQ_VISUAL_TPM = '90000';
     try {
@@ -176,6 +192,7 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
       assert.equal(submission.status, 202, await submission.clone().text());
       const { id } = await submission.json();
       assert.equal((await (await submit(visualInput, key)).json()).id, id);
+      assert((await Promise.all(Array.from({ length: 12 }, () => submit(visualInput)))).every(response => response.status === 409));
       assert.equal(await availableGenerationCredits(owner), 18);
       const completed = await waitForJob(id, 'completed');
       assert.equal(completed.checkpoint, 'persisted');
@@ -206,6 +223,18 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
             durationSec: output.renderState.qa.durationSec, ...renderJob.metrics }));
         }
         assert.equal(await availableGenerationCredits(owner), 12);
+        const motion = { operation: 'motion', projectId: manual.session.id, revision: 2, sceneIndex: 0, scope: 'hook',
+          visualRevision: manualVisuals.fingerprint };
+        assert.equal((await submit({ ...motion, visualRevision: 'stale' })).status, 409);
+        const previewJob = await submit(motion);
+        assert.equal(previewJob.status, 202);
+        const preview = await waitForJob((await previewJob.json()).id, 'completed');
+        assert.equal(preview.calls.length, 0);
+        const updated = await (await request(`/api/pipeline/script/${manual.session.id}`)).json();
+        assert.equal(updated.motionPreview.visualRevision, motion.visualRevision);
+        assert(updated.motionPreview.durationSec > 0 && updated.motionPreview.durationSec <= 15);
+        assert.equal((await fetch(base + updated.motionPreview.mediaUrl, { headers: { Range: 'bytes=0-1023' } })).status, 206);
+        t.diagnostic(JSON.stringify({ source: 'motion', durationSec: updated.motionPreview.durationSec, ...preview.metrics }));
       }
       failTransport = true;
       const uncertain = await addProject();
@@ -223,14 +252,26 @@ test('owner-scoped submissions run through BullMQ with saved audio, manual and a
       assert.equal((await reconciliation()).status, 200);
       assert.equal((await reconciliation()).status, 409);
       assert.equal((await getOwnedJob(owner, pending._id))?.status, 'failed');
+      failTransport = false;
+      reply = { ...legacy.sevenKeyScript, title: 'Refined verification title' };
+      const target = await addProject();
+      const refinement = await submit({ operation: 'refine', projectId: target.session.id, revision: 0, instruction: 'Change the title.' });
+      assert.equal(refinement.status, 202);
+      const refined = await waitForJob((await refinement.json()).id, 'completed');
+      assert.equal(refined.calls.length, 1);
+      const refinedProject = await (await request(`/api/pipeline/script/${target.session.id}`)).json();
+      assert.equal(refinedProject.sevenKeyScript.title, 'Refined verification title');
     } finally {
       for (const [key, value] of Object.entries(original)) {
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
       }
       await worker.close();
+      await renderer.close();
       await queue.obliterate({ force: true });
       await queue.close();
+      await renderQueue.obliterate({ force: true });
+      await renderQueue.close();
       server.closeAllConnections();
       await new Promise<void>(resolve => server.close(() => resolve()));
       await mongoose.connection.dropDatabase();

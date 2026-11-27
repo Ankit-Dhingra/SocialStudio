@@ -6,6 +6,7 @@
     "api": "tsx src/api.ts",
     "worker": "tsx src/worker.ts",
     "worker:studio": "tsx src/studio-worker.ts",
+    "worker:render": "tsx src/studio-worker.ts render",
     "dev:dashboard": "npm --prefix dashboard run dev",
     "db:init": "tsx src/init-db.ts",
     "check": "tsc --noEmit",
