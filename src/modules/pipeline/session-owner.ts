@@ -39,9 +39,13 @@ export function canAdoptLocalSession(req: Request) {
     && (!req.headers.origin || /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(req.headers.origin));
 }
 
-export function canProvisionLegacySession(req: Request) {
+export function validLegacyAutomation(req: Request) {
   const expected = process.env.AUTOMATION_TOKEN;
   const provided = req.get('X-Automation-Token');
-  return Boolean(ownerToken(req) && expected && provided &&
+  return Boolean(process.env.NODE_ENV !== 'production' && expected && expected.length >= 32 && provided &&
     timingSafeEqual(Buffer.from(digest(expected), 'hex'), Buffer.from(digest(provided), 'hex')));
+}
+
+export function canProvisionLegacySession(req: Request) {
+  return Boolean(ownerToken(req)) && validLegacyAutomation(req);
 }

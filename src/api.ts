@@ -36,7 +36,7 @@ import { prepareStoryboardVisuals, reviseVisualAssets, storyboardVisualInputRevi
 import { storyDirectionSchema, technicalShotKinds } from './modules/video/visual-story.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 import { runServerPipeline, isJobRunning } from './modules/pipeline/server-orchestrator.js';
-import { canAdoptLocalSession, canProvisionLegacySession, ownerFor, ownsSession, sessionIdPattern } from './modules/pipeline/session-owner.js';
+import { canAdoptLocalSession, canProvisionLegacySession, ownerFor, ownsSession, sessionIdPattern, validLegacyAutomation } from './modules/pipeline/session-owner.js';
 import { DirectiveError, prepareVisualImport, visualArtifactRevision, visualDirectiveMaxBytes, visualPromptContext } from './modules/render/visual-directives.js';
 import { AutomaticVisualError, prepareAutomaticVisuals, type AutomaticProgress } from './modules/render/automatic-visual-directives.js';
 import { verifiedDirectiveExample, visualSourcePack } from './modules/render/visual-source-pack.js';
@@ -51,12 +51,26 @@ import { clerkConfig } from './modules/accounts/auth-config.js';
 import { requireOwner, studioAuthentication } from './modules/accounts/auth-middleware.js';
 import { connectAccounts } from './modules/accounts/users.js';
 import { demoRouter } from './modules/demo/routes.js';
+import { projectRouter } from './modules/projects/routes.js';
+import { initProjects } from './modules/projects/repository.js';
+import { privateMediaFromEnv } from './modules/storage/private-media.js';
+import { monitorRedis } from './modules/jobs/redis-health.js';
+import { getOwnedJob, initJobs } from './modules/jobs/durable-jobs.js';
+import { availableGenerationCredits, initAdmission } from './modules/jobs/admission.js';
+import { razorpayTestConfig } from './modules/payments/razorpay.js';
+import { initTestBilling } from './modules/payments/ledger.js';
+import { razorpayWebhook, testBillingRouter } from './modules/payments/routes.js';
 
 const authConfig = clerkConfig(process.env);
+const privateMedia = authConfig ? privateMediaFromEnv() : undefined;
+const testBilling = authConfig ? razorpayTestConfig() : undefined;
+let redisHealth: ReturnType<typeof monitorRedis> | undefined;
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: authConfig?.frontendOrigin ?? '*' }));
 app.use('/api/demo', demoRouter({ directory: process.env.DEMO_MEDIA_DIR, publicBaseUrl: process.env.DEMO_PUBLIC_BASE_URL }));
+if (privateMedia?.router) app.use('/api/private-media', privateMedia.router);
+if (testBilling) app.use('/api/billing/test/webhook', razorpayWebhook(testBilling));
 
 if (authConfig) {
   app.use('/api', ...studioAuthentication(authConfig));
@@ -65,13 +79,21 @@ if (authConfig) {
     res.json({ id: _id, email, displayName, role, status, plan, trialEligibility });
   });
   app.get('/api/admin/access', requireOwner(authConfig), (_req, res) => res.json({ allowed: true }));
-  app.use('/api', (req, res, next) => {
-    const route = req.path;
-    const readOnly = ['GET', 'HEAD'].includes(req.method) &&
-      /^\/pipeline\/(?:sessions|(?:script|status)\/session_[a-zA-Z0-9_-]{1,100}|manual-visual\/session_[a-zA-Z0-9_-]{1,100}\/context)\/?$/.test(route);
-    const localEditing = req.method === 'POST' &&
-      /^\/pipeline\/(?:script\/custom|manual-visual\/session_[a-zA-Z0-9_-]{1,100}\/validate)\/?$/.test(route);
-    if (readOnly || localEditing) return next();
+  app.get('/api/admin/redis-health', requireOwner(authConfig), (_req, res) => res.json(redisHealth?.read() ?? { status: 'disabled' }));
+  app.get('/api/credits/balance', (_req, res, next) => {
+    availableGenerationCredits(res.locals.studioAccount.clerkUserId).then(available => res.json({ available })).catch(next);
+  });
+  app.get('/api/pipeline/jobs/:id', (req, res, next) => {
+    if (!/^[a-f0-9]{64}$/.test(req.params.id)) return res.status(404).json({ error: 'Job not found.' });
+    getOwnedJob(res.locals.studioAccount.clerkUserId, req.params.id).then(job => {
+      if (!job) return res.status(404).json({ error: 'Job not found.' });
+      return res.json({ id: job._id, projectId: job.projectId, operation: job.operation, status: job.status,
+        attempts: job.attempts, checkpoint: job.checkpoint, updatedAt: job.updatedAt });
+    }).catch(next);
+  });
+  app.use('/api/pipeline', projectRouter(privateMedia));
+  if (testBilling) app.use('/api/billing/test', testBillingRouter(testBilling));
+  app.use('/api', (_req, res) => {
     res.status(403).json({ error: 'This operation is unavailable in the hosted Studio.' });
   });
 }
@@ -1098,6 +1120,7 @@ app.get('/api/pipeline/status/:sessionId', (req, res) => {
 
   // Resume stalled running job if server process was restarted
   if (
+    !authConfig &&
     session.job?.status === 'running' &&
     session.visualAssets?.source !== 'manual' &&
     session.renderState?.status !== 'completed' &&
@@ -1142,10 +1165,7 @@ app.get('/api/videos/:id', async (req, res) => {
 
 // Helper for token authorization
 function checkAuth(req: express.Request): boolean {
-  const token = req.headers['x-automation-token'];
-  const expected = process.env.AUTOMATION_TOKEN || 'change-me-in-local-dev';
-  // If no auth token required in local dev, allow, else verify
-  return !process.env.AUTOMATION_TOKEN || token === expected;
+  return validLegacyAutomation(req);
 }
 
 // Preview the exact storyboard and its opening voice before committing to a full render.
@@ -1404,13 +1424,17 @@ app.use((err: any, _req: any, res: any, next: any) => {
 
 const port = Number(process.env.PORT || process.env.API_PORT || 4000);
 if (authConfig && process.env.NODE_ENV !== 'test') {
-  await connectAccounts(authConfig.mongodbUri).catch(() => { throw new Error('SocialStudio account database connection failed.'); });
+  await connectAccounts(authConfig.mongodbUri).then(async () => {
+    await Promise.all([initProjects(), initJobs(), initAdmission()]);
+    if (testBilling) await initTestBilling();
+  }).catch(() => { throw new Error('SocialStudio database connection failed.'); });
 }
 export const server =
   process.env.NODE_ENV === 'test'
     ? null
     : app.listen(port, process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', () => {
         console.log(`🚀 SocialStudio API running at http://localhost:${port}`);
+        if (process.env.REDIS_HEALTH_CHECK === 'true' && process.env.REDIS_URL) redisHealth = monitorRedis(connection);
         if (authConfig) return;
 
         // Auto-initialize DB schema if needed on startup

@@ -62,18 +62,18 @@ The legacy API currently allows wildcard CORS. Static routes expose media by URL
 | --- | --- | --- |
 | 1 | Clerk authentication and owner binding | Local verification passed. Live Express owner binding pending the development secret. |
 | 2 | Public read-only demo | Implemented and locally verified. Public media deployment pending. |
-| 3 | MongoDB persistence and owner migration | Pending |
-| 4 | Cloudflare R2 and private media | Pending |
-| 5 | Redis, BullMQ, workers, and recovery | Pending |
-| 6 | Manual and Groq generation integration | Pending |
-| 7 | Provider gateway and spending guard | Pending |
-| 8 | Prepaid credits and plans | Pending |
+| 3 | MongoDB persistence and owner migration | Hosted project persistence and migration implemented and locally verified. Atlas database created on the Free cluster. Cloud application credential and live owner migration pending. |
+| 4 | Cloudflare R2 and private media | Local private storage and R2 adapter implemented. Local streaming, expiry, and cleanup verified. R2 activation and live integration pending. |
+| 5 | Redis, BullMQ, workers, and recovery | Free Render Key Value provisioned. Health monitoring and durable recovery implemented. Hosted generation workers and production wiring pending. |
+| 6 | Manual and Groq generation integration | Saved local workflow regressed successfully. Hosted paid stages, previews, and renders remain gated. |
+| 7 | Provider gateway and spending guard | Atomic cost reservation and settlement implemented and locally verified. Provider adapters, usage capture, and hosted enforcement pending. |
+| 8 | Prepaid credits and plans | Expiring credit grants, atomic reservation, and balance reads implemented and locally verified. Production plans, admin allocations, and financial reconciliation pending. |
 | 9 | Trial infrastructure and abuse prevention | Pending |
-| 10 | Razorpay test integration and reconciliation | Pending |
-| 11 | Security and owner administration | Pending |
-| 12 | Deployment and portable workers | Pending |
-| 13 | Environment and operating documentation | Pending |
-| 14 | End-to-end verification and capacity tests | Pending |
+| 10 | Razorpay test integration and reconciliation | Test checkout and transactional reconciliation implemented and locally verified with fixture transport. Razorpay account verification and dispute handling pending. |
+| 11 | Security and owner administration | Strict hosted auth, origin enforcement, owner-scoped media/project access, TLS and legacy route lockdown implemented. Full administration and release audit pending. |
+| 12 | Deployment and portable workers | Existing Render failure investigated. Docker runtime and deployment examples updated. Release and hosted workers pending. |
+| 13 | Environment and operating documentation | Staging configuration and external activation steps documented. Complete release runbook pending. |
+| 14 | End-to-end verification and capacity tests | Node 22 regression suite and dashboard build passed. Hosted integrations and capacity measurement pending. |
 | 15 | Release readiness and rollback verification | Pending |
 
 ## Phase 1 Clerk authentication and owner binding
@@ -114,3 +114,23 @@ Phase 1 live verification needs the Clerk development secret and owner MFA enrol
 | RAG | 135.680 s |
 
 The full suite with saved-session and local MongoDB fixtures passed 66 tests. TypeScript and the production dashboard build passed. Browser verification played all five 1080-wide originals without signing in and opened Google sign-in from the demo CTA. The published media bucket and public deployment remain pending. No new media renders or AI calls were used to create the demo.
+
+## Hosted persistence and private media
+
+The hosted project endpoints now read and write MongoDB using the authenticated Clerk subject. Pasted scripts, draft finalization, source pack downloads, manual import validation, and project archival use the existing script and visual engine where applicable. Updates compare revisions to prevent stale writes. The local creator still uses its existing session files. Hosted status reads never resume a legacy generation.
+
+The migration command accepts explicit legacy IDs and defaults to a dry run. The saved WhatsApp project passed that check. Apply requires an active owner record with the pinned Clerk ID, preserves existing projects on repeat runs, and fails rather than moving an ID to another owner. Existing audio, timing, and visual metadata remain in the archived record. Private media can be copied from existing artifacts without regeneration. Hosted API responses only issue signed links for the requesting owner's registered files. Old raw local media paths stay disabled in hosted mode.
+
+The `socialstudio` database and initial `users` collection were created on the existing Atlas Free `Cluster0` after approval. Data Explorer reported 237.57 kB of aggregate storage for the two existing databases before creation. Atlas applies the 0.5 GB quota to uncompressed BSON and indexes, so the browser storage figure verifies modest usage but gives no exact remaining quota. Other databases were left in place. No Atlas application credential or production project data has been written. [Atlas Free cluster limits](https://www.mongodb.com/docs/atlas/reference/free-shared-limitations/)
+
+## Queue and payment readiness
+
+The Render Key Value instance uses the Free, nonpersistent plan in Virginia. The optional five-minute connectivity monitor reports owner-only health. The MongoDB job repository supports fenced claims, checkpoint recovery after queue data loss, and a `needs_review` state for expired execution with a provider call in flight. Hosted job status reads are owner-scoped. Dispatch for chargeable generation stays gated until worker, credit, and provider spending controls are connected.
+
+The Razorpay integration uses test keys only. It builds orders from server configuration, checks the checkout and webhook signatures, fetches canonical payment records, and reconciles credits and verified refunds in a MongoDB transaction. Test balances are isolated from generation entitlements. A local MongoDB replica set and fixture Razorpay transport were used for verification. Real gateway delivery, live payments, production wallets, disputes, and provider spending controls remain pending.
+
+Generation admission can atomically reserve expiring credits, daily and monthly global limits, daily per-user limits, and daily per-provider limits with integer micro-units. The same transaction records the durable job. Settlement requires a safe job outcome and verified cost. A provider operation with uncertain billing remains held for review. The authenticated balance endpoint reads these grants independently of Razorpay test credits. The hosted worker and the existing AI provider clients do not yet use this admission path.
+
+The final Node 22 run passed all 71 tests with none skipped. It exercised isolated local MongoDB, a local MongoDB replica set for transactions, local Redis with BullMQ, and the saved WhatsApp workflow with provider calls intercepted. The queue test removed a queued Redis entry and recreated it from MongoDB without duplicate dispatch records. TypeScript and the Clerk-enabled Vite production build passed. The local Redis binary is 5.0.14.1, below BullMQ's recommended 6.2.0 baseline, so managed Render compatibility still needs a staging smoke test. Live AI costs, actual payment-gateway traffic, and production capacity were outside these checks.
+
+Render's November 14 deploy exited with status 1 while running the application. Detailed logs expired, so the precise startup exception could not be recovered from the dashboard. The existing deployment and uptime monitoring were left in place. See [staging integration instructions](SAAS_INTEGRATIONS.md) for configuration and blockers.

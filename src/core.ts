@@ -4,12 +4,21 @@ import { Redis } from 'ioredis';
 import { Queue } from 'bullmq';
 import { StoryboardSchema, type Storyboard } from './modules/contracts/storyboard.js';
 
-const dbUrl = process.env.DATABASE_URL;
-const needsSsl = dbUrl?.includes('sslmode=require') || dbUrl?.includes('neon.tech') || dbUrl?.includes('supabase');
+function configuredUrl(value: string, name: string) {
+  try { return new URL(value); }
+  catch { throw new Error(`Invalid ${name} configuration.`); }
+}
+
+const dbUrl = process.env.DATABASE_URL ? configuredUrl(process.env.DATABASE_URL, 'DATABASE_URL') : undefined;
+const needsSsl = Boolean(dbUrl && (process.env.NODE_ENV === 'production' ||
+  dbUrl.searchParams.has('sslmode') || dbUrl.hostname.endsWith('.neon.tech') || dbUrl.hostname.includes('.supabase.')));
+if (needsSsl) {
+  for (const option of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'ssl']) dbUrl?.searchParams.delete(option);
+}
 
 export const pool = new Pool({
-  connectionString: dbUrl,
-  ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
+  connectionString: dbUrl?.href,
+  ssl: needsSsl ? { rejectUnauthorized: true } : undefined,
 });
 pool.on('error', (err) => {
   // Gracefully log DB warnings without crashing the process
@@ -18,11 +27,17 @@ pool.on('error', (err) => {
 
 let hasLoggedRedisWarning = false;
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+if (process.env.NODE_ENV === 'production' && process.env.REDIS_URL) {
+  const connectionUrl = configuredUrl(redisUrl, 'REDIS_URL');
+  if (connectionUrl.protocol !== 'rediss:' && !(connectionUrl.protocol === 'redis:' && /^red-[a-z0-9]+$/.test(connectionUrl.hostname))) {
+    throw new Error('Production Redis requires TLS or a Render private Key Value address.');
+  }
+}
 export const connection = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
   retryStrategy: () => 30000,
   enableOfflineQueue: false,
-  tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+  tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: true } : undefined,
 });
 connection.on('error', () => {
   // Log once to keep console clean during local standalone development

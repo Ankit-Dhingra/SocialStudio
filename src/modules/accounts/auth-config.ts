@@ -17,13 +17,24 @@ export function clerkConfig(env: NodeJS.ProcessEnv) {
   if (env.NODE_ENV === 'production' && (!publishableKey.startsWith('pk_live_') || !secretKey.startsWith('sk_live_'))) {
     throw new Error('Production requires keys from a Clerk production instance.');
   }
+  const mongodbUri = env.MONGODB_URI!.trim();
+  if (env.NODE_ENV === 'production') {
+    const options = new URLSearchParams(mongodbUri.split('?')[1]?.toLowerCase());
+    const disablesTls = ['tls', 'ssl'].some(name => options.getAll(name).includes('false'));
+    const bypassesVerification = ['tlsinsecure', 'tlsallowinvalidcertificates', 'tlsallowinvalidhostnames']
+      .some(name => options.getAll(name).includes('true'));
+    const usesTls = mongodbUri.startsWith('mongodb+srv://') || ['tls', 'ssl'].some(name => options.getAll(name).includes('true'));
+    if (!usesTls || disablesTls || bypassesVerification || env.NODE_TLS_REJECT_UNAUTHORIZED === '0') {
+      throw new Error('Production requires MongoDB TLS with verified certificates and hostnames.');
+    }
+  }
 
   return {
     frontendOrigin: frontend.origin,
     publishableKey,
     secretKey,
     jwtKey: env.CLERK_JWT_KEY?.trim().replace(/\\n/g, '\n') || undefined,
-    mongodbUri: env.MONGODB_URI!.trim(),
+    mongodbUri,
     ownerEmail: env.OWNER_EMAIL!.trim().toLowerCase(),
     ownerClerkUserId: env.OWNER_CLERK_USER_ID?.trim() || undefined,
     requireOwnerMfa: env.NODE_ENV === 'production' || env.OWNER_REQUIRE_MFA === 'true',

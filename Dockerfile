@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-slim
 
 # Install system libraries for headless browser, FFmpeg, and TrueType fonts
 RUN apt-get update && apt-get install -y \

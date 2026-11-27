@@ -839,7 +839,14 @@ Always return the full updated 7 sections so the script remains complete and sel
     if (!session) {
       throw new Error(`Session ${sessionId} not found.`);
     }
+    this.finalizeStoredScript(session, customMarkdown);
+    sessions.set(sessionId, session);
+    saveSessionToDisk(session);
+    console.log(`[MasterScript] Session ${sessionId} locked and finalized with ${session.storyboard.scenes.length} scenes.`);
+    return session;
+  }
 
+  finalizeStoredScript(session: ScriptSession, customMarkdown?: string): ScriptSession {
     if (customMarkdown?.trim() && customMarkdown !== session.currentMarkdown) {
       const sections = parseSectionsFromMarkdown(customMarkdown);
       const approved = decodePastedScript(customMarkdown) ?? tryParseSevenKeyJson(customMarkdown);
@@ -861,9 +868,6 @@ Always return the full updated 7 sections so the script remains complete and sel
 
     session.finalized = true;
     session.updatedAt = Date.now();
-    sessions.set(sessionId, session);
-    saveSessionToDisk(session);
-    console.log(`[MasterScript] Session ${sessionId} locked and finalized with ${session.storyboard.scenes.length} scenes.`);
     return session;
   }
 
@@ -874,20 +878,34 @@ Always return the full updated 7 sections so the script remains complete and sel
     angleOverride?: string,
     ownerDigest?: string,
   ): Promise<ScriptSession> {
+    const existing = existingSessionId ? this.getSession(existingSessionId) : undefined;
+    const session = await this.buildCustomSession(customScript, topicFallback, existing, angleOverride, existingSessionId);
+    session.ownerDigest = existing?.ownerDigest ?? ownerDigest;
+    sessions.set(session.id, session);
+    saveSessionToDisk(session);
+    console.log(`[MasterScript] Created custom script session ${session.id} with ${session.storyboard.scenes.length} scenes.`);
+    return session;
+  }
+
+  async buildCustomSession(
+    customScript: string | Record<string, any>,
+    topicFallback = 'Creator Custom Script',
+    existing?: ScriptSession,
+    angleOverride?: string,
+    existingSessionId?: string,
+  ): Promise<ScriptSession> {
     const decoded = typeof customScript === 'string' ? decodePastedScript(customScript) : customScript;
     const structuredScript = decoded && typeof decoded === 'object' && !Array.isArray(decoded)
       ? decoded as Record<string, any>
       : typeof customScript === 'string' ? tryParseSevenKeyJson(customScript) : null;
     const storyboard = await parseCustomScriptToStoryboard(structuredScript ?? customScript, topicFallback);
     const scriptObj = structuredScript ?? { title: topicFallback, hook: customScript };
-    const existing = existingSessionId ? this.getSession(existingSessionId) : undefined;
-    const id = existingSessionId || `session_${randomUUID()}`;
+    const id = existing?.id || existingSessionId || `session_${randomUUID()}`;
     const rawText = typeof customScript === 'string' ? customScript : JSON.stringify(scriptObj, null, 2);
 
     const session: ScriptSession = {
       ...(existing || {}),
       id,
-      ownerDigest: existing?.ownerDigest ?? ownerDigest,
       topic: scriptObj.title || storyboard.title || topicFallback,
       angle: angleOverride || existing?.angle || 'Behind The Tech Tech Reel',
       messages: existing?.messages || [
@@ -908,9 +926,6 @@ Always return the full updated 7 sections so the script remains complete and sel
       updatedAt: Date.now(),
     };
     this.clearMedia(session);
-    sessions.set(id, session);
-    saveSessionToDisk(session);
-    console.log(`[MasterScript] Created custom script session ${id} with ${storyboard.scenes.length} scenes.`);
     return session;
   }
 

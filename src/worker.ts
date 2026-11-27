@@ -22,6 +22,10 @@ import { prepareStoryboardVisuals } from './modules/render/storyboard-visuals.js
 import { renderReviewedPreviews } from './modules/render/review-storyboard.js';
 import { performMediaQA } from './modules/qa/media-qa.js';
 
+if (process.env.NODE_ENV === 'production' || process.env.SOCIALSTUDIO_AUTH === 'clerk') {
+  throw new Error('The legacy worker is available only for the local creator workflow.');
+}
+
 export interface VideoJobData {
   id: string;
   topic?: string;

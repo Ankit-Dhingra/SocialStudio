@@ -53,6 +53,15 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
   const [operation, setOperation] = useState('');
   const [contextLoad, setContextLoad] = useState(0);
   const endpoint = `/api/pipeline/manual-visual/${encodeURIComponent(sessionId)}`;
+
+  async function downloadSource(name) {
+    try {
+      const response = await pipelineFetch(toApiUrl(`/api/pipeline/visual-source-pack/${encodeURIComponent(name)}`));
+      if (!response.ok) throw new Error();
+      const file = await response.blob();
+      download(name, file, file.type);
+    } catch { setError(`Could not download ${name}.`); }
+  }
   const requestKey = JSON.stringify([endpoint, narrationKey, contextLoad]);
   const active = prepared?.key === requestKey ? prepared : null;
   const context = active?.context;
@@ -210,9 +219,9 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
             <p>Download these for one-time ChatGPT Project setup.</p>
           </div>
           <div className="manual-visual-files" aria-label="Source file downloads">
-            {sourceFiles.map(name => <a className="btn btn-secondary" key={name} href={toApiUrl(`/api/pipeline/visual-source-pack/${name}`)} download={name}>
+            {sourceFiles.map(name => <button className="btn btn-secondary" type="button" key={name} onClick={() => downloadSource(name)}>
               <Download size={13} aria-hidden="true" /> {name}
-            </a>)}
+            </button>)}
           </div>
         </div>
       </details>

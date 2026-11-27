@@ -11,6 +11,7 @@ generated_scripts
 dist-remotion
 media/local-dashboard
 media/demo
+media/private
 media/sessions
 media/runs
 media/tmp

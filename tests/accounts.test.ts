@@ -9,6 +9,9 @@ import { requireOwner, studioAuthentication } from '../src/modules/accounts/auth
 import { accountProfile, connectAccounts, getStudioUser, type StudioAccount, VerifiedEmailRequired } from '../src/modules/accounts/users.js';
 import { ownerFor, ownsSession } from '../src/modules/pipeline/session-owner.js';
 import type { ScriptSession } from '../src/modules/ai-script/master-script-service.js';
+import { getProject, importProject, initProjects, replaceProject } from '../src/modules/projects/repository.js';
+import { claimJob, getOwnedJob, initJobs, reconcileJobs, recordJob, updateJobLease } from '../src/modules/jobs/durable-jobs.js';
+import { Queue } from 'bullmq';
 
 const email = 'owner@example.test';
 const ownerId = 'user_verified_owner';
@@ -25,6 +28,10 @@ test('Clerk configuration fails closed for hosted Studio', () => {
   };
   assert.throws(() => clerkConfig(config), /production instance/);
   assert.throws(() => clerkConfig({ ...config, FRONTEND_URL: `${frontendOrigin}/projects` }), /application origin/);
+  const live = { ...config, CLERK_PUBLISHABLE_KEY: 'pk_live_fixture', CLERK_SECRET_KEY: 'sk_live_fixture' };
+  assert.throws(() => clerkConfig(live), /verified certificates/);
+  assert.throws(() => clerkConfig({ ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio?tlsAllowInvalidCertificates=true' }), /verified certificates/);
+  assert.doesNotThrow(() => clerkConfig({ ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio' }));
 });
 
 test('owner eligibility requires a verified Clerk email, linked verified Google identity, and an optional pinned ID', () => {
@@ -119,6 +126,8 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
 
   try {
     await connectAccounts(config.mongodbUri);
+    await initProjects();
+    await initJobs();
     const accounts = await Promise.all(Array.from({ length: 5 }, () => getStudioUser(ownerId, config, profile)));
     assert.equal(new Set(accounts.map(account => String(account._id))).size, 1);
     assert(accounts.every(account => account.role === 'owner' && account.status === 'active'));
@@ -143,7 +152,6 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
       OWNER_REQUIRE_MFA: 'true', MONGODB_URI: config.mongodbUri, REDIS_URL: 'redis://127.0.0.1:6379' };
     const { app } = await import('../src/api.js');
     const { connection } = await import('../src/core.js');
-    const { masterScriptService } = await import('../src/modules/ai-script/master-script-service.js');
     const server = app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -171,6 +179,61 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
       assert.equal(created.status, 201);
       createdSessionId = (await created.json()).id;
       assert.match(createdSessionId!, /^session_/);
+      const record = await getProject('user_other', createdSessionId!);
+      assert(record);
+      assert.equal(await replaceProject('user_other', record.session, record.revision), true);
+      assert.equal(await replaceProject('user_other', record.session, record.revision), false);
+      const legacy = { ...record.session, id: 'session_legacy_import_fixture', ownerDigest: 'legacy-credential',
+        job: { status: 'running' }, renderState: { status: 'rendering', progress: 42 } };
+      assert.equal(await importProject(ownerId, legacy), true);
+      assert.equal(await importProject(ownerId, legacy), false);
+      assert.equal(await getProject('user_other', legacy.id), null);
+      const migrated = await getProject(ownerId, legacy.id);
+      assert.equal(migrated?.session.ownerDigest, undefined);
+      assert.equal(migrated?.session.job.status, 'failed');
+      assert.equal(migrated?.session.renderState.status, 'idle');
+      const recorded = await recordJob('user_other', createdSessionId!, 'visuals', 1, 'fixture-request');
+      const same = await recordJob('user_other', createdSessionId!, 'visuals', 1, 'fixture-request');
+      assert(recorded && same);
+      assert.equal(recorded._id, same._id);
+      assert.equal(await getOwnedJob(ownerId, recorded._id), null);
+      const ids = new Set();
+      const queue = { add: async (_name: string, data: { id: string }) => ids.add(data.id) } as unknown as Pick<Queue, 'add'>;
+      if (process.env.STUDIO_JOB_TEST_REDIS_PORT) {
+        const isolatedQueue = new Queue(`studio-recovery-${crypto.randomUUID()}`, {
+          connection: { host: '127.0.0.1', port: Number(process.env.STUDIO_JOB_TEST_REDIS_PORT) },
+        });
+        try {
+          await isolatedQueue.waitUntilReady();
+          assert.equal(await reconcileJobs(isolatedQueue), 1);
+          assert.equal(await isolatedQueue.getWaitingCount(), 1);
+          await isolatedQueue.drain();
+          assert.equal(await isolatedQueue.getWaitingCount(), 0);
+          assert.equal(await reconcileJobs(isolatedQueue), 1);
+          assert.equal(await reconcileJobs(isolatedQueue), 1);
+          assert.equal(await isolatedQueue.getWaitingCount(), 1);
+        } finally { await isolatedQueue.obliterate({ force: true }); await isolatedQueue.close(); }
+      }
+      assert.equal(await reconcileJobs(queue), 1);
+      assert.deepEqual([...ids], [recorded._id]);
+      ids.clear();
+      assert.equal(await reconcileJobs(queue), 1);
+      assert.deepEqual([...ids], [recorded._id]);
+      const startedAt = new Date();
+      const claims = (await Promise.all([claimJob(recorded._id, startedAt), claimJob(recorded._id, startedAt)])).filter(Boolean);
+      assert.equal(claims.length, 1);
+      assert.equal(await updateJobLease(recorded._id, claims[0]!.leaseId!, 'checkpoint', 'timeline', startedAt), true);
+      const expiredAt = new Date(startedAt.getTime() + 61_000);
+      assert.equal(await reconcileJobs(queue, expiredAt), 1);
+      const resumed = await claimJob(recorded._id, expiredAt);
+      assert.equal(resumed?.checkpoint, 'timeline');
+      assert.equal(await updateJobLease(recorded._id, claims[0]!.leaseId!, 'complete', undefined, expiredAt), false);
+      assert.equal(await updateJobLease(recorded._id, resumed!.leaseId!, 'provider-start', undefined, expiredAt), true);
+      assert.equal(await reconcileJobs(queue, new Date(expiredAt.getTime() + 61_000)), 0);
+      assert.equal((await getOwnedJob('user_other', recorded._id))?.status, 'needs_review');
+      assert.equal((await request(`/api/pipeline/jobs/${recorded._id}`, ownerId)).status, 404);
+      const jobStatus = await request(`/api/pipeline/jobs/${recorded._id}`, 'user_other');
+      assert.equal((await jobStatus.json()).status, 'needs_review');
       assert.equal((await request(`/api/pipeline/status/${createdSessionId}`, 'user_other')).status, 200);
       assert.equal((await request(`/api/pipeline/status/${createdSessionId}`, ownerId)).status, 404);
       for (const [id, hasReel] of [['user_other', true], [ownerId, false]] as const) {
@@ -179,8 +242,10 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
         const reels = await response.json() as Array<{ id: string }>;
         assert.equal(reels.some(reel => reel.id === createdSessionId), hasReel);
       }
+      assert.equal((await request(`/api/pipeline/session/${createdSessionId}`, ownerId, { method: 'DELETE' })).status, 404);
+      assert.equal((await request(`/api/pipeline/session/${createdSessionId}`, 'user_other', { method: 'DELETE' })).status, 200);
+      assert.equal((await request(`/api/pipeline/status/${createdSessionId}`, 'user_other')).status, 404);
     } finally {
-      if (createdSessionId) masterScriptService.deleteSession(createdSessionId);
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
       connection.disconnect();
