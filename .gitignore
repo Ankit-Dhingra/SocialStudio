@@ -63,4 +63,5 @@ __pycache__/
 *.pyc
 output/
 /backups/
+/media/demo/
 reference_reels/extracted_visuals/

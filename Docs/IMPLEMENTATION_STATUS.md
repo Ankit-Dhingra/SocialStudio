@@ -61,7 +61,7 @@ The legacy API currently allows wildcard CORS. Static routes expose media by URL
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Clerk authentication and owner binding | Local verification passed. Live Express owner binding pending the development secret. |
-| 2 | Public read-only demo | Pending |
+| 2 | Public read-only demo | Implemented and locally verified. Public media deployment pending. |
 | 3 | MongoDB persistence and owner migration | Pending |
 | 4 | Cloudflare R2 and private media | Pending |
 | 5 | Redis, BullMQ, workers, and recovery | Pending |
@@ -97,4 +97,20 @@ Hosted mode restricts the legacy API to isolated project reads, pasted-script ed
 - The approved SocialStudio development instance is provisioned with Google and Email enabled. Browser automatic approval review rejected disabling Email, so the development instance retained both methods. Production Clerk configuration and real owner MFA enrollment remain pending.
 - The database integration used a temporary loopback MongoDB process. No cloud database credentials, new paid resources, or production deployment changes were involved.
 
-Phase 1 is gated on the live development secret, Express owner verification, and owner MFA enrollment verification. The fixture result for a normal member is recorded above. The subsequent implementation phases remain pending this gate. See [owner setup](OWNER_SETUP.md) for the secure local configuration path.
+Phase 1 live verification needs the Clerk development secret and owner MFA enrollment. The fixture result for a normal member is recorded above. Independent phases can proceed while live verification is pending. See [owner setup](OWNER_SETUP.md) for the secure local configuration path.
+
+## Phase 2 Public read-only demo
+
+`/demo` is accessible without signing in. The homepage adds an Explore Demo link. The demo serves a curated catalog and supports browser range requests. The demo API has no provider, queue, account, or project database dependency and only serves allowlisted media names. The sign-in CTA opens Clerk on the existing homepage.
+
+`npm run demo:prepare` stages the original MP4 bytes and extracts JPEG thumbnails locally. The five SHA-256 values are checked before media is made available. Originals remain in place. `DEMO_PUBLIC_BASE_URL` can serve the same names directly from a public demo bucket once it is ready.
+
+| Reel | Verified runtime |
+| --- | ---: |
+| WhatsApp V2, featured | 148.416 s |
+| Load Balancing | 18.219 s |
+| Bloom Filter | 31.637 s |
+| Merkle Tree | 42.944 s |
+| RAG | 135.680 s |
+
+The full suite with saved-session and local MongoDB fixtures passed 66 tests. TypeScript and the production dashboard build passed. Browser verification played all five 1080-wide originals without signing in and opened Google sign-in from the demo CTA. The published media bucket and public deployment remain pending. No new media renders or AI calls were used to create the demo.

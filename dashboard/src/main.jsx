@@ -942,7 +942,10 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
               )}
             </button>
           </nav>
-          {accountControls && <div className="studio-account-controls">{accountControls}</div>}
+          <div className="studio-account-controls">
+            <a className="btn btn-secondary" href="/demo">Explore Demo</a>
+            {accountControls}
+          </div>
         </div>
       </aside>
 

@@ -1,6 +1,7 @@
-import React, { useLayoutEffect } from 'react';
+import React, { useEffect, useLayoutEffect } from 'react';
 import { ClerkProvider, useAuth, useClerk, UserButton, UserProfile } from '@clerk/react';
 import { registerPipelineTokenGetter } from './pipeline-api.js';
+import { DemoLibrary } from './DemoLibrary.jsx';
 
 function SignedInStudio({ Studio, userId, getToken }) {
   useLayoutEffect(() => registerPipelineTokenGetter(getToken), [getToken]);
@@ -24,6 +25,12 @@ function ClerkStudio({ Studio }) {
   const signIn = () => openSignIn({ forceRedirectUrl: '/studio' });
   const signUp = () => openSignUp({ forceRedirectUrl: '/studio' });
 
+  useEffect(() => {
+    if (!isLoaded || isSignedIn || new URLSearchParams(window.location.search).get('signin') !== '1') return;
+    window.history.replaceState(null, '', '/');
+    openSignIn({ forceRedirectUrl: '/studio' });
+  }, [isLoaded, isSignedIn, openSignIn]);
+
   if (isSignedIn) return <SignedInStudio key={userId} Studio={Studio} userId={userId} getToken={getToken} />;
 
   return <Studio canAccessStudio={false} onStudioRequired={isLoaded ? signIn : undefined} accountControls={<>
@@ -33,6 +40,7 @@ function ClerkStudio({ Studio }) {
 }
 
 export function AuthShell({ Studio }) {
+  if (window.location.pathname.replace(/\/$/, '') === '/demo') return <DemoLibrary />;
   const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   if (key) {
     return <ClerkProvider publishableKey={key} afterSignOutUrl="/">

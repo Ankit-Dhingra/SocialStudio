@@ -50,11 +50,13 @@ import { pool, queue, connection } from './core.js';
 import { clerkConfig } from './modules/accounts/auth-config.js';
 import { requireOwner, studioAuthentication } from './modules/accounts/auth-middleware.js';
 import { connectAccounts } from './modules/accounts/users.js';
+import { demoRouter } from './modules/demo/routes.js';
 
 const authConfig = clerkConfig(process.env);
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: authConfig?.frontendOrigin ?? '*' }));
+app.use('/api/demo', demoRouter({ directory: process.env.DEMO_MEDIA_DIR, publicBaseUrl: process.env.DEMO_PUBLIC_BASE_URL }));
 
 if (authConfig) {
   app.use('/api', ...studioAuthentication(authConfig));
@@ -1388,7 +1390,8 @@ if (fs.existsSync(dashboardDist)) {
 }
 
 // Error middleware
-app.use((err: any, _req: any, res: any, _next: any) => {
+app.use((err: any, _req: any, res: any, next: any) => {
+  if (res.headersSent) return next(err);
   if (authConfig) {
     if (err.status === 413) return res.status(413).json({ error: 'Request body is too large.' });
     if (err.status === 400) return res.status(400).json({ error: 'Invalid request body.' });

@@ -8,8 +8,9 @@
     "dev:dashboard": "npm --prefix dashboard run dev",
     "db:init": "tsx src/init-db.ts",
     "check": "tsc --noEmit",
-    "test": "tsx --test tests/scene-schema-registry.test.ts tests/reel-quality.test.ts tests/visual-directives.test.ts tests/accounts.test.ts",
+    "test": "tsx --test tests/scene-schema-registry.test.ts tests/reel-quality.test.ts tests/visual-directives.test.ts tests/accounts.test.ts tests/demo.test.ts",
     "export:visual-source-pack": "tsx scripts/export-visual-source-pack.ts",
+    "demo:prepare": "tsx scripts/prepare-demo-media.ts",
     "bundle:remotion": "tsx scripts/bundle-remotion.ts",
     "preview:design": "tsx scripts/render-design-showcase.ts",
     "start": "tsx src/api.ts"
