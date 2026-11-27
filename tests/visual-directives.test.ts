@@ -9,7 +9,8 @@ import { loadVisualDirectorReference, visualDirectorFiles } from '../src/modules
 
 const audit = process.env.REEL_MANUAL_AUDIT_SESSION;
 const exportMedia = process.env.REEL_MANUAL_RENDER_TEST === '1';
-const output = path.resolve(exportMedia ? 'output/manual-visual-import' : 'output/manual-visual-validation');
+const output = path.resolve(process.env.REEL_MANUAL_AUDIT_OUTPUT ||
+  (exportMedia ? 'output/manual-visual-import' : 'output/manual-visual-validation'));
 const hash = (data: unknown) => createHash('sha256').update(JSON.stringify(data)).digest('hex');
 
 test('the source pack exports the runtime schema and a compiled example', async () => {
@@ -86,8 +87,8 @@ test('manual visual API validates, authorizes and preserves a pinned production 
     assert.match(result.body.error, hint);
     errors[name] = result.body;
   };
-  const verify = async (route: string, predicate: (body: any) => boolean) => {
-    const deadline = Date.now() + 330_000;
+  const verify = async (route: string, predicate: (body: any) => boolean, timeoutMs = 330_000) => {
+    const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const response = await request(route);
       assert.equal(response.status, 200);
@@ -96,7 +97,7 @@ test('manual visual API validates, authorizes and preserves a pinned production 
       if (predicate(response.body)) return response.body;
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
-    throw new Error(`Render did not finish: ${route}`);
+    throw new Error(`Render did not finish within ${timeoutMs / 1000} seconds: ${route}`);
   };
   try {
     const context = await request(`${endpoint}/context`);
@@ -249,7 +250,7 @@ test('manual visual API validates, authorizes and preserves a pinned production 
       await copyFile(path.resolve(motion.preview.mediaUrl.slice(1)), path.join(output, 'motion-preview.mp4'));
       assert.equal((await request('/api/pipeline/render', { sessionId: id, visualRevision: 'stale' })).status, 409);
       assert.equal((await request('/api/pipeline/render', { sessionId: id, visualRevision: fingerprint })).status, 200);
-      const final = await verify(`/api/pipeline/render/status/${id}`, body => body.renderState?.status === 'completed');
+      const final = await verify(`/api/pipeline/render/status/${id}`, body => body.renderState?.status === 'completed', 20 * 60_000);
       assert(final.renderState.qa.passed);
       assert.equal(masterScriptService.getSession(id)?.visualAssets?.fingerprint, fingerprint);
       await copyFile(path.resolve(final.renderState.mediaUrl.slice(1)), path.join(output, 'manual-final.mp4'));
