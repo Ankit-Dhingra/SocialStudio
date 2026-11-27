@@ -871,7 +871,8 @@ Always return the full updated 7 sections so the script remains complete and sel
     customScript: string | Record<string, any>,
     topicFallback = 'Creator Custom Script',
     existingSessionId?: string,
-    angleOverride?: string
+    angleOverride?: string,
+    ownerDigest?: string,
   ): Promise<ScriptSession> {
     const decoded = typeof customScript === 'string' ? decodePastedScript(customScript) : customScript;
     const structuredScript = decoded && typeof decoded === 'object' && !Array.isArray(decoded)
@@ -886,6 +887,7 @@ Always return the full updated 7 sections so the script remains complete and sel
     const session: ScriptSession = {
       ...(existing || {}),
       id,
+      ownerDigest: existing?.ownerDigest ?? ownerDigest,
       topic: scriptObj.title || storyboard.title || topicFallback,
       angle: angleOverride || existing?.angle || 'Behind The Tech Tech Reel',
       messages: existing?.messages || [

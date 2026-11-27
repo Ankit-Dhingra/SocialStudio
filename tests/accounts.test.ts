@@ -1,0 +1,193 @@
+import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign } from 'node:crypto';
+import { once } from 'node:events';
+import test from 'node:test';
+import express from 'express';
+import mongoose from 'mongoose';
+import { clerkConfig, type ClerkConfig } from '../src/modules/accounts/auth-config.js';
+import { requireOwner, studioAuthentication } from '../src/modules/accounts/auth-middleware.js';
+import { accountProfile, connectAccounts, getStudioUser, type StudioAccount, VerifiedEmailRequired } from '../src/modules/accounts/users.js';
+import { ownerFor, ownsSession } from '../src/modules/pipeline/session-owner.js';
+import type { ScriptSession } from '../src/modules/ai-script/master-script-service.js';
+
+const email = 'owner@example.test';
+const ownerId = 'user_verified_owner';
+const frontendOrigin = 'https://studio.example.test';
+const clerkHostname = 'app.clerk.accounts.dev';
+const mongoTestUrl = process.env.STUDIO_ACCOUNTS_TEST_MONGODB_URI;
+
+test('Clerk configuration fails closed for hosted Studio', () => {
+  assert.equal(clerkConfig({ NODE_ENV: 'development' }), undefined);
+  assert.throws(() => clerkConfig({ NODE_ENV: 'production' }), /CLERK_SECRET_KEY/);
+  const config = {
+    NODE_ENV: 'production', CLERK_PUBLISHABLE_KEY: 'pk_test_fake', CLERK_SECRET_KEY: 'sk_test_fake',
+    MONGODB_URI: 'mongodb://localhost/studio', FRONTEND_URL: frontendOrigin, OWNER_EMAIL: email,
+  };
+  assert.throws(() => clerkConfig(config), /production instance/);
+  assert.throws(() => clerkConfig({ ...config, FRONTEND_URL: `${frontendOrigin}/projects` }), /application origin/);
+});
+
+test('owner eligibility requires a verified Clerk email, linked verified Google identity, and an optional pinned ID', () => {
+  const profile = {
+    id: ownerId, firstName: 'Studio', lastName: 'Owner',
+    primaryEmailAddress: { emailAddress: email.toUpperCase(), verification: { status: 'verified' } },
+    externalAccounts: [{ provider: 'oauth_google', emailAddress: email, verification: { status: 'verified' } }],
+    publicMetadata: { role: 'member' }, unsafeMetadata: { role: 'owner' },
+  } as Parameters<typeof accountProfile>[0];
+  assert.equal(accountProfile(profile, { ownerEmail: email, ownerClerkUserId: undefined }).ownerCandidate, true);
+  assert.equal(accountProfile(profile, { ownerEmail: email, ownerClerkUserId: 'user_other' }).ownerCandidate, false);
+  assert.equal(accountProfile({ ...profile, externalAccounts: [] }, { ownerEmail: email, ownerClerkUserId: undefined }).ownerCandidate, false);
+  assert.throws(() => accountProfile({ ...profile, primaryEmailAddress: null },
+    { ownerEmail: email, ownerClerkUserId: undefined }), VerifiedEmailRequired);
+});
+
+function signedSessions() {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const config: ClerkConfig = {
+    frontendOrigin, publishableKey: `pk_test_${Buffer.from(`${clerkHostname}$`).toString('base64')}`,
+    secretKey: 'sk_test_mock', jwtKey: publicKey.export({ format: 'pem', type: 'spki' }),
+    mongodbUri: 'unused', ownerEmail: email, ownerClerkUserId: ownerId, requireOwnerMfa: true,
+  };
+  const token = (sub: string, secondFactorAge = -1, azp = frontendOrigin) => {
+    const now = Math.floor(Date.now() / 1000);
+    const header = { alg: 'RS256', typ: 'JWT', kid: 'studio-test', cat: 'cl_B7d4PD111AAA' };
+    const claims = { sub, azp, sid: `sess_${sub}`, sts: 'active', fva: [0, secondFactorAge],
+      iss: `https://${clerkHostname}`, iat: now, nbf: now - 5, exp: now + 60, v: 2 };
+    const message = [header, claims].map(part => Buffer.from(JSON.stringify(part)).toString('base64url')).join('.');
+    return `${message}.${sign('RSA-SHA256', Buffer.from(message), privateKey).toString('base64url')}`;
+  };
+  return { config, token };
+}
+
+test('Clerk session verification gates owner actions and isolates session ownership', async () => {
+  const { config, token } = signedSessions();
+  const app = express();
+  const requestedUsers: string[] = [];
+  app.use('/api', ...studioAuthentication(config, async clerkUserId => {
+    requestedUsers.push(clerkUserId);
+    return { clerkUserId, role: clerkUserId === ownerId ? 'owner' : 'member',
+      status: clerkUserId === 'user_suspended' ? 'suspended' : 'active' } as StudioAccount;
+  }));
+  let reel: ScriptSession | undefined;
+  app.post('/api/reel', (req, res) => {
+    reel = { ownerDigest: ownerFor(req, res) } as ScriptSession;
+    res.status(201).end();
+  });
+  app.get('/api/reel', (req, res) => res.sendStatus(reel && ownsSession(req, reel) ? 200 : 404));
+  app.get('/api/admin', requireOwner(config), (_req, res) => res.sendStatus(200));
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const request = async (path: string, accessToken?: string, method = 'GET') => {
+    const headers = new Headers({ Origin: frontendOrigin, 'X-Clerk-User-Id': ownerId,
+      'X-Role': 'owner', 'X-SocialStudio-Owner': 'a'.repeat(64) });
+    if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+    const response = await fetch(`${base}${path}`, { headers, method, redirect: 'manual' });
+    return response.status;
+  };
+
+  try {
+    assert.equal(await request('/api/admin'), 401);
+    const member = token('user_member');
+    assert.equal(await request('/api/admin', token('user_member', 0, 'https://other.example.test')), 401);
+    assert.equal(await request('/api/admin', member), 403);
+    assert.equal(await request('/api/admin', token(ownerId)), 403);
+    assert.equal(await request('/api/admin', token(ownerId, 1)), 200);
+    assert.equal(await request('/api/reel', member, 'POST'), 201);
+    assert.equal(await request('/api/reel', member), 200);
+    assert.equal(await request('/api/reel', token(ownerId, 1)), 404);
+    assert.equal(await request('/api/reel', token('user_suspended')), 403);
+    assert.deepEqual(requestedUsers, ['user_member', ownerId, ownerId, 'user_member', 'user_member', ownerId, 'user_suspended']);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlement', { skip: !mongoTestUrl }, async () => {
+  const db = new URL(mongoTestUrl!);
+  db.pathname = `/socialstudio_accounts_test_${crypto.randomUUID().replaceAll('-', '')}`;
+  const config: ClerkConfig = {
+    frontendOrigin, publishableKey: 'unused', secretKey: 'unused', jwtKey: undefined,
+    mongodbUri: db.href, ownerEmail: email, ownerClerkUserId: undefined, requireOwnerMfa: true,
+  };
+  const profile = async (id: string) => ({
+    id, firstName: 'Studio', lastName: 'Tester',
+    primaryEmailAddress: { emailAddress: email, verification: { status: 'verified' } },
+    externalAccounts: [{ provider: 'google', emailAddress: email, verification: { status: 'verified' } }],
+  } as Parameters<typeof accountProfile>[0]);
+
+  try {
+    await connectAccounts(config.mongodbUri);
+    const accounts = await Promise.all(Array.from({ length: 5 }, () => getStudioUser(ownerId, config, profile)));
+    assert.equal(new Set(accounts.map(account => String(account._id))).size, 1);
+    assert(accounts.every(account => account.role === 'owner' && account.status === 'active'));
+
+    const member = await getStudioUser('user_other', config, profile);
+    assert.equal(member.role, 'member');
+    assert.equal(member.plan, null);
+    assert.equal(member.trialEligibility, 'unassessed');
+    assert.equal(member.clerkUserId, 'user_other');
+
+    await mongoose.disconnect();
+    await connectAccounts(config.mongodbUri);
+    const savedOwner = await getStudioUser(ownerId, config, async () => { throw new Error('Unexpected Clerk lookup.'); });
+    assert.equal(savedOwner.role, 'owner');
+    assert.equal(String(savedOwner._id), String(accounts[0]._id));
+
+    const signed = signedSessions();
+    const originalEnv = process.env;
+    process.env = { ...process.env, NODE_ENV: 'test', SOCIALSTUDIO_AUTH: 'clerk', FRONTEND_URL: frontendOrigin,
+      CLERK_PUBLISHABLE_KEY: signed.config.publishableKey, CLERK_SECRET_KEY: signed.config.secretKey,
+      CLERK_JWT_KEY: signed.config.jwtKey, OWNER_EMAIL: email, OWNER_CLERK_USER_ID: ownerId,
+      OWNER_REQUIRE_MFA: 'true', MONGODB_URI: config.mongodbUri, REDIS_URL: 'redis://127.0.0.1:6379' };
+    const { app } = await import('../src/api.js');
+    const { connection } = await import('../src/core.js');
+    const { masterScriptService } = await import('../src/modules/ai-script/master-script-service.js');
+    const server = app.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const request = (route: string, clerkUserId?: string, init: RequestInit = {}) => {
+      const headers = new Headers(init.headers);
+      headers.set('Origin', frontendOrigin);
+      if (clerkUserId) headers.set('Authorization', `Bearer ${signed.token(clerkUserId, 0)}`);
+      return fetch(base + route, { ...init, headers });
+    };
+    let createdSessionId: string | undefined;
+    try {
+      assert.equal((await request('/api/pipeline/sessions')).status, 401);
+      assert.equal((await request('/api/videos', undefined, { method: 'POST' })).status, 401);
+      assert.equal((await request('/api/pipeline/audio/synthesize', ownerId, { method: 'POST' })).status, 403);
+      assert.equal((await request('/output/old-video.mp4')).status, 404);
+      assert.equal((await request('/api/admin/access', 'user_other')).status, 403);
+      assert.equal((await request('/api/admin/access', ownerId)).status, 200);
+      assert.equal((await (await request('/api/account', ownerId)).json()).role, 'owner');
+      assert.equal((await (await request('/api/account', 'user_other')).json()).role, 'member');
+
+      const created = await request('/api/pipeline/script/custom', 'user_other', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customScript: 'A queue stores work until a worker is ready to process it.' }),
+      });
+      assert.equal(created.status, 201);
+      createdSessionId = (await created.json()).id;
+      assert.match(createdSessionId!, /^session_/);
+      assert.equal((await request(`/api/pipeline/status/${createdSessionId}`, 'user_other')).status, 200);
+      assert.equal((await request(`/api/pipeline/status/${createdSessionId}`, ownerId)).status, 404);
+      for (const [id, hasReel] of [['user_other', true], [ownerId, false]] as const) {
+        const response = await request('/api/pipeline/sessions', id);
+        assert.equal(response.status, 200);
+        const reels = await response.json() as Array<{ id: string }>;
+        assert.equal(reels.some(reel => reel.id === createdSessionId), hasReel);
+      }
+    } finally {
+      if (createdSessionId) masterScriptService.deleteSession(createdSessionId);
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      connection.disconnect();
+      process.env = originalEnv;
+    }
+  } finally {
+    try { if (mongoose.connection.readyState === 1) await mongoose.connection.dropDatabase(); }
+    finally { await mongoose.disconnect(); }
+  }
+});

@@ -44,7 +44,7 @@ The legacy API currently allows wildcard CORS. Static routes expose media by URL
 
 - Render's SocialStudio workspace has the existing Free Docker web service. It tracks GitHub `main` and the latest deployment shown in the dashboard failed. The older running deployment returned a healthy response from [its health endpoint](https://socialstudio-backend-kuwv.onrender.com/health).
 - The existing Vercel frontend displayed an earlier dashboard at [its public URL](https://social-studio-olive.vercel.app/). The account is on Hobby, which Vercel limits to personal, noncommercial use. [Vercel Hobby plan](https://vercel.com/docs/plans/hobby)
-- Clerk dashboard access succeeded. The visible application was for a different project. SocialStudio Clerk keys and sign-in remain pending.
+- Clerk dashboard access succeeded. The preexisting application belonged to another project. Phase 1 provisioned a dedicated SocialStudio development instance.
 - Atlas dashboard access succeeded. The visible Free cluster belongs to another project. A dedicated SocialStudio database and database credentials remain pending.
 - Cloudflare dashboard access succeeded. R2 displays a subscription step with $0 due at activation and potential monthly usage charges. Subscription activation requires explicit approval and user completion.
 - Razorpay redirected to its email or phone login. Account access and test mode remain unverified.
@@ -60,7 +60,7 @@ The legacy API currently allows wildcard CORS. Static routes expose media by URL
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 1 | Clerk authentication and owner binding | In progress |
+| 1 | Clerk authentication and owner binding | Local verification passed. Live Express owner binding pending the development secret. |
 | 2 | Public read-only demo | Pending |
 | 3 | MongoDB persistence and owner migration | Pending |
 | 4 | Cloudflare R2 and private media | Pending |
@@ -75,3 +75,26 @@ The legacy API currently allows wildcard CORS. Static routes expose media by URL
 | 13 | Environment and operating documentation | Pending |
 | 14 | End-to-end verification and capacity tests | Pending |
 | 15 | Release readiness and rollback verification | Pending |
+
+## Phase 1 Clerk authentication and owner binding
+
+The React dashboard uses the official Clerk SDK for the sign-in and sign-up modals, account management, and logout. Signed-out visits keep the existing overview and route Studio actions to sign-in. The Express API accepts Clerk session bearer tokens for the configured frontend origin. MongoDB stores the application account keyed by the immutable Clerk user ID. Owner bootstrap requires verified email and a linked verified Google account. A database index limits the owner role to one account. Production owner endpoints also require a second factor verified within 15 minutes.
+
+Hosted mode restricts the legacy API to isolated project reads, pasted-script editing, and local import validation. The generation and render actions need credit and spending enforcement before they can be enabled. Legacy file media stays off in hosted mode until private storage is in place. The loopback development mode retains the existing creator pipeline.
+
+### Modified files
+
+- `src/modules/accounts/` contains Clerk configuration, Express session and role middleware, and the Mongoose account model.
+- `src/api.ts` mounts the hosted route gates. `src/modules/pipeline/session-owner.ts` binds hosted projects to authenticated Clerk IDs. `src/modules/ai-script/master-script-service.ts` persists ownership with the initial pasted script.
+- `dashboard/src/AuthShell.jsx`, `dashboard/src/main.jsx`, `dashboard/src/pipeline-api.js`, and `dashboard/src/style.css` add Clerk navigation, account controls, and bearer requests within the existing layout.
+- `.env.example`, the package manifests and locks, and `tests/accounts.test.ts` cover isolated configuration, dependencies, and regression checks.
+
+### Verification and cost
+
+- The full suite passed 64 tests with the saved-session fixture and local MongoDB enabled. The account tests used Clerk-compatible signed fixtures and the mounted Express routes to verify unauthorized rejection, cross-user isolation, owner MFA, suspended-user rejection, and forged-role rejection. MongoDB tests verified owner uniqueness, concurrent signup, persistence across reconnect, and no trial or plan entitlement at signup.
+- The TypeScript check and Vite production builds passed. The Clerk-enabled Vite build used the development public key and produced its output separately from the original local dashboard.
+- Chrome completed Google sign-in against the actual Clerk development instance. The browser retained the session after reload, opened the Clerk Account profile, and returned to signed-out controls after logout. The approved identity is registered in Clerk's development user list. It still needs an Express request with the development secret before the live MongoDB owner record is verified.
+- The approved SocialStudio development instance is provisioned with Google and Email enabled. Browser automatic approval review rejected disabling Email, so the development instance retained both methods. Production Clerk configuration and real owner MFA enrollment remain pending.
+- The database integration used a temporary loopback MongoDB process. No cloud database credentials, new paid resources, or production deployment changes were involved.
+
+Phase 1 is gated on the live development secret, Express owner verification, and owner MFA enrollment verification. The fixture result for a normal member is recorded above. The subsequent implementation phases remain pending this gate. See [owner setup](OWNER_SETUP.md) for the secure local configuration path.

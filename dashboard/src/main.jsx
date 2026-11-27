@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MotionPreview } from './MotionPreview.jsx';
 import { ManualVisualImport } from './ManualVisualImport.jsx';
+import { AuthShell } from './AuthShell.jsx';
 import { pipelineFetch } from './pipeline-api.js';
 import {
   Sparkles,
@@ -248,9 +249,19 @@ function getSceneVisualMeta(type) {
   }
 }
 
-function App() {
+function App({ canAccessStudio = true, onStudioRequired, accountControls, userId }) {
   // Sidebar Navigation: 'overview' or 'create'
   const [activeNav, setActiveNav] = useState('overview');
+  const activeStageKey = userId ? `socialstudio_active_stage:${userId}` : 'socialstudio_active_stage';
+  const activeSessionKey = userId ? `socialstudio_active_session:${userId}` : 'socialstudio_active_session';
+
+  function openSection(section) {
+    if (section !== 'overview' && !canAccessStudio) {
+      onStudioRequired?.();
+      return;
+    }
+    setActiveNav(section);
+  }
 
   // Create Reel Timeline Stepper: 1: Script, 2: Voiceover, 3: Visuals, 4: Render
   const [stage, setStage] = useState(1);
@@ -317,24 +328,25 @@ function App() {
 
   // Sync active stage and session to localStorage
   useEffect(() => {
-    localStorage.setItem('socialstudio_active_stage', String(stage));
-  }, [stage]);
+    if (canAccessStudio) localStorage.setItem(activeStageKey, String(stage));
+  }, [activeStageKey, canAccessStudio, stage]);
 
   useEffect(() => {
     if (session?.id) {
-      localStorage.setItem('socialstudio_active_session', session.id);
+      localStorage.setItem(activeSessionKey, session.id);
     }
-  }, [session?.id]);
+  }, [activeSessionKey, session?.id]);
 
   // Load existing pipeline sessions on mount & for Overview library
   async function loadSessions() {
+    if (!canAccessStudio) return;
     try {
       const res = await pipelineFetch(toApiUrl('/api/pipeline/sessions'));
       if (res.ok) {
         const list = await res.json();
         setSessionsList(list || []);
 
-        const savedId = localStorage.getItem('socialstudio_active_session');
+        const savedId = localStorage.getItem(activeSessionKey);
         const targetId = savedId && list.some((s) => s.id === savedId) ? savedId : null;
         if (targetId && !session) {
           const latestRes = await pipelineFetch(toApiUrl(`/api/pipeline/status/${targetId}`));
@@ -358,7 +370,7 @@ function App() {
               setRenderedMediaUrl(statusData.mediaUrl || rState?.mediaUrl);
             }
 
-            const savedStage = parseInt(localStorage.getItem('socialstudio_active_stage') || '1', 10);
+            const savedStage = parseInt(localStorage.getItem(activeStageKey) || '1', 10);
             if (fullSession.voiceoverNeedsRefresh) {
               setStage(2);
             } else if (savedStage >= 1 && savedStage <= 4) {
@@ -392,8 +404,8 @@ function App() {
           const data = await response.json().catch(() => ({}));
           throw new Error(data.error || `Server returned HTTP ${response.status}.`);
         }
-        localStorage.setItem('socialstudio_active_session', session.id);
-        localStorage.setItem('socialstudio_active_stage', String(stage));
+        localStorage.setItem(activeSessionKey, session.id);
+        localStorage.setItem(activeStageKey, String(stage));
         await loadSessions();
       }
       setDraftToast({ message: 'Draft saved! You can resume it anytime from the Drafts tab.' });
@@ -417,8 +429,8 @@ function App() {
           setStills([]);
           setRenderedMediaUrl('');
           setStage(1);
-          localStorage.removeItem('socialstudio_active_session');
-          localStorage.removeItem('socialstudio_active_stage');
+            localStorage.removeItem(activeSessionKey);
+            localStorage.removeItem(activeStageKey);
         }
         await loadSessions();
       }
@@ -455,7 +467,7 @@ function App() {
       setAudioResult(fullAudio);
       setStills(fullStills);
       setRenderedMediaUrl(mediaUrl);
-      localStorage.setItem('socialstudio_active_session', fullSession.id);
+      localStorage.setItem(activeSessionKey, fullSession.id);
 
       let s = 1;
       if (targetStage) {
@@ -470,7 +482,7 @@ function App() {
         s = 2;
       }
       setStage(s);
-      localStorage.setItem('socialstudio_active_stage', String(s));
+      localStorage.setItem(activeStageKey, String(s));
       setActiveNav('create');
     } catch (err) {
       console.error('Failed to load session into studio:', err);
@@ -495,13 +507,13 @@ function App() {
     setCustomScriptText('');
     setTopic('');
     setAngle('');
-    localStorage.removeItem('socialstudio_active_session');
-    localStorage.removeItem('socialstudio_active_stage');
+    localStorage.removeItem(activeSessionKey);
+    localStorage.removeItem(activeStageKey);
   }
 
   useEffect(() => {
     loadSessions();
-  }, [activeNav]);
+  }, [activeNav, canAccessStudio]);
 
   // Poll server pipeline job and render status
   useEffect(() => {
@@ -569,7 +581,7 @@ function App() {
 
       const curSession = data.session || { id: data.sessionId };
       setSession(curSession);
-      localStorage.setItem('socialstudio_active_session', data.sessionId);
+      localStorage.setItem(activeSessionKey, data.sessionId);
       setRendering(true);
       setRenderProgress(data.job?.progress || 10);
       setStage(4);
@@ -883,7 +895,7 @@ function App() {
             <button
               type="button"
               className={`sidebar-nav-item ${activeNav === 'overview' ? 'active' : ''}`}
-              onClick={() => setActiveNav('overview')}
+              onClick={() => openSection('overview')}
             >
               <div className="sidebar-nav-left">
                 <LayoutDashboard size={15} />
@@ -894,7 +906,7 @@ function App() {
             <button
               type="button"
               className={`sidebar-nav-item ${activeNav === 'create' ? 'active' : ''}`}
-              onClick={() => setActiveNav('create')}
+              onClick={() => openSection('create')}
             >
               <div className="sidebar-nav-left">
                 <PlusCircle size={15} />
@@ -905,7 +917,7 @@ function App() {
             <button
               type="button"
               className={`sidebar-nav-item ${activeNav === 'drafts' ? 'active' : ''}`}
-              onClick={() => setActiveNav('drafts')}
+              onClick={() => openSection('drafts')}
             >
               <div className="sidebar-nav-left">
                 <FileText size={15} />
@@ -919,7 +931,7 @@ function App() {
             <button
               type="button"
               className={`sidebar-nav-item ${activeNav === 'library' ? 'active' : ''}`}
-              onClick={() => setActiveNav('library')}
+              onClick={() => openSection('library')}
             >
               <div className="sidebar-nav-left">
                 <Film size={15} />
@@ -930,6 +942,7 @@ function App() {
               )}
             </button>
           </nav>
+          {accountControls && <div className="studio-account-controls">{accountControls}</div>}
         </div>
       </aside>
 
@@ -956,7 +969,7 @@ function App() {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => setActiveNav('create')}
+                onClick={() => openSection('create')}
                 style={{
                   height: 38,
                   padding: '0 18px',
@@ -1032,7 +1045,7 @@ function App() {
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => setActiveNav('create')}
+                  onClick={() => openSection('create')}
                   style={{ width: '100%', gap: 6 }}
                 >
                   <span>Open Studio</span>
@@ -1057,7 +1070,7 @@ function App() {
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveNav('drafts')}
+                  onClick={() => openSection('drafts')}
                   style={{ width: '100%', gap: 6 }}
                 >
                   <span>View Drafts ({draftsList.length})</span>
@@ -1082,7 +1095,7 @@ function App() {
                 <button
                   type="button"
                   className="btn btn-secondary btn-sm"
-                  onClick={() => setActiveNav('library')}
+                  onClick={() => openSection('library')}
                   style={{ width: '100%', gap: 6 }}
                 >
                   <span>Open Library ({libraryReels.length})</span>
@@ -1103,7 +1116,7 @@ function App() {
                       Quick access to your latest exported videos.
                     </p>
                   </div>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActiveNav('library')}>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => openSection('library')}>
                     <span>View All ({libraryReels.length})</span>
                     <ArrowRight size={12} />
                   </button>
@@ -2808,6 +2821,6 @@ class ErrorBoundary extends React.Component {
 const root = createRoot(document.getElementById('root'));
 root.render(
   <ErrorBoundary>
-    <App />
+    <AuthShell Studio={App} />
   </ErrorBoundary>
 );

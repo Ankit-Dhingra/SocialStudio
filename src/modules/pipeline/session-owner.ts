@@ -13,6 +13,8 @@ function ownerToken(req: Request) {
 }
 
 export function ownerFor(req: Request, res: Response) {
+  const clerkUserId = res.locals.studioAccount?.clerkUserId;
+  if (clerkUserId) return digest(`clerk:${clerkUserId}`);
   const existing = ownerToken(req);
   if (existing) return digest(existing);
   const issued = res.locals.ownerToken as string | undefined;
@@ -25,6 +27,8 @@ export function ownerFor(req: Request, res: Response) {
 }
 
 export function ownsSession(req: Request, session: ScriptSession) {
+  const clerkUserId = req.res?.locals.studioAccount?.clerkUserId;
+  if (clerkUserId) return session.ownerDigest === digest(`clerk:${clerkUserId}`);
   const token = ownerToken(req);
   return Boolean(token && session.ownerDigest === digest(token));
 }

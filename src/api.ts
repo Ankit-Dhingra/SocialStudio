@@ -47,22 +47,45 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { pool, queue, connection } from './core.js';
+import { clerkConfig } from './modules/accounts/auth-config.js';
+import { requireOwner, studioAuthentication } from './modules/accounts/auth-middleware.js';
+import { connectAccounts } from './modules/accounts/users.js';
 
+const authConfig = clerkConfig(process.env);
 export const app = express();
+app.disable('x-powered-by');
+app.use(cors({ origin: authConfig?.frontendOrigin ?? '*' }));
+
+if (authConfig) {
+  app.use('/api', ...studioAuthentication(authConfig));
+  app.get('/api/account', (_req, res) => {
+    const { _id, email, displayName, role, status, plan, trialEligibility } = res.locals.studioAccount;
+    res.json({ id: _id, email, displayName, role, status, plan, trialEligibility });
+  });
+  app.get('/api/admin/access', requireOwner(authConfig), (_req, res) => res.json({ allowed: true }));
+  app.use('/api', (req, res, next) => {
+    const route = req.path;
+    const readOnly = ['GET', 'HEAD'].includes(req.method) &&
+      /^\/pipeline\/(?:sessions|(?:script|status)\/session_[a-zA-Z0-9_-]{1,100}|manual-visual\/session_[a-zA-Z0-9_-]{1,100}\/context)\/?$/.test(route);
+    const localEditing = req.method === 'POST' &&
+      /^\/pipeline\/(?:script\/custom|manual-visual\/session_[a-zA-Z0-9_-]{1,100}\/validate)\/?$/.test(route);
+    if (readOnly || localEditing) return next();
+    res.status(403).json({ error: 'This operation is unavailable in the hosted Studio.' });
+  });
+}
+
 const jsonBody = express.json({ limit: '50kb' });
 app.use((req, res, next) => /^\/api\/pipeline\/manual-visual\//i.test(req.path) ? next() : jsonBody(req, res, next));
-app.use(cors({ origin: '*' })); // Allow dashboard, n8n, and local dev clients
 
 // Serve rendered videos and media assets
-for (const directory of ['runs', 'previews', 'generated-reel-visuals']) {
-  app.use(`/media/${directory}`, express.static(path.resolve('media', directory)));
+if (!authConfig) {
+  for (const directory of ['runs', 'previews', 'generated-reel-visuals']) {
+    app.use(`/media/${directory}`, express.static(path.resolve('media', directory)));
+  }
+  app.use('/audio', express.static(path.resolve('remotion/public/audio')));
+  app.use('/previews', express.static(path.resolve('remotion/public/previews')));
+  app.use('/output', express.static(path.resolve('output')));
 }
-// Serve Remotion audio assets
-app.use('/audio', express.static(path.resolve('remotion/public/audio')));
-// Serve Remotion visual stills and screenshots
-app.use('/previews', express.static(path.resolve('remotion/public/previews')));
-// Serve output reels and previews
-app.use('/output', express.static(path.resolve('output')));
 
 // Serve compiled Dashboard frontend
 const dashboardDist = path.resolve('dashboard/dist');
@@ -160,14 +183,17 @@ app.use('/api/pipeline', (req, res, next) => {
   if (id === undefined || id === null || id === '') return next();
   if (typeof id !== 'string' || !sessionIdPattern.test(id)) return res.status(400).json({ error: 'Invalid session ID.' });
   const session = masterScriptService.getSession(id);
-  if (session?.ownerDigest && !ownsSession(req, session)) return res.status(404).json({ error: 'Session not found.' });
+  if ((authConfig || session?.ownerDigest) && (!session || !ownsSession(req, session))) {
+    return res.status(404).json({ error: 'Session not found.' });
+  }
   next();
 });
 
 // 1. List pipeline sessions
 app.get('/api/pipeline/sessions', (req, res) => {
   try {
-    const list = masterScriptService.listSessions().filter(session => !session.ownerDigest || ownsSession(req, session)).map((s) => ({
+    const list = masterScriptService.listSessions().filter(session =>
+      (!authConfig && !session.ownerDigest) || ownsSession(req, session)).map((s) => ({
       id: s.id,
       jobId: s.jobId || s.job?.id,
       topic: s.topic,
@@ -229,11 +255,8 @@ app.post('/api/pipeline/script/custom', async (req, res) => {
     return res.status(400).json({ error: 'Please provide customScript (6-Key JSON or text).' });
   }
   try {
-    const session = await masterScriptService.createCustomSession(customScript, topic, sessionId);
-    if (!sessionId) {
-      session.ownerDigest = ownerFor(req, res);
-      masterScriptService.updateSession(session);
-    }
+    const ownerDigest = sessionId ? undefined : ownerFor(req, res);
+    const session = await masterScriptService.createCustomSession(customScript, topic, sessionId, undefined, ownerDigest);
     res.status(201).json(session);
   } catch (err: any) {
     console.error('[API /pipeline/script/custom Error]:', err);
@@ -1357,7 +1380,7 @@ app.post('/api/queue/reset', async (req, res) => {
 
 if (fs.existsSync(dashboardDist)) {
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/media') || req.path.startsWith('/audio')) {
+    if (/^\/(?:api|media|audio|previews|output)(?:\/|$)/i.test(req.path)) {
       return next();
     }
     res.sendFile(path.join(dashboardDist, 'index.html'));
@@ -1366,16 +1389,26 @@ if (fs.existsSync(dashboardDist)) {
 
 // Error middleware
 app.use((err: any, _req: any, res: any, _next: any) => {
+  if (authConfig) {
+    if (err.status === 413) return res.status(413).json({ error: 'Request body is too large.' });
+    if (err.status === 400) return res.status(400).json({ error: 'Invalid request body.' });
+    console.error('[API] Unhandled request error.');
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
   console.error('[API Error]:', err);
   res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
 const port = Number(process.env.PORT || process.env.API_PORT || 4000);
+if (authConfig && process.env.NODE_ENV !== 'test') {
+  await connectAccounts(authConfig.mongodbUri).catch(() => { throw new Error('SocialStudio account database connection failed.'); });
+}
 export const server =
   process.env.NODE_ENV === 'test'
     ? null
-    : app.listen(port, () => {
+    : app.listen(port, process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', () => {
         console.log(`🚀 SocialStudio API running at http://localhost:${port}`);
+        if (authConfig) return;
 
         // Auto-initialize DB schema if needed on startup
         try {

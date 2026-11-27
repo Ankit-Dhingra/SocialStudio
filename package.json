@@ -8,13 +8,14 @@
     "dev:dashboard": "npm --prefix dashboard run dev",
     "db:init": "tsx src/init-db.ts",
     "check": "tsc --noEmit",
-    "test": "tsx --test tests/scene-schema-registry.test.ts tests/reel-quality.test.ts tests/visual-directives.test.ts",
+    "test": "tsx --test tests/scene-schema-registry.test.ts tests/reel-quality.test.ts tests/visual-directives.test.ts tests/accounts.test.ts",
     "export:visual-source-pack": "tsx scripts/export-visual-source-pack.ts",
     "bundle:remotion": "tsx scripts/bundle-remotion.ts",
     "preview:design": "tsx scripts/render-design-showcase.ts",
     "start": "tsx src/api.ts"
   },
   "dependencies": {
+    "@clerk/express": "2.1.99",
     "@react-three/fiber": "8.18.0",
     "@remotion/bundler": "^4.0.0",
     "@remotion/lottie": "4.0.541",
@@ -30,6 +31,7 @@
     "get-mp3-duration": "^1.0.0",
     "ioredis": "^5.4.0",
     "js-tiktoken": "1.0.21",
+    "mongoose": "9.13.0",
     "msedge-tts": "^2.1.1",
     "pg": "^8.13.0",
     "react": "^18.3.1",
@@ -50,6 +52,6 @@
     "typescript": "^5.7.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   }
 }
