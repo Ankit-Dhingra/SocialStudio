@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 import {speechChunks} from './speech-text.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -66,7 +67,7 @@ export class SarvamTTSProvider implements TTSProvider {
     const languageCode = this.languageCode ?? (speaker.split('_')[1] === 'en' ? 'en-IN' : 'hi-IN');
     for (let attempt = 1; ; attempt++) {
       try {
-        const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+        const response = await providerFetch('sarvam', 'https://api.sarvam.ai/text-to-speech', {
           method: 'POST',
           headers: {
             'api-subscription-key': this.apiKey,

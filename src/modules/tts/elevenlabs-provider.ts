@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import getMp3Duration from 'get-mp3-duration';
@@ -27,7 +28,7 @@ export class ElevenLabsProvider implements TTSProvider {
     }
 
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/with-timestamps?output_format=mp3_44100_128`;
-    const res = await fetch(url, {
+    const res = await providerFetch('elevenlabs', url, {
       method: 'POST',
       headers: {
         'xi-api-key': this.apiKey,

@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 import {prepareSpeech} from './speech-text.js';
 import {masterVoice} from './master-voice.js';
 import fs from 'node:fs';
@@ -66,7 +67,7 @@ export async function alignAudioWithGroq(
       fd.append('prompt', promptText);
     }
 
-    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    const res = await providerFetch('groq', 'https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
       signal: AbortSignal.timeout(30000),
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -86,6 +87,7 @@ export async function alignAudioWithGroq(
 
 export interface SynthesizeNarrationOptions {
   align?: boolean;
+  requireWhisper?: boolean;
 }
 
 export async function synthesizeStoryboardNarration(
@@ -112,7 +114,7 @@ export async function synthesizeStoryboardNarration(
 
   for (const clip of clips) {
     masterVoice(clip);
-    if (options.align !== false && !clip.alignment && process.env.GROQ_API_KEY) {
+    if (options.align !== false && (options.requireWhisper || !clip.alignment) && process.env.GROQ_API_KEY) {
       const words = await alignAudioWithGroq(clip.filePath, clip.spokenText);
       if (words.length) clip.wordTimestamps = words;
     }

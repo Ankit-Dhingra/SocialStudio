@@ -72,15 +72,18 @@ test('generation admission atomically holds credits and budget and creates a dur
   }
 });
 
-test('checkout, duplicate webhooks and out-of-order refunds reconcile through MongoDB transactions', { skip: !mongoUrl }, async () => {
+test('checkout, duplicate webhooks, refunds and disputes reconcile through MongoDB transactions', { skip: !mongoUrl }, async () => {
   const uri = new URL(mongoUrl!);
   uri.pathname = `/studio_billing_test_${randomUUID().replaceAll('-', '')}`;
   let current = { ...captured, status: 'authorized', captured: false };
   let createdOrders = 0;
+  let canonical = { id: 'disp_fixture', payment_id: captured.id, currency: 'INR', amount: 1000,
+    amount_deducted: 0, status: 'open' };
   const client = {
     orders: { async create() { createdOrders++; return { id: captured.order_id, amount: 5000, currency: 'INR' }; },
       async fetchPayments() { return { items: [current] }; } },
     payments: { async fetch() { return current; } },
+    disputes: { async fetch() { return canonical; } },
   } as unknown as RazorpayTestConfig['client'];
   const config = { client, amount: 5000, credits: 20, keyId: 'rzp_test_fixture', keySecret: secret, webhookSecret: secret };
 
@@ -101,6 +104,8 @@ test('checkout, duplicate webhooks and out-of-order refunds reconcile through Mo
       payment: { entity: { id: captured.id } }, refund: { entity: { id: `rfnd_${id}`, payment_id: captured.id, amount: 2500, status: 'processed' } },
     } });
     const webhook = (body: string, signature = sign(body)) => post('/webhook', body, { 'X-Razorpay-Signature': signature });
+    const dispute = (status: string, timestamp: number) => JSON.stringify({ event: `payment.dispute.${status}`,
+      created_at: timestamp, payload: { dispute: { entity: { id: canonical.id, payment_id: captured.id } } } });
     try {
       const newOrder = JSON.stringify({ requestId: randomUUID() });
       assert.equal((await post('/billing/orders', newOrder, { 'X-Test-Identity': 'user_buyer' })).status, 201);
@@ -115,6 +120,16 @@ test('checkout, duplicate webhooks and out-of-order refunds reconcile through Mo
       assert.equal((await webhook(capture)).status, 503);
       current = captured;
       assert.deepEqual((await Promise.all([webhook(capture), webhook(capture), checkout()])).map(response => response.status), [204, 204, 200]);
+      assert.equal(await testBalance('user_buyer'), 20);
+
+      const opened = dispute('created', 123);
+      assert.deepEqual((await Promise.all([webhook(opened), webhook(opened)])).map(response => response.status), [204, 204]);
+      assert.equal(await testBalance('user_buyer'), 16);
+      canonical = { ...canonical, status: 'won' };
+      assert.equal((await webhook(dispute('won', 125))).status, 204);
+      assert.equal(await testBalance('user_buyer'), 20);
+      canonical = { ...canonical, status: 'open' };
+      assert.equal((await webhook(dispute('under_review', 124))).status, 204);
       assert.equal(await testBalance('user_buyer'), 20);
 
       current = captured;

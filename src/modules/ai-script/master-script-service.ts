@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -649,7 +650,8 @@ export class MasterScriptService {
     // 1. Try Gemini first if key available
     if (this.geminiKey) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.geminiKey}`;
+        const model = encodeURIComponent(this.model.replace(/^models\//, ''));
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
         const body = {
           contents: [
@@ -667,9 +669,9 @@ export class MasterScriptService {
           },
         };
 
-        const res = await fetch(url, {
+        const res = await providerFetch('gemini', url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.geminiKey },
           body: JSON.stringify(body),
         });
 
@@ -689,7 +691,7 @@ export class MasterScriptService {
     const groqKey = process.env.GROQ_API_KEY;
     if (groqKey) {
       try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const res = await providerFetch('groq', 'https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${groqKey}`,
@@ -722,6 +724,14 @@ export class MasterScriptService {
   }
 
   async startScriptSession(topic: string, angle?: string, existingSessionId?: string): Promise<ScriptSession> {
+    const existing = existingSessionId ? this.getSession(existingSessionId) : undefined;
+    const session = await this.buildGeneratedSession(topic, angle, existing, existingSessionId);
+    sessions.set(session.id, session);
+    saveSessionToDisk(session);
+    return session;
+  }
+
+  async buildGeneratedSession(topic: string, angle?: string, existingSession?: ScriptSession, existingSessionId?: string): Promise<ScriptSession> {
     const systemPrompt = getMasterPromptTemplate();
     const userPrompt = `TOPIC: ${topic.trim()}\nANGLE: ${angle ? angle.trim() : 'Focus on real-world production failure, edge cases and distributed architecture'}`;
 
@@ -732,13 +742,12 @@ export class MasterScriptService {
     const sevenKeyObj = tryParseSevenKeyJson(responseText);
     if (sevenKeyObj) {
       console.log(`[MasterScript] Successfully parsed 7-key JSON script: "${sevenKeyObj.title || topic}"`);
-      return this.createCustomSession(sevenKeyObj, topic, existingSessionId, angle);
+      return this.buildCustomSession(sevenKeyObj, topic, existingSession, angle, existingSessionId);
     }
 
     const sections = parseSectionsFromMarkdown(responseText);
     const storyboard = buildStoryboardFromParsed(topic, sections, responseText, angle);
-    const existingSession = existingSessionId ? this.getSession(existingSessionId) : undefined;
-    const id = existingSessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = existingSession?.id || existingSessionId || `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     const session: ScriptSession = {
       ...(existingSession || {}),
@@ -766,8 +775,6 @@ export class MasterScriptService {
       updatedAt: Date.now(),
     };
     this.clearMedia(session);
-    sessions.set(id, session);
-    saveSessionToDisk(session);
     return session;
   }
 

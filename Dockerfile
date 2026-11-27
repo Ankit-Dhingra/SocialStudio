@@ -43,11 +43,11 @@ RUN npm run bundle:remotion
 RUN mkdir -p /app/media/tmp /app/media/runs
 
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=160"
+ENV NODE_OPTIONS="--max-old-space-size=320"
 ENV TMPDIR=/app/media/tmp
 
 # Expose API port
 EXPOSE 4000
 
-# Start API + in-process BullMQ Worker
+# Start the hosted API. Run npm run worker:studio in the dedicated worker.
 CMD ["npm", "start"]

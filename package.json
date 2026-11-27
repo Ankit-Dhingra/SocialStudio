@@ -5,10 +5,11 @@
   "scripts": {
     "api": "tsx src/api.ts",
     "worker": "tsx src/worker.ts",
+    "worker:studio": "tsx src/studio-worker.ts",
     "dev:dashboard": "npm --prefix dashboard run dev",
     "db:init": "tsx src/init-db.ts",
     "check": "tsc --noEmit",
-    "test": "tsx --test tests/scene-schema-registry.test.ts tests/reel-quality.test.ts tests/visual-directives.test.ts tests/accounts.test.ts tests/demo.test.ts tests/private-media.test.ts tests/razorpay.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "export:visual-source-pack": "tsx scripts/export-visual-source-pack.ts",
     "demo:prepare": "tsx scripts/prepare-demo-media.ts",
     "media:cleanup": "tsx scripts/clean-temporary-media.ts",

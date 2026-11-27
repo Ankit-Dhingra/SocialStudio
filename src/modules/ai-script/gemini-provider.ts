@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 export interface LLMCallParams {
   prompt: string;
   systemInstruction?: string;
@@ -13,7 +14,7 @@ export class GeminiRequestError extends Error {
 export async function geminiRequest(url: string, apiKey: string, body: object, timeoutMs: number): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await providerFetch('gemini', url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),

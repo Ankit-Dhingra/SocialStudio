@@ -18,6 +18,7 @@ export interface RenderShortOptions {
   visualPlan?: VisualPlan;
   previewRange?: [startFrame: number, endFrame: number];
   previewScale?: number;
+  narrationRoot?: string;
   onProgress?: (progress: { percent: number; renderedFrames: number; totalFrames: number }) => void;
 }
 
@@ -78,22 +79,22 @@ function getRenderingConfig() {
   return { concurrency, ffmpegThreads, gl, browserExecutable };
 }
 
-function stageRunAudio(location: string, timeline: VideoTimeline) {
+function stageRunAudio(location: string, timeline: VideoTimeline, narrationRoot = path.resolve('remotion/public')) {
   // A development bundle snapshots public/. Later jobs introduce new run-specific assets.
   for (const {audioSrc} of timeline.segments) {
     if (!/^audio\/runs\/[\w./-]+$/.test(audioSrc) || audioSrc.split('/').includes('..')) continue;
     const target = path.join(location, 'public', audioSrc);
     fs.mkdirSync(path.dirname(target), {recursive:true});
-    fs.copyFileSync(path.resolve('remotion/public', audioSrc), target);
+    fs.copyFileSync(path.resolve(narrationRoot, audioSrc), target);
   }
 }
 
-export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string> {
+export async function getOrCreateBundle(timeline: VideoTimeline, narrationRoot?: string): Promise<string> {
   const prebuilt = path.resolve('dist-remotion');
   const signature = compositionSignature();
   const stamp = path.join(prebuilt, 'composition.sha256');
   if (fs.existsSync(path.join(prebuilt, 'index.html')) && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8') === signature) {
-    stageRunAudio(prebuilt, timeline);
+    stageRunAudio(prebuilt, timeline, narrationRoot);
     return prebuilt;
   }
 
@@ -118,8 +119,16 @@ export async function getOrCreateBundle(timeline: VideoTimeline): Promise<string
     })().catch(error => { cachedBundlePromise = null; throw error; });
   }
   const location = await cachedBundlePromise;
-  stageRunAudio(location, timeline);
+  stageRunAudio(location, timeline, narrationRoot);
   return location;
+}
+
+export async function removeHostedBundleNarration(run: string) {
+  if (!/^hosted-studio-[a-zA-Z0-9]+$/.test(run)) return;
+  const cached = await cachedBundlePromise?.catch(() => undefined);
+  for (const location of [path.resolve('dist-remotion'), cached]) {
+    if (location) await fs.promises.rm(path.join(location, 'public', 'audio', 'runs', run), { recursive: true, force: true });
+  }
 }
 
 export async function renderStudioShort(options: RenderShortOptions): Promise<RenderResult> {
@@ -136,7 +145,7 @@ export async function renderStudioShort(options: RenderShortOptions): Promise<Re
   }
 
   const startTime = Date.now();
-  const bundleLocation = await getOrCreateBundle(timeline);
+  const bundleLocation = await getOrCreateBundle(timeline, options.narrationRoot);
   const stagedPlan = previewRange ? visualPlan?.map((group, index) =>
     group.filter(shot => timeline.segments[index].startFrame + shot.from <= previewRange[1])
   ) : visualPlan;
@@ -297,6 +306,7 @@ export async function renderStillPreviews(
   urlPrefix = '/previews',
   visualPlan?: VisualPlan,
   sceneIndices?: ReadonlySet<number>,
+  narrationRoot?: string,
 ): Promise<StillPreviewResult[]> {
   validateRenderPlan(storyboard, timeline, visualPlan);
   if (!fs.existsSync(outputDir)) {
@@ -348,7 +358,7 @@ export async function renderStillPreviews(
     }];
   });
 
-  const bundleLocation = await getOrCreateBundle(timeline);
+  const bundleLocation = await getOrCreateBundle(timeline, narrationRoot);
   await stageReelVisuals(bundleLocation, visualPlan);
   const { gl, browserExecutable } = getRenderingConfig();
   const chromiumOptions = { gl, enableMultiProcessOnLinux: true, disableWebSecurity: true };

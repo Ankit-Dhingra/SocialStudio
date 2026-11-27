@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { findFfmpeg } from '../tts/sarvam-provider.js';
@@ -34,7 +35,7 @@ export async function generateCloudflareImage(prompt: string, referencePath?: st
   const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${cloudflareImageModel}`;
   let response: Response;
   try {
-    response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(90_000) });
+    response = await providerFetch('cloudflare', url, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(90_000) });
   } catch (error) {
     const reason = error instanceof Error && error.name === 'TimeoutError' ? 'timed out' : 'could not be reached';
     throw new Error(`Cloudflare Workers AI ${reason}.`);

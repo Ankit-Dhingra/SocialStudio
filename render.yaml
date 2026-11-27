@@ -11,6 +11,10 @@ services:
         value: 4000
       - key: NODE_ENV
         value: production
+      - key: STUDIO_GENERATION_ENABLED
+        value: "false"
+      - key: STUDIO_TRIALS_ENABLED
+        value: "false"
       - key: CLERK_PUBLISHABLE_KEY
         sync: false
       - key: CLERK_SECRET_KEY

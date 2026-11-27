@@ -86,7 +86,10 @@ export interface SavedVisualImport {
   assets: AssetManifestEntry[];
 }
 
-export async function visualJobContext(session: ScriptSession) {
+export type VerifyNarration = (source: string) => Promise<void>;
+const verifyLocalNarration: VerifyNarration = source => access(path.resolve('remotion/public', source));
+
+export async function visualJobContext(session: ScriptSession, verifyNarration = verifyLocalNarration) {
   const timeline = session.timeline as VideoTimeline | undefined;
   const clips = session.audioResult?.clips;
   if (!session.finalized) {
@@ -122,7 +125,7 @@ export async function visualJobContext(session: ScriptSession) {
       throw new DirectiveError([{ path: `$.scenes[${index}].audio`, message: `Scene ${index + 1} has an invalid saved audio reference.`,
         resolution: 'Restore the matching saved voiceover for that scene, then reopen Manual mode.' }], 409);
     }
-    try { await access(path.resolve('remotion/public', segment.audioSrc)); }
+    try { await verifyNarration(segment.audioSrc); }
     catch { throw new DirectiveError([{ path: `$.scenes[${index}].audio`, message: `Scene ${index + 1} has no saved audio file.`,
       resolution: 'Restore the original saved audio file for that scene, then reopen Manual mode.' }], 409); }
   }));
@@ -192,8 +195,8 @@ function parseDirective(raw: string, revision: string) {
 }
 
 export async function prepareVisualImport(session: ScriptSession, raw: string, dryRun = true,
-  validationRange?: { from: number; through: number }) {
-  const job = await visualJobContext(session);
+  validationRange?: { from: number; through: number }, verifyNarration?: VerifyNarration) {
+  const job = await visualJobContext(session, verifyNarration);
   const parsed = parseDirective(raw, job.inputRevision);
   const timeline = session.timeline as VideoTimeline;
   const { normalized } = parsed;
@@ -300,12 +303,12 @@ export async function prepareVisualImport(session: ScriptSession, raw: string, d
   return { ...parsed, job, focalRepairs, connectorRepairs, layoutWarnings, visuals };
 }
 
-export async function visualPromptContext(session: ScriptSession, example: unknown) {
+export async function visualPromptContext(session: ScriptSession, example: unknown, verifyNarration?: VerifyNarration) {
   const reference = loadVisualDirectorReference().catch(() => {
     throw new DirectiveError([{ path: '$.artDirection', message: 'The Visual Director reference files could not be read.',
       resolution: 'Restore the supplied files in visual-director/ on the backend, then use Refresh Context in Advanced Settings.' }], 503);
   });
-  const [job, catalog, artDirection] = await Promise.all([visualJobContext(session), loadApprovedVisualAssets(), reference]);
+  const [job, catalog, artDirection] = await Promise.all([visualJobContext(session, verifyNarration), loadApprovedVisualAssets(), reference]);
   const specification = { version: visualContractVersion, schemaHash: visualSchemaHash, contractHash: visualContractHash, schema: directiveJsonSchema,
     capabilities: rendererCapabilities, rules: directiveRules, assets: catalog.capabilities
       .filter(({ id }) => id !== 'brand-behind-the-stack').map(({ id, role, description }) => ({ id, role, description })),

@@ -2,15 +2,18 @@ import { createHash } from 'node:crypto';
 import { Router, json, raw, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { attachTestOrder, findTestOrder, hasTestEvent, reconcileTestPayment, reserveTestOrder, testBalance } from './ledger.js';
-import { orderId, paymentId, validSignature, type RazorpayTestConfig } from './razorpay.js';
+import { disputeId, disputeShape, orderId, paymentId, validSignature, type RazorpayTestConfig } from './razorpay.js';
 
 const requestOrder = z.object({ requestId: z.string().uuid() }).strict();
 const checkout = z.object({ orderId, paymentId, signature: z.string().length(64) }).strict();
-const paymentEvent = z.object({ event: z.string(), payload: z.object({
+const paymentEvent = z.object({ event: z.string(), created_at: z.number().int().positive().optional(), payload: z.object({
   payment: z.object({ entity: z.object({ id: paymentId }) }).optional(),
   refund: z.object({ entity: z.object({ id: z.string().regex(/^rfnd_[a-zA-Z0-9]{3,64}$/), payment_id: paymentId,
     amount: z.number().int().positive().max(10_000_000), status: z.string() }) }).optional(),
+  dispute: z.object({ entity: z.object({ id: disputeId, payment_id: paymentId }) }).optional(),
 }) });
+const disputeEvents = new Set(['payment.dispute.created', 'payment.dispute.won', 'payment.dispute.lost',
+  'payment.dispute.closed', 'payment.dispute.under_review', 'payment.dispute.action_required']);
 
 function handle(action: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => { action(req, res).catch(next); };
@@ -33,7 +36,19 @@ export function razorpayWebhook(config: RazorpayTestConfig) {
     catch { return res.status(400).json({ error: 'Invalid webhook.' }); }
     const parsed = paymentEvent.safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid webhook.' });
-    const { event, payload } = parsed.data;
+    const { event, payload, created_at: observedAt } = parsed.data;
+    if (disputeEvents.has(event)) {
+      const notice = payload.dispute?.entity;
+      if (!notice || !observedAt) return res.status(400).json({ error: 'Missing dispute identifier or timestamp.' });
+      const receipt = createHash('sha256').update(req.body).digest('hex');
+      if (await hasTestEvent(receipt)) return res.sendStatus(204);
+      const payment = await fetchPayment(config, notice.payment_id);
+      if (!orderId.safeParse(payment.order_id).success || !await findTestOrder(payment.order_id!)) return res.sendStatus(204);
+      const canonical = disputeShape.parse(await config.client.disputes.fetch(notice.id));
+      if (canonical.id !== notice.id || canonical.payment_id !== notice.payment_id) throw new Error('Unexpected Razorpay dispute.');
+      const result = await reconcileTestPayment(payment.order_id!, payment, { id: receipt, dispute: { canonical, observedAt } });
+      return res.sendStatus(result.status === 'pending' ? 503 : 204);
+    }
     if (event !== 'payment.captured' && event !== 'refund.processed') return res.sendStatus(204);
     const refund = payload.refund?.entity;
     const id = event === 'payment.captured' ? payload.payment?.entity.id : refund?.payment_id;

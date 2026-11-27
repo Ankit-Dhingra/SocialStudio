@@ -1,4 +1,5 @@
 import { Router, json, text, type Request, type Response, type NextFunction } from 'express';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { masterScriptService, type ScriptSession } from '../ai-script/master-script-service.js';
 import { sessionIdPattern } from '../pipeline/session-owner.js';
@@ -6,6 +7,11 @@ import { DirectiveError, prepareVisualImport, visualArtifactRevision, visualDire
 import { verifiedDirectiveExample, visualSourcePack } from '../render/visual-source-pack.js';
 import { archiveProject, createProject, getProject, listProjects, replaceProject } from './repository.js';
 import type { PrivateMedia } from '../storage/private-media.js';
+import { admitGeneration } from '../jobs/admission.js';
+import { quoteBound, type ExecutionConfig } from '../jobs/execution-config.js';
+import { narrationBindings } from '../jobs/project-media.js';
+import { getOwnedJob, studioJobId } from '../jobs/durable-jobs.js';
+import { generationPaused } from '../jobs/generation-control.js';
 
 const pasteInput = z.object({ customScript: z.union([z.string().min(1), z.record(z.string(), z.unknown())]),
   topic: z.string().max(300).optional(), sessionId: z.string().regex(sessionIdPattern).optional() }).strict();
@@ -33,9 +39,76 @@ function handle(action: (req: Request, res: Response) => Promise<unknown>) {
   };
 }
 
-export function projectRouter(storage?: PrivateMedia) {
+export function projectRouter(storage?: PrivateMedia, generation?: ExecutionConfig) {
   const router = Router();
   const owner = (res: Response): string => res.locals.studioAccount.clerkUserId;
+  const verifyNarration = (item: NonNullable<Awaited<ReturnType<typeof getProject>>>) => narrationBindings(item.media, storage);
+
+  const executionInput = z.discriminatedUnion('operation', [
+    z.object({ operation: z.literal('script'), topic: z.string().trim().min(1).max(300), angle: z.string().trim().max(300).optional() }).strict(),
+    z.object({ operation: z.literal('visuals'), projectId: z.string().regex(sessionIdPattern), revision: z.number().int().nonnegative(),
+      feedback: z.string().trim().min(1).max(500).optional(), sceneIndex: z.number().int().nonnegative().optional() }).strict(),
+    z.object({ operation: z.enum(['audio', 'stills', 'render']), projectId: z.string().regex(sessionIdPattern),
+      revision: z.number().int().nonnegative(), visualRevision: z.string().max(128).optional() }).strict(),
+  ]);
+
+  router.post('/jobs', json({ limit: '4kb' }), handle(async (req, res) => {
+    const parsed = executionInput.safeParse(req.body);
+    const requestId = req.get('Idempotency-Key');
+    if (!parsed.success || !requestId || !/^[\w-]{16,100}$/.test(requestId)) {
+      return res.status(400).json({ error: 'Provide a valid operation, project revision and idempotency key.' });
+    }
+    const input = parsed.data;
+    const { operation } = input;
+    const quote = generation?.operations[operation];
+    if (!storage || !generation || !quote) return res.status(503).json({ error: 'This generation operation is disabled.' });
+    const ownerId = owner(res);
+    const projectId = input.operation === 'script'
+      ? `session_${createHash('sha256').update(JSON.stringify([ownerId, requestId])).digest('hex')}`
+      : input.projectId;
+    const revision = input.operation === 'script' ? 0 : input.revision;
+    const id = studioJobId(ownerId, projectId, operation, revision, requestId);
+    if (await getOwnedJob(ownerId, id)) return res.status(202).json({ id, projectId });
+    if (await generationPaused()) return res.status(503).json({ error: 'Generation is paused.' });
+    const project = await getProject(ownerId, projectId);
+    let draft: ScriptSession | undefined;
+    if (!project && input.operation === 'script') {
+      draft = await masterScriptService.buildCustomSession(input.topic, input.topic, undefined, input.angle, projectId);
+      draft.topic = input.topic;
+      draft.angle = input.angle;
+      draft.finalized = false;
+    }
+    if (!project && !draft) return res.status(404).json({ error: 'Session not found.' });
+    if (project && project.revision !== revision) return res.status(409).json({ error: 'The project changed. Reload it before generating.' });
+    if ((operation === 'audio' && !project?.session.finalized) ||
+        (operation === 'visuals' && (!project?.session.timeline || project.session.voiceoverNeedsRefresh))) {
+      return res.status(409).json({ error: 'Complete the preceding stage before generating.' });
+    }
+    if (input.operation === 'visuals' && input.sceneIndex !== undefined && input.sceneIndex >= (project?.scenesCount ?? 0)) {
+      return res.status(400).json({ error: 'The requested scene does not exist.' });
+    }
+    if (input.operation === 'stills' || input.operation === 'render') {
+      const visuals = project?.session.visualAssets;
+      if (!visuals?.shots || visuals.fingerprint !== input.visualRevision) {
+        return res.status(409).json({ error: 'Review the current visual revision before rendering.' });
+      }
+    }
+    try {
+      await admitGeneration({ ownerId, projectId, operation, revision, requestId, credits: quote.credits,
+        provider: 'compute', boundMicros: quoteBound(quote), quote, draft,
+        input: input.operation === 'visuals' ? { feedback: input.feedback, sceneIndex: input.sceneIndex } : undefined }, generation.caps);
+    } catch (error) {
+      const message = (error as Error).message;
+      if (/^Insufficient generation credits/.test(message)) return res.status(402).json({ error: message });
+      if (/^Generation spending limit/.test(message)) return res.status(429).json({ error: message });
+      if ((error as { code?: number }).code === 11000 || /^The authorized project/.test(message)) {
+        if (await getOwnedJob(ownerId, id)) return res.status(202).json({ id, projectId });
+        return res.status(409).json({ error: 'Another generation is pending or the project revision changed.' });
+      }
+      throw error;
+    }
+    return res.status(202).json({ id, projectId });
+  }));
 
   router.get('/sessions', handle(async (_req, res) => {
     const items = await listProjects(owner(res));
@@ -54,8 +127,9 @@ export function projectRouter(storage?: PrivateMedia) {
     const item = await getProject(owner(res), req.params.sessionId);
     if (!item) return res.status(404).json({ error: 'Session not found.' });
     const session = await present(item.session, item.media, storage);
-    if (req.path.toLowerCase().startsWith('/script/')) return res.json(session);
-    return res.json({ ok: true, sessionId: session.id, session, job: session.job ?? { status: 'idle', stage: 'scripting', progress: 0, message: '' },
+    if (req.path.toLowerCase().startsWith('/script/')) return res.json({ ...session, revision: item.revision });
+    return res.json({ ok: true, sessionId: session.id, session: { ...session, revision: item.revision },
+      job: session.job ?? { status: 'idle', stage: 'scripting', progress: 0, message: '' },
       renderState: session.renderState ?? { status: 'idle', progress: 0 }, mediaUrl: session.renderState?.mediaUrl ?? null });
   }));
 
@@ -101,21 +175,34 @@ export function projectRouter(storage?: PrivateMedia) {
   router.get('/manual-visual/:sessionId/context', handle(async (req, res) => {
     const item = await getProject(owner(res), req.params.sessionId);
     if (!item) return res.status(404).json({ error: 'Session not found.' });
-    return res.json(await visualPromptContext(item.session, await verifiedDirectiveExample()));
+    return res.json(await visualPromptContext(item.session, await verifiedDirectiveExample(), verifyNarration(item)));
   }));
 
-  router.post('/manual-visual/:sessionId/validate', text({ type: ['text/plain', 'application/json'], limit: visualDirectiveMaxBytes }),
+  router.post(['/manual-visual/:sessionId/validate', '/manual-visual/:sessionId/generate'],
+    text({ type: ['text/plain', 'application/json'], limit: visualDirectiveMaxBytes }),
     handle(async (req, res) => {
       const ownerId = owner(res);
       const item = await getProject(ownerId, req.params.sessionId);
       if (!item) return res.status(404).json({ error: 'Session not found.' });
       if (typeof req.body !== 'string') return res.status(400).json({ error: 'Paste a JSON document.' });
       const revision = visualArtifactRevision(item.session);
-      const { strippedFence, focalRepairs, connectorRepairs, layoutWarnings } = await prepareVisualImport(item.session, req.body, true);
-      if ((await getProject(ownerId, item.projectId))?.revision !== item.revision) {
-        return res.status(409).json({ error: 'The project changed. Copy a fresh visual prompt.' });
+      const generate = req.path.toLowerCase().endsWith('/generate');
+      const { visuals, strippedFence, focalRepairs, connectorRepairs, layoutWarnings } =
+        await prepareVisualImport(item.session, req.body, !generate, undefined, verifyNarration(item));
+      if (visuals) {
+        const session = item.session;
+        session.visualAssets = visuals;
+        session.updatedAt = Date.now();
+        delete session.stillPreviews;
+        delete session.motionPreview;
+        session.renderState = { status: 'idle', progress: 0 };
+        if (await replaceProject(ownerId, session, item.revision)) {
+          return res.json({ ok: true, strippedFence, revision, focalRepairs, connectorRepairs, layoutWarnings, visuals, stills: [] });
+        }
+      } else if ((await getProject(ownerId, item.projectId))?.revision === item.revision) {
+        return res.json({ ok: true, strippedFence, revision, focalRepairs, connectorRepairs, layoutWarnings });
       }
-      return res.json({ ok: true, strippedFence, revision, focalRepairs, connectorRepairs, layoutWarnings });
+      return res.status(409).json({ error: 'The project changed. Copy a fresh visual prompt.' });
     }));
   return router;
 }

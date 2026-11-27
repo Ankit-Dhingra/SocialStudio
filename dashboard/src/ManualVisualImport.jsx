@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ChevronDown, Copy, Download, LoaderCircle, TriangleAlert } from 'lucide-react';
-import { pipelineFetch } from './pipeline-api.js';
+import { clerkEnabled, pipelineFetch } from './pipeline-api.js';
 
 const maximumBytes = 256 * 1024;
 const sourceFiles = ['MASTER_VISUAL_PROMPT.md', 'VISUAL_DESIGN_SYSTEM.md', 'MOTION_AND_TEACHING.md', 'GOLDEN_REFERENCE.svg',
@@ -126,7 +126,7 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
     setIssues([]);
     setLayoutWarnings([]);
     setError('');
-    setStatus(generate ? 'Validating JSON and generating stills…' : 'Validating JSON and geometry…');
+    setStatus(generate && !clerkEnabled ? 'Validating JSON and generating stills…' : 'Validating JSON and geometry…');
     try {
       const response = await pipelineFetch(toApiUrl(`${endpoint}/${action}`), { method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: text });
@@ -137,11 +137,12 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
         if (details.some(issue => ['$.inputRevision', '$.schemaHash', '$.version'].includes(issue.path))) refresh();
         throw new Error(result.error || `Could not prepare the visuals (HTTP ${response.status}).`);
       }
-      if (generate) onGenerated(result);
+      if (generate) await onGenerated(result);
       setLayoutWarnings(result.layoutWarnings ?? []);
       const focalNotice = result.focalRepairs?.length ? ' Invalid focal references were removed. Visible layers were preserved.' : '';
       const connectorNotice = result.connectorRepairs?.length ? ' Connector attachments or routes were corrected.' : '';
-      setStatus(`${generate ? 'Visuals ready to review.' : 'JSON and geometry validated.'}${focalNotice}${connectorNotice}${result.strippedFence ? ' The surrounding JSON fence was removed.' : ''}`);
+      const outcome = generate ? (clerkEnabled ? 'Visual plan saved.' : 'Visuals ready to review.') : 'JSON and geometry validated.';
+      setStatus(`${outcome}${focalNotice}${connectorNotice}${result.strippedFence ? ' The surrounding JSON fence was removed.' : ''}`);
     } catch (err) { setStatus(''); setError(err.message); }
     finally { setOperation(''); if (generate) onBusyChange(false); }
   }
@@ -170,7 +171,7 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
           aria-invalid={issues.length > 0} placeholder="Paste the JSON response here" onChange={event => updateText(event.target.value)} />
         <div className="manual-visual-actions">
           <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
-            {operation === 'generate' ? <><LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> Generating Visuals…</> : 'Generate Visuals'}
+            {operation === 'generate' ? <><LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> {clerkEnabled ? 'Saving Visual Plan…' : 'Generating Visuals…'}</> : clerkEnabled ? 'Save Visual Plan' : 'Generate Visuals'}
           </button>
           {issues.length > 0 && <button className="btn btn-secondary" type="button" disabled={!context || working}
             onClick={() => copyPrompt(true)}>Copy Repair Prompt</button>}

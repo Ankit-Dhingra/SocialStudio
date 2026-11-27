@@ -3,7 +3,8 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import type { Readable } from 'node:stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Router } from 'express';
 
@@ -14,6 +15,8 @@ const maxAssetBytes = 100 * 1024 * 1024;
 export interface PrivateMedia {
   put(key: string, source: string, contentType: string): Promise<void>;
   url(key: string): Promise<string>;
+  verify?(key: string): Promise<void>;
+  get?(key: string, target: string): Promise<void>;
   router?: ReturnType<typeof Router>;
 }
 
@@ -47,6 +50,16 @@ export function localPrivateMedia(root: string, signingSecret: string, clock = D
 
   return {
     router,
+    async verify(key) {
+      assertKey(key);
+      await checkSource(path.join(root, key));
+    },
+    async get(key, target) {
+      assertKey(key);
+      const source = path.join(root, key);
+      await checkSource(source);
+      await pipeline(createReadStream(source), createWriteStream(target, { flags: 'wx', mode: 0o600 }));
+    },
     async put(key, source) {
       assertKey(key);
       await checkSource(source);
@@ -87,6 +100,20 @@ export function privateMediaFromEnv(env: NodeJS.ProcessEnv = process.env): Priva
     credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY }, requestChecksumCalculation: 'WHEN_REQUIRED',
   });
   return {
+    async verify(key) {
+      assertKey(key);
+      const metadata = await client.send(new HeadObjectCommand({ Bucket: R2_PRIVATE_BUCKET, Key: key }));
+      if (!metadata.ContentLength || metadata.ContentLength > maxAssetBytes) throw new Error('Invalid stored media size.');
+    },
+    async get(key, target) {
+      assertKey(key);
+      const media = await client.send(new GetObjectCommand({ Bucket: R2_PRIVATE_BUCKET, Key: key }));
+      if (!media.ContentLength || media.ContentLength > maxAssetBytes || !media.Body) {
+        (media.Body as Readable | undefined)?.destroy();
+        throw new Error('Invalid stored media size.');
+      }
+      await pipeline(media.Body as Readable, createWriteStream(target, { flags: 'wx', mode: 0o600 }));
+    },
     async put(key, source, contentType) {
       assertKey(key);
       const size = await checkSource(source);

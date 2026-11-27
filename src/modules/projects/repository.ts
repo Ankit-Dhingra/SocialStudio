@@ -35,18 +35,21 @@ export function listProjects(ownerId: string) {
 
 function storedSession(session: ScriptSession) {
   const { ownerDigest: _legacyOwner, ...data } = session;
-  if (Buffer.byteLength(JSON.stringify(data)) > 8 * 1024 * 1024) throw new Error('Project metadata exceeds the storage limit.');
-  return data;
+  const serialized = JSON.stringify(data);
+  if (Buffer.byteLength(serialized) > 8 * 1024 * 1024) throw new Error('Project metadata exceeds the storage limit.');
+  // Preserve optional properties as absent when MongoDB stores nested render inputs.
+  return JSON.parse(serialized) as Omit<ScriptSession, 'ownerDigest'>;
 }
 
-export async function createProject(ownerId: string, session: ScriptSession) {
-  await projects.create({ ownerId, projectId: session.id, ...projectFields(storedSession(session)) });
+export async function createProject(ownerId: string, session: ScriptSession, transaction?: ClientSession) {
+  await projects.create([{ ownerId, projectId: session.id, ...projectFields(storedSession(session)) }], { session: transaction });
 }
 
-export async function replaceProject(ownerId: string, session: ScriptSession, revision: number) {
+export async function replaceProject(ownerId: string, session: ScriptSession, revision: number,
+  transaction?: ClientSession, media?: { source: string; key: string }[]) {
   const updated = await projects.updateOne({ ownerId, projectId: session.id, revision, deletedAt: { $exists: false } }, {
-    $set: projectFields(storedSession(session)), $inc: { revision: 1 },
-  });
+    $set: { ...projectFields(storedSession(session)), ...(media && { media }) }, $inc: { revision: 1 },
+  }, { session: transaction });
   return updated.modifiedCount === 1;
 }
 

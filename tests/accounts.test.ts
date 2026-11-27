@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
 import { once } from 'node:events';
 import test from 'node:test';
 import express from 'express';
@@ -13,10 +12,7 @@ import { getProject, importProject, initProjects, replaceProject } from '../src/
 import { claimJob, getOwnedJob, initJobs, reconcileJobs, recordJob, updateJobLease } from '../src/modules/jobs/durable-jobs.js';
 import { Queue } from 'bullmq';
 
-const email = 'owner@example.test';
-const ownerId = 'user_verified_owner';
-const frontendOrigin = 'https://studio.example.test';
-const clerkHostname = 'app.clerk.accounts.dev';
+import { fixtureOwnerEmail as email, fixtureOwnerId as ownerId, fixtureFrontendOrigin as frontendOrigin, signedSessions } from './fixtures/clerk-session.js';
 const mongoTestUrl = process.env.STUDIO_ACCOUNTS_TEST_MONGODB_URI;
 
 test('Clerk configuration fails closed for hosted Studio', () => {
@@ -47,24 +43,6 @@ test('owner eligibility requires a verified Clerk email, linked verified Google 
   assert.throws(() => accountProfile({ ...profile, primaryEmailAddress: null },
     { ownerEmail: email, ownerClerkUserId: undefined }), VerifiedEmailRequired);
 });
-
-function signedSessions() {
-  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-  const config: ClerkConfig = {
-    frontendOrigin, publishableKey: `pk_test_${Buffer.from(`${clerkHostname}$`).toString('base64')}`,
-    secretKey: 'sk_test_mock', jwtKey: publicKey.export({ format: 'pem', type: 'spki' }),
-    mongodbUri: 'unused', ownerEmail: email, ownerClerkUserId: ownerId, requireOwnerMfa: true,
-  };
-  const token = (sub: string, secondFactorAge = -1, azp = frontendOrigin) => {
-    const now = Math.floor(Date.now() / 1000);
-    const header = { alg: 'RS256', typ: 'JWT', kid: 'studio-test', cat: 'cl_B7d4PD111AAA' };
-    const claims = { sub, azp, sid: `sess_${sub}`, sts: 'active', fva: [0, secondFactorAge],
-      iss: `https://${clerkHostname}`, iat: now, nbf: now - 5, exp: now + 60, v: 2 };
-    const message = [header, claims].map(part => Buffer.from(JSON.stringify(part)).toString('base64url')).join('.');
-    return `${message}.${sign('RSA-SHA256', Buffer.from(message), privateKey).toString('base64url')}`;
-  };
-  return { config, token };
-}
 
 test('Clerk session verification gates owner actions and isolates session ownership', async () => {
   const { config, token } = signedSessions();

@@ -4,6 +4,12 @@ import { z } from 'zod';
 
 export const paymentId = z.string().regex(/^pay_[a-zA-Z0-9]{3,64}$/);
 export const orderId = z.string().regex(/^order_[a-zA-Z0-9]{3,64}$/);
+export const disputeId = z.string().regex(/^disp_[a-zA-Z0-9]{3,64}$/);
+export const disputeShape = z.object({ id: disputeId, payment_id: paymentId, currency: z.literal('INR'),
+  amount: z.number().int().positive().max(10_000_000), amount_deducted: z.number().int().nonnegative(),
+  status: z.enum(['open', 'under_review', 'action_required', 'won', 'lost', 'closed', 'accepted']) })
+  .refine(dispute => dispute.amount_deducted <= dispute.amount);
+export type VerifiedDispute = z.infer<typeof disputeShape>;
 const paymentShape = z.object({ id: paymentId, order_id: orderId, currency: z.literal('INR'),
   amount: z.number().int().positive().max(10_000_000), amount_refunded: z.number().int().min(0),
   status: z.enum(['created', 'authorized', 'captured', 'refunded', 'failed']), captured: z.boolean() });

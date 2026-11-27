@@ -6,7 +6,7 @@ import type { ScriptSession } from '../ai-script/master-script-service.js';
 import { GroqProvider, GroqRateLimitError, GroqRequestError } from '../ai-script/groq-provider.js';
 import { describeResponseSchema } from './describe-response-schema.js';
 import { directiveRange, directiveSequenceSchema, type DirectiveSequence } from './visual-directive-compiler.js';
-import { DirectiveError, prepareVisualImport, readVisualDirectiveJson, visualPromptContext, type DirectiveIssue } from './visual-directives.js';
+import { DirectiveError, prepareVisualImport, readVisualDirectiveJson, visualPromptContext, type DirectiveIssue, type VerifyNarration } from './visual-directives.js';
 import { loadVisualDirectorReference } from './visual-director-reference.js';
 import { verifiedDirectiveExample } from './visual-source-pack.js';
 
@@ -89,9 +89,10 @@ function buildInput(context: Context, svg: string, range: Range, previous: Direc
 export async function prepareAutomaticVisuals(session: ScriptSession, options: {
   scope?: number[]; feedback?: string; recompile?: boolean; progress?: (progress: AutomaticProgress) => void;
   current?: () => boolean; saveDraft?: (draft: AutomaticVisualDraft) => void;
+  verifyNarration?: VerifyNarration;
 } = {}) {
   const started = Date.now();
-  const context = await visualPromptContext(session, await verifiedDirectiveExample());
+  const context = await visualPromptContext(session, await verifiedDirectiveExample(), options.verifyNarration);
   const reference = await loadVisualDirectorReference();
   const svg = reference.files.get('GOLDEN_REFERENCE.svg')!.toString('utf8');
   const { job, specification } = context;
@@ -199,7 +200,7 @@ export async function prepareAutomaticVisuals(session: ScriptSession, options: {
           continue;
         }
         try {
-          await prepareVisualImport(session, envelope([sequence]), true, span);
+          await prepareVisualImport(session, envelope([sequence]), true, span, options.verifyNarration);
           draft.sequences.push(sequence);
         } catch (error) {
           if (!(error instanceof DirectiveError)) throw error;
@@ -293,7 +294,7 @@ export async function prepareAutomaticVisuals(session: ScriptSession, options: {
     throw new AutomaticVisualError(failures.slice(0, 24), draft.report);
   }
   update('Compiling accepted directives and resolving visual assets…');
-  const imported = await prepareVisualImport(session, envelope(ordered()), false);
+  const imported = await prepareVisualImport(session, envelope(ordered()), false, undefined, options.verifyNarration);
   const { manualImport, ...visuals } = imported.visuals!;
   drafts.delete(session.id);
   return { visuals: { ...visuals, source: 'automatic' as const, automaticImport: manualImport },

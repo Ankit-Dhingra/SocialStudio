@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MotionPreview } from './MotionPreview.jsx';
 import { ManualVisualImport } from './ManualVisualImport.jsx';
 import { AuthShell } from './AuthShell.jsx';
-import { pipelineFetch } from './pipeline-api.js';
+import { clerkEnabled, hostedProject, pipelineFetch, runHostedJob } from './pipeline-api.js';
 import {
   Sparkles,
   FileText,
@@ -518,7 +518,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   // Poll server pipeline job and render status
   useEffect(() => {
     let interval = null;
-    if (rendering && session?.id) {
+    if (!clerkEnabled && rendering && session?.id) {
       interval = setInterval(async () => {
         try {
           const res = await pipelineFetch(toApiUrl(`/api/pipeline/status/${session.id}`));
@@ -599,6 +599,15 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     setStudioLoading(true);
     setIsEditingScript(false);
     try {
+      if (clerkEnabled) {
+        const data = await runHostedJob(toApiUrl, { operation: 'script', topic: topic.trim(), angle: angle.trim() });
+        setSession(data);
+        setAudioResult(null);
+        clearRenderPreview();
+        setStage(1);
+        loadSessions();
+        return data;
+      }
       const res = await pipelineFetch(toApiUrl('/api/pipeline/script/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -757,6 +766,14 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     if (!session?.id) return;
     setAudioSynthesizing(true);
     try {
+      if (clerkEnabled) {
+        const latest = session.revision === undefined ? await hostedProject(toApiUrl, session.id) : session;
+        const updated = await runHostedJob(toApiUrl, { operation: 'audio', projectId: session.id, revision: latest.revision });
+        setSession(updated);
+        setAudioResult(updated.audioResult);
+        clearRenderPreview();
+        return;
+      }
       const res = await pipelineFetch(toApiUrl('/api/pipeline/audio/synthesize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -786,6 +803,21 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     setVisualPreviewError(null);
   }
 
+  async function hostedStills(project) {
+    return runHostedJob(toApiUrl, { operation: 'stills', projectId: project.id, revision: project.revision,
+      visualRevision: project.visualAssets.fingerprint });
+  }
+
+  async function acceptManualVisuals(data) {
+    acceptVisualPreviews(data);
+    setRenderedMediaUrl('');
+    if (clerkEnabled) {
+      const latest = await hostedProject(toApiUrl, session.id);
+      if (latest.visualAssets?.fingerprint !== data.visuals.fingerprint) throw new Error('The project changed. Reload the latest visual plan.');
+      setSession(latest);
+    }
+  }
+
   async function handleGenerateStills(editorFeedback, sceneIndex) {
     if (!session?.id) return;
     setGeneratingStills(true);
@@ -793,6 +825,18 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     setAutomaticVisualProgress(null);
     setVisualPreviewError(null);
     try {
+      if (clerkEnabled) {
+        const latest = session.revision === undefined ? await hostedProject(toApiUrl, session.id) : session;
+        const planned = visualMode === 'manual' ? latest : await runHostedJob(toApiUrl, {
+          operation: 'visuals', projectId: session.id, revision: latest.revision, feedback: editorFeedback, sceneIndex,
+        });
+        setSession(planned);
+        const prepared = await hostedStills(planned);
+        acceptVisualPreviews({ stills: prepared.stillPreviews, visuals: prepared.visualAssets });
+        setSession(prepared);
+        setRenderedMediaUrl('');
+        return;
+      }
       const res = await pipelineFetch(toApiUrl('/api/pipeline/stills'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -842,6 +886,18 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     setRenderProgress(5);
     setStage(4);
     try {
+      if (clerkEnabled) {
+        const latest = session.revision === undefined ? await hostedProject(toApiUrl, session.id) : session;
+        const updated = await runHostedJob(toApiUrl, { operation: 'render', projectId: session.id, revision: latest.revision,
+          visualRevision: reviewedVisualRevision?.sessionId === session.id ? reviewedVisualRevision.fingerprint : latest.visualAssets?.fingerprint },
+        status => setRenderProgress(status.status === 'completed' ? 100 : status.checkpoint === 'artifacts-stored' ? 95 : status.status === 'running' ? 20 : 5));
+        setSession(updated);
+        setRenderedMediaUrl(updated.renderState?.mediaUrl);
+        setQaReport(updated.renderState?.qa);
+        setRendering(false);
+        loadSessions();
+        return;
+      }
       const res = await pipelineFetch(toApiUrl('/api/pipeline/render'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2359,11 +2415,11 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                           </div>
                           {visualMode === 'manual' && session?.id && <ManualVisualImport key={session.id} sessionId={session.id} toApiUrl={toApiUrl}
                             narrationKey={JSON.stringify([(audioResult || session.audioResult)?.fullAudioUrl, session.finalized, session.voiceoverNeedsRefresh])}
-                            busy={generatingStills} onBusyChange={setGeneratingStills} onGenerated={data => { acceptVisualPreviews(data); setRenderedMediaUrl(''); }} />}
+                            busy={generatingStills} onBusyChange={setGeneratingStills} onGenerated={acceptManualVisuals} />}
                         </div>
 
                         <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24, alignItems: 'center' }}>
-                          {visualMode === 'automatic' && <button
+                          {(visualMode === 'automatic' || (clerkEnabled && session?.visualAssets?.source === 'manual')) && <button
                             type="button"
                             className="btn btn-primary"
                             disabled={generatingStills}
@@ -2375,7 +2431,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                             ) : (
                               <Camera size={13} />
                             )}
-                            <span>{generatingStills ? 'Generating Visuals…' : 'Generate Visuals'}</span>
+                            <span>{generatingStills ? 'Generating Visuals…' : visualMode === 'manual' ? 'Generate Scene Previews' : 'Generate Visuals'}</span>
                           </button>}
 
                           <button
@@ -2459,7 +2515,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                           <button type="submit" disabled={generatingStills} className="btn btn-secondary">Regenerate with feedback</button>
                         </form>
                       </details>}
-                      {session?.id && !awaitingManualVisuals && <MotionPreview
+                      {!clerkEnabled && session?.id && !awaitingManualVisuals && <MotionPreview
                         key={`${session.id}:${audioResult?.fullAudioUrl || session.audioResult?.fullAudioUrl || ''}:${session.visualAssets?.fingerprint || ''}`}
                         sessionId={session.id} scenes={session.storyboard?.scenes ?? []} toApiUrl={toApiUrl}
                         visualRevision={session.visualAssets?.fingerprint}

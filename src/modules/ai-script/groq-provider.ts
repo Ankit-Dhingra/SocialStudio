@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 const structuredOutputModels = new Set(['qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'meta-models/muse-spark-open']);
 const visualKeyCooldowns = new Map<string, number>();
 const responsiveVisualKeys = new Map<string, string>();
@@ -62,7 +63,7 @@ export class GroqProvider {
       }
       if (cooldown !== undefined) visualKeyCooldowns.delete(cooldownKey);
       try {
-        const res = await fetch(url, {
+        const res = await providerFetch('groq', url, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${key}`,

@@ -1,3 +1,4 @@
+import { providerFetch } from '../jobs/provider-guard.js';
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -56,7 +57,7 @@ export async function prepareStoryClip(options: ClipOptions): Promise<{ asset: s
   if (cached) return { asset: `${options.assetFolder}/${name}`, seconds: cached };
 
   const art = await fs.readFile(path.join(options.library, path.basename(options.image)));
-  const response = await fetch(endpoint, {
+  const response = await providerFetch('story-video', endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': options.apiKey },
     signal: AbortSignal.timeout(300_000),

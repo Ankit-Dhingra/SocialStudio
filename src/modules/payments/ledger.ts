@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import mongoose, { Schema } from 'mongoose';
-import { earnedCredits, validatePayment } from './razorpay.js';
+import { earnedCredits, validatePayment, type VerifiedDispute } from './razorpay.js';
 
 const orders = mongoose.model('TestPaymentOrder', new Schema({
   _id: { type: String, required: true }, ownerId: { type: String, required: true, immutable: true },
@@ -15,8 +15,11 @@ const entries = mongoose.model('TestCreditEntry', new Schema({
 }, { collection: 'test_credit_entries', timestamps: true }));
 const receipts = mongoose.model('TestPaymentEvent', new Schema({ _id: String, orderId: String, refundAmount: Number },
   { collection: 'test_payment_events', timestamps: true }).index({ orderId: 1 }));
+const disputes = mongoose.model('TestPaymentDispute', new Schema({
+  _id: String, orderId: String, paymentId: String, heldAmount: Number, status: String, observedAt: Number,
+}, { collection: 'test_payment_disputes', timestamps: true }).index({ orderId: 1 }));
 
-export const initTestBilling = () => Promise.all([orders.init(), wallets.init(), entries.init(), receipts.init()]);
+export const initTestBilling = () => Promise.all([orders.init(), wallets.init(), entries.init(), receipts.init(), disputes.init()]);
 export const findTestOrder = (orderId: string) => orders.findOne({ orderId }).lean().exec();
 export const testBalance = async (ownerId: string) => (await wallets.findById(ownerId).lean())?.balance ?? 0;
 export const hasTestEvent = (id: string) => receipts.exists({ _id: id });
@@ -36,8 +39,10 @@ export async function attachTestOrder(id: string, orderId: string) {
   await orders.updateOne({ _id: id, orderId: { $exists: false } }, { $set: { orderId } });
 }
 
-export async function reconcileTestPayment(orderId: string, fetched: unknown, event?: { id: string; refundAmount?: number }) {
-  let result: { status: 'unknown' | 'pending' | 'credited' | 'refunded' | 'duplicate'; credited?: number } = { status: 'unknown' };
+type PaymentEvent = { id: string; refundAmount?: number; dispute?: { canonical: VerifiedDispute; observedAt: number } };
+
+export async function reconcileTestPayment(orderId: string, fetched: unknown, event?: PaymentEvent) {
+  let result: { status: 'unknown' | 'pending' | 'credited' | 'refunded' | 'duplicate' | 'disputed'; credited?: number } = { status: 'unknown' };
   try {
     await mongoose.connection.transaction(async session => {
       const order = await orders.findOne({ orderId }).session(session);
@@ -52,16 +57,35 @@ export async function reconcileTestPayment(orderId: string, fetched: unknown, ev
       if ((verifiedRefunds?.total ?? 0) > order.amount) throw new Error('Refund total exceeds the stored order amount.');
       const allocation = earnedCredits(payment, order.credits, Math.max(order.refunded, verifiedRefunds?.total ?? 0));
       if (!allocation) { result = { status: 'pending' }; return; }
-      const delta = allocation.credits - order.credited;
+      if (event?.dispute) {
+        const { canonical, observedAt } = event.dispute;
+        if (canonical.payment_id !== payment.id || canonical.amount > payment.amount) throw new Error('Dispute does not match the stored payment.');
+        const previous = await disputes.findById(canonical.id).session(session);
+        if (previous && (previous.paymentId !== payment.id || previous.orderId !== orderId)) throw new Error('Dispute payment changed.');
+        const terminal = ['won', 'lost', 'closed', 'accepted'];
+        const hold = terminal.includes(canonical.status) ? canonical.amount_deducted : canonical.amount;
+        if (!previous || (previous.observedAt! <= observedAt &&
+          (!terminal.includes(previous.status!) || terminal.includes(canonical.status)))) {
+          await disputes.updateOne({ _id: canonical.id }, { $set: { orderId, paymentId: payment.id,
+            heldAmount: hold, observedAt, status: canonical.status } }, { upsert: true, session });
+        }
+      }
+      const [adjustment] = await disputes.aggregate<{ total: number }>([
+        { $match: { orderId } }, { $group: { _id: null, total: { $sum: '$heldAmount' } } },
+      ]).session(session);
+      const disputed = adjustment?.total ?? 0;
+      const combined = Math.min(order.amount, allocation.refunded + disputed);
+      const credited = Math.floor(order.credits * (order.amount - combined) / order.amount);
+      const delta = credited - order.credited;
       if (delta !== 0) {
         await wallets.updateOne({ _id: order.ownerId }, { $inc: { balance: delta } }, { upsert: true, session });
         await entries.create([{ ownerId: order.ownerId, orderId, paymentId: payment.id, delta, refunded: allocation.refunded }], { session });
       }
       order.paymentId = payment.id;
-      order.credited = allocation.credits;
+      order.credited = credited;
       order.refunded = allocation.refunded;
       await order.save({ session });
-      result = { status: allocation.refunded ? 'refunded' : 'credited', credited: allocation.credits };
+      result = { status: disputed ? 'disputed' : allocation.refunded ? 'refunded' : 'credited', credited };
     });
   } catch (error) {
     if (event && error instanceof mongoose.mongo.MongoServerError && error.code === 11000 && await hasTestEvent(event.id)) {

@@ -3,6 +3,7 @@ import { ClerkProvider, useAuth, useClerk, UserButton, UserProfile } from '@cler
 import { registerPipelineTokenGetter } from './pipeline-api.js';
 import { DemoLibrary } from './DemoLibrary.jsx';
 import { TestBilling } from './TestBilling.jsx';
+import { GenerationAccount } from './GenerationAccount.jsx';
 
 function SignedInStudio({ Studio, userId, getToken }) {
   useLayoutEffect(() => registerPipelineTokenGetter(getToken), [getToken]);
@@ -11,6 +12,7 @@ function SignedInStudio({ Studio, userId, getToken }) {
     return <main className="main-content">
       <a className="btn btn-secondary" href="/studio">Open Studio</a>
       <UserProfile routing="hash" />
+      <GenerationAccount />
       <TestBilling />
     </main>;
   }

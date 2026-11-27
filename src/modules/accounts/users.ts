@@ -16,6 +16,7 @@ userSchema.index({ role: 1 }, { unique: true, partialFilterExpression: { role: '
 const StudioUser = mongoose.model('User', userSchema);
 
 export const hasActiveOwner = (clerkUserId: string) => StudioUser.exists({ clerkUserId, role: 'owner', status: 'active' });
+export const hasActiveAccount = (clerkUserId: string) => StudioUser.exists({ clerkUserId, status: 'active' });
 
 export async function connectAccounts(uri: string) {
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 8_000, maxPoolSize: 10 });

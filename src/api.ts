@@ -56,6 +56,9 @@ import { initProjects } from './modules/projects/repository.js';
 import { privateMediaFromEnv } from './modules/storage/private-media.js';
 import { monitorRedis } from './modules/jobs/redis-health.js';
 import { getOwnedJob, initJobs } from './modules/jobs/durable-jobs.js';
+import { executionConfig } from './modules/jobs/execution-config.js';
+import { generationAdminRouter } from './modules/jobs/admin-routes.js';
+import { initTrials, trialPolicy, trialRouter } from './modules/jobs/trials.js';
 import { availableGenerationCredits, initAdmission } from './modules/jobs/admission.js';
 import { razorpayTestConfig } from './modules/payments/razorpay.js';
 import { initTestBilling } from './modules/payments/ledger.js';
@@ -64,6 +67,8 @@ import { razorpayWebhook, testBillingRouter } from './modules/payments/routes.js
 const authConfig = clerkConfig(process.env);
 const privateMedia = authConfig ? privateMediaFromEnv() : undefined;
 const testBilling = authConfig ? razorpayTestConfig() : undefined;
+const generation = authConfig ? executionConfig() : undefined;
+const trial = privateMedia && generation?.caps.trialDailyMicros ? trialPolicy() : undefined;
 let redisHealth: ReturnType<typeof monitorRedis> | undefined;
 export const app = express();
 app.disable('x-powered-by');
@@ -80,6 +85,8 @@ if (authConfig) {
   });
   app.get('/api/admin/access', requireOwner(authConfig), (_req, res) => res.json({ allowed: true }));
   app.get('/api/admin/redis-health', requireOwner(authConfig), (_req, res) => res.json(redisHealth?.read() ?? { status: 'disabled' }));
+  app.use('/api/admin/generation', requireOwner(authConfig), generationAdminRouter());
+  app.use('/api/credits/trial', trialRouter(trial));
   app.get('/api/credits/balance', (_req, res, next) => {
     availableGenerationCredits(res.locals.studioAccount.clerkUserId).then(available => res.json({ available })).catch(next);
   });
@@ -91,7 +98,7 @@ if (authConfig) {
         attempts: job.attempts, checkpoint: job.checkpoint, updatedAt: job.updatedAt });
     }).catch(next);
   });
-  app.use('/api/pipeline', projectRouter(privateMedia));
+  app.use('/api/pipeline', projectRouter(privateMedia, generation));
   if (testBilling) app.use('/api/billing/test', testBillingRouter(testBilling));
   app.use('/api', (_req, res) => {
     res.status(403).json({ error: 'This operation is unavailable in the hosted Studio.' });
@@ -1426,6 +1433,7 @@ const port = Number(process.env.PORT || process.env.API_PORT || 4000);
 if (authConfig && process.env.NODE_ENV !== 'test') {
   await connectAccounts(authConfig.mongodbUri).then(async () => {
     await Promise.all([initProjects(), initJobs(), initAdmission()]);
+    if (trial) await initTrials();
     if (testBilling) await initTestBilling();
   }).catch(() => { throw new Error('SocialStudio database connection failed.'); });
 }
