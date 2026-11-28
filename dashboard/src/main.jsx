@@ -47,6 +47,8 @@ import {
   Trash2,
   Bookmark,
   Edit3,
+  CreditCard,
+  Menu,
 } from 'lucide-react';
 import './style.css';
 
@@ -253,9 +255,19 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   // Sidebar Navigation: 'overview' or 'create'
   const [activeNav, setActiveNav] = useState('overview');
   const [createStatus, setCreateStatus] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [creditBalance, setCreditBalance] = useState(null);
   const navigationRequest = useRef(0);
   const activeStageKey = userId ? `socialstudio_active_stage:${userId}` : 'socialstudio_active_stage';
   const activeSessionKey = userId ? `socialstudio_active_session:${userId}` : 'socialstudio_active_session';
+
+  async function loadCreditBalance(signal) {
+    const response = await pipelineFetch(toApiUrl('/api/billing/test/plan'), { signal, cache: 'no-store' });
+    if (!response.ok) throw new Error('Wallet unavailable');
+    const { balance } = await response.json();
+    if (!Number.isSafeInteger(balance) || balance < 0) throw new Error('Invalid wallet balance');
+    return balance;
+  }
 
   async function openSection(section, reset = false) {
     const request = ++navigationRequest.current;
@@ -267,11 +279,9 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     if (section === 'create' && clerkEnabled) {
       setCreateStatus('Checking credit balance…');
       try {
-        const response = await pipelineFetch(toApiUrl('/api/billing/test/plan'), { cache: 'no-store' });
-        if (!response.ok) throw new Error('Checkout unavailable.');
-        const { balance } = await response.json();
-        if (!Number.isFinite(balance)) throw new Error('Invalid credit balance.');
+        const balance = await loadCreditBalance();
         if (request !== navigationRequest.current) return;
+        setCreditBalance(balance);
         if (balance <= 0) {
           window.location.assign('/billing');
           return;
@@ -284,13 +294,22 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
     setCreateStatus('');
     if (reset) handleStartNewReel();
     setActiveNav(section);
+    setSidebarOpen(false);
   }
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('create') !== '1') return;
-    window.history.replaceState(null, '', '/studio');
-    void openSection('create');
-  }, []);
+    if (new URLSearchParams(window.location.search).get('create') === '1') {
+      window.history.replaceState(null, '', '/studio');
+      void openSection('create');
+      return;
+    }
+    if (!clerkEnabled || !userId) return;
+    const controller = new AbortController();
+    loadCreditBalance(controller.signal)
+      .then(balance => { if (!controller.signal.aborted) setCreditBalance(balance); })
+      .catch(() => { if (!controller.signal.aborted) setCreditBalance('Unavailable'); });
+    return () => controller.abort();
+  }, [userId]);
 
   // Create Reel Timeline Stepper: 1: Script, 2: Voiceover, 3: Visuals, 4: Render
   const [stage, setStage] = useState(1);
@@ -981,16 +1000,20 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
       {/* =========================================================================
           LEFT SIDEBAR NAVIGATION
           ========================================================================= */}
-      <aside className="sidebar">
-        <div>
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar-expanded' : ''}`}>
           {/* BRAND HEADER */}
           <div className="sidebar-header">
             <div className="sidebar-logo">
-              <Zap size={16} fill="#09090b" />
+              <Zap size={16} />
             </div>
             <a href="/" className="sidebar-brand-title">SocialStudio</a>
+            <button type="button" className="sidebar-toggle" aria-expanded={sidebarOpen}
+              aria-controls="studio-sidebar-content" aria-label="Workspace menu" onClick={() => setSidebarOpen(open => !open)}>
+              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
 
+          <div className="sidebar-content" id="studio-sidebar-content">
           {/* MENU SECTION */}
           <div className="sidebar-menu-label">Workspace</div>
           <nav className="sidebar-nav-list" aria-label="Studio workspace">
@@ -1044,12 +1067,16 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
               )}
             </button>
           </nav>
-          <div className="studio-account-controls">
-            <a className="btn btn-secondary" href="/demo">Explore Demo</a>
-            <a className="btn btn-secondary" href={clerkEnabled ? '/billing' : '/plans'}>Plans & billing</a>
-            {accountControls}
+          <nav className="sidebar-nav-list sidebar-resources" aria-label="Studio resources">
+            <a className="sidebar-nav-item" href={clerkEnabled ? '/billing' : '/plans'}><span className="sidebar-nav-left"><CreditCard size={16} /> Plans & billing</span></a>
+            <a className="sidebar-nav-item" href="/demo"><span className="sidebar-nav-left"><Play size={16} /> Demo library</span></a>
+          </nav>
           </div>
-        </div>
+          {clerkEnabled && userId && <a className="sidebar-wallet" href="/billing">
+            <span><CreditCard size={15} /> Creator wallet</span>
+            <strong>{typeof creditBalance === 'number' ? `${creditBalance.toLocaleString()} credits` : creditBalance ?? 'Loading…'}</strong>
+          </a>}
+          {accountControls && <div className="studio-profile">{accountControls}</div>}
       </aside>
 
       {/* =========================================================================
@@ -1114,13 +1141,13 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
 
               <div className="stat-card">
                 <div className="stat-top">
-                  <span className="stat-label">Voiceover Engine</span>
+                  <span className="stat-label">{clerkEnabled ? 'Available credits' : 'Voiceover Engine'}</span>
                   <div className="stat-icon-wrap">
-                    <Volume2 size={16} />
+                    {clerkEnabled ? <CreditCard size={16} /> : <Volume2 size={16} />}
                   </div>
                 </div>
-                <div className="stat-value">{clerkEnabled || !canAccessStudio ? 'Saved audio' : 'Sarvam Neural'}</div>
-                <div className="stat-subtext">{clerkEnabled || !canAccessStudio ? 'Voiceover generation unavailable' : 'sunny_hi_reels • Hinglish'}</div>
+                <div className="stat-value">{clerkEnabled ? creditBalance?.toLocaleString() ?? 'Loading…' : 'Sarvam Neural'}</div>
+                <div className="stat-subtext">{clerkEnabled ? <a href="/billing">Creator test wallet <ArrowRight size={13} /></a> : 'sunny_hi_reels • Hinglish'}</div>
               </div>
 
               <div className="stat-card">

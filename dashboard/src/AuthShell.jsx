@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { ClerkProvider, SignIn, useAuth, UserButton, UserProfile } from '@clerk/react';
+import { ClerkProvider, SignIn, useAuth, useClerk, useUser, UserButton, UserProfile } from '@clerk/react';
 import { pipelineFetch, registerPipelineTokenGetter } from './pipeline-api.js';
 import { DemoLibrary } from './DemoLibrary.jsx';
 import { BillingPage } from './BillingPage.jsx';
@@ -19,22 +19,43 @@ function AccessScreen({ children }) {
 function SignedInStudio({ Studio, getToken, userId, page }) {
   const [access, setAccess] = useState('loading');
   const [retry, setRetry] = useState(0);
+  const [switchError, setSwitchError] = useState(false);
+  const { signOut } = useClerk();
+  const { user } = useUser();
+  const returnTo = page === '/billing' || page === '/account' ? page : '/studio';
   useLayoutEffect(() => registerPipelineTokenGetter(getToken), [getToken]);
   useEffect(() => {
     const controller = new AbortController();
     pipelineFetch(apiBase + '/api/account', { signal: controller.signal, cache: 'no-store' })
-      .then(response => {
-        if (!controller.signal.aborted) setAccess(response.ok ? 'granted' : response.status === 403 ? 'restricted' : 'unavailable');
+      .then(async response => {
+        const failure = response.status === 403 ? await response.json().catch(() => ({})) : null;
+        if (controller.signal.aborted) return;
+        if (response.ok) setAccess('granted');
+        else if (failure?.error === 'Hosted staging is restricted to the Studio owner.') setAccess('wrongAccount');
+        else if (response.status === 403) setAccess('restricted');
+        else if (response.status === 401) setAccess('expired');
+        else setAccess('unavailable');
       })
       .catch(() => { if (!controller.signal.aborted) setAccess('unavailable'); });
     return () => controller.abort();
   }, [getToken, retry]);
 
   if (access !== 'granted') return <AccessScreen>
+    <div className="studio-access-card">
     {access === 'loading' && <p role="status">Opening your workspace…</p>}
-    {access === 'restricted' && <><h1>Studio access is by invitation</h1><p>Switch to the account that has Studio access, or explore the demo.</p><UserButton /></>}
+    {['wrongAccount', 'restricted', 'expired'].includes(access) && <>
+      <h1>{access === 'wrongAccount' ? 'Switch to your Studio owner account' : access === 'expired' ? 'Sign in again' : 'This account can’t open Studio'}</h1>
+      {user?.primaryEmailAddress?.emailAddress && <p>Signed in as <strong>{user.primaryEmailAddress.emailAddress}</strong></p>}
+      {access === 'wrongAccount' && <p>Use the Google account you enrolled for SocialStudio owner access.</p>}
+      <button className="marketing-primary" type="button" onClick={() => {
+        setSwitchError(false);
+        void signOut({ redirectUrl: returnTo }).catch(() => setSwitchError(true));
+      }}>{access === 'expired' ? 'Sign in again' : 'Use another account'}</button>
+      {switchError && <p role="alert">Couldn’t switch accounts. Try again.</p>}
+    </>}
     {access === 'unavailable' && <><h1>Studio couldn’t connect</h1><button className="marketing-secondary" onClick={() => { setAccess('loading'); setRetry(value => value + 1); }}>Try again</button></>}
     <a className="marketing-secondary" href="/demo">Watch demo</a>
+    </div>
   </AccessScreen>;
 
   if (page === '/billing') return <BillingPage />;
@@ -46,7 +67,7 @@ function SignedInStudio({ Studio, getToken, userId, page }) {
   </main>;
 
   return <Studio userId={userId} accountControls={<>
-    <a className="btn btn-secondary" href="/account">Account</a><UserButton />
+    <UserButton /><a href="/account">Account settings</a>
   </>} />;
 }
 
