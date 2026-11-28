@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { pipelineFetch } from './pipeline-api.js';
 
 const billingUrl = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/api/billing/test`;
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
+const day = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 let checkoutScript;
 
 function loadCheckout() {
@@ -25,18 +27,42 @@ async function post(route, details) {
 
 export function TestBilling() {
   const [plan, setPlan] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [availability, setAvailability] = useState('loading');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const orderRequest = useRef(null);
 
+  async function refresh(signal) {
+    const response = await pipelineFetch(`${billingUrl}/plan`, { signal });
+    if (response.status === 403 || response.status === 404) { setAvailability('disabled'); return; }
+    if (!response.ok) throw new Error('Could not load test billing.');
+    const currentPlan = await response.json();
+    if (currentPlan.mode !== 'test') { setAvailability('disabled'); return; }
+    setPlan(currentPlan);
+    setAvailability('enabled');
+    const history = await pipelineFetch(`${billingUrl}/orders`, { signal });
+    if (!history.ok) throw new Error('Could not load test payment activity.');
+    setOrders((await history.json()).orders);
+  }
+
   useEffect(() => {
     const controller = new AbortController();
-    pipelineFetch(`${billingUrl}/plan`, { signal: controller.signal })
-      .then(async response => { if (response.ok) setPlan(await response.json()); }).catch(() => {});
+    refresh(controller.signal).catch(error => {
+      if (!controller.signal.aborted) setStatus(error.message);
+    });
     return () => controller.abort();
   }, []);
 
-  if (plan?.mode !== 'test') return null;
+  async function reconcile(orderId) {
+    setBusy(true);
+    try {
+      const result = await post(`/orders/${encodeURIComponent(orderId)}/reconcile`, {});
+      setStatus(result.status === 'pending' ? 'Razorpay has yet to capture this test payment.' : 'Test payment status updated.');
+      await refresh();
+    } catch (error) { setStatus(error.message); }
+    finally { setBusy(false); }
+  }
 
   async function start() {
     setBusy(true);
@@ -47,7 +73,10 @@ export function TestBilling() {
       const order = await post('/orders', { requestId: orderRequest.current });
       const checkout = new window.Razorpay({
         key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency, name: 'SocialStudio test checkout',
-        modal: { ondismiss: () => setBusy(false) },
+        modal: { ondismiss: () => {
+          setBusy(false);
+          void refresh().catch(error => setStatus(error.message));
+        } },
         handler: async response => {
           orderRequest.current = null;
           try {
@@ -55,7 +84,9 @@ export function TestBilling() {
               paymentId: response.razorpay_payment_id, signature: response.razorpay_signature });
             setPlan(current => ({ ...current, balance: result.balance }));
             setStatus(result.status === 'pending' ? 'Waiting for payment capture.' : 'Test payment verified.');
-          } catch { setStatus('Confirmation is pending. Razorpay will retry the webhook.'); }
+          } catch { setStatus('Confirmation is pending. Check the order status in Payment activity.'); }
+          try { await refresh(); }
+          catch { setStatus('Could not refresh payment activity. Reload to check the latest status.'); }
           finally { setBusy(false); }
         },
       });
@@ -63,12 +94,28 @@ export function TestBilling() {
     } catch (error) { setStatus(error.message); setBusy(false); }
   }
 
-  return <section aria-label="Test billing" className="test-billing">
-    <h2>Test billing</h2>
-    <p>{plan.balance} test credits available.</p>
-    <button type="button" className="btn btn-secondary" onClick={start} disabled={busy}>
-      Test {plan.credits} credits for {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(plan.amount / 100)}
-    </button>
+  return <section aria-label="Credit plans and payments" className="billing-panel">
+    <h2>Credit plans</h2>
+    {availability === 'loading' && !status && <p role="status">Checking checkout availability…</p>}
+    {availability === 'disabled' && <p>Credit pack checkout is unavailable.</p>}
+    {plan && availability === 'enabled' && <>
+      <h3>Razorpay test credit pack</h3>
+      <p>{plan.credits} test credits for {inr.format(plan.amount / 100)}. Test credits stay in the test wallet.</p>
+      <p><strong>{plan.balance} test credits available</strong></p>
+      <button type="button" className="btn btn-primary" onClick={start} disabled={busy}>Open test checkout</button>
+      <h3>Payment activity</h3>
+      {orders.length ? <div className="billing-table"><table>
+        <thead><tr><th scope="col">Date</th><th scope="col">Test amount</th><th scope="col">Credits added</th>
+          <th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+        <tbody>{orders.map(order => <tr key={order.orderId}>
+          <td>{day.format(new Date(order.createdAt))}</td><td>{inr.format(order.amount / 100)}</td>
+          <td>{order.credited} of {order.credits}</td>
+          <td className="billing-state">{order.state}{order.refunded > 0 && ` · ${inr.format(order.refunded / 100)} returned`}</td>
+          <td><button type="button" className="btn btn-secondary" disabled={busy}
+            onClick={() => void reconcile(order.orderId)}>Check status</button></td>
+        </tr>)}</tbody>
+      </table></div> : <p>No test orders yet.</p>}
+    </>}
     {status && <p role="status">{status}</p>}
   </section>;
 }

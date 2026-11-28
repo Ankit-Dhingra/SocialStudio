@@ -36,6 +36,9 @@ export function earnedCredits(payment: VerifiedPayment, credits: number, previou
 
 export function razorpayTestConfig(env: NodeJS.ProcessEnv = process.env) {
   if (env.RAZORPAY_TEST_ENABLED !== 'true') return undefined;
+  if (env.NODE_ENV === 'production' && env.SOCIALSTUDIO_DEPLOYMENT !== 'staging') {
+    throw new Error('Hosted Razorpay test checkout requires the staging deployment.');
+  }
   const { RAZORPAY_KEY_ID: keyId, RAZORPAY_KEY_SECRET: keySecret, RAZORPAY_WEBHOOK_SECRET: webhookSecret } = env;
   const amount = Number(env.RAZORPAY_TEST_PLAN_PAISA);
   const credits = Number(env.RAZORPAY_TEST_PLAN_CREDITS);

@@ -7,6 +7,7 @@ const orders = mongoose.model('TestPaymentOrder', new Schema({
   orderId: String, paymentId: String, amount: { type: Number, required: true }, credits: { type: Number, required: true },
   credited: { type: Number, default: 0, required: true }, refunded: { type: Number, default: 0, required: true },
 }, { collection: 'test_payment_orders', timestamps: true })
+  .index({ ownerId: 1, createdAt: -1, _id: -1 })
   .index({ orderId: 1 }, { unique: true, partialFilterExpression: { orderId: { $type: 'string' } } })
   .index({ paymentId: 1 }, { unique: true, partialFilterExpression: { paymentId: { $type: 'string' } } }));
 const wallets = mongoose.model('TestCreditWallet', new Schema({ _id: String, balance: { type: Number, default: 0 } }, { collection: 'test_wallets' }));
@@ -22,6 +23,17 @@ const disputes = mongoose.model('TestPaymentDispute', new Schema({
 export const initTestBilling = () => Promise.all([orders.init(), wallets.init(), entries.init(), receipts.init(), disputes.init()]);
 export const findTestOrder = (orderId: string) => orders.findOne({ orderId }).lean().exec();
 export const testBalance = async (ownerId: string) => (await wallets.findById(ownerId).lean())?.balance ?? 0;
+export async function recentTestOrders(ownerId: string) {
+  const records = await orders.find({ ownerId, orderId: { $type: 'string' } })
+    .select('orderId paymentId amount credits credited refunded createdAt')
+    .sort({ createdAt: -1, _id: -1 }).limit(20).lean();
+  return records.map(record => ({
+    orderId: record.orderId, amount: record.amount, credits: record.credits, credited: record.credited,
+    refunded: record.refunded, createdAt: record.createdAt,
+    state: !record.paymentId ? 'pending' : record.refunded === record.amount ? 'refunded' :
+      record.refunded ? 'partially refunded' : record.credited < record.credits ? 'adjusted' : 'credited',
+  }));
+}
 export const hasTestEvent = (id: string) => receipts.exists({ _id: id });
 
 export async function reserveTestOrder(ownerId: string, requestId: string, amount: number, credits: number) {

@@ -2,18 +2,20 @@ import React, { useEffect, useLayoutEffect } from 'react';
 import { ClerkProvider, useAuth, useClerk, UserButton, UserProfile } from '@clerk/react';
 import { registerPipelineTokenGetter } from './pipeline-api.js';
 import { DemoLibrary } from './DemoLibrary.jsx';
-import { TestBilling } from './TestBilling.jsx';
+import { BillingPage } from './BillingPage.jsx';
 import { GenerationAccount } from './GenerationAccount.jsx';
 
 function SignedInStudio({ Studio, userId, getToken }) {
   useLayoutEffect(() => registerPipelineTokenGetter(getToken), [getToken]);
 
-  if (window.location.pathname === '/account') {
+  const page = window.location.pathname.replace(/\/$/, '');
+  if (page === '/billing') return <BillingPage />;
+  if (page === '/account') {
     return <main className="main-content">
       <a className="btn btn-secondary" href="/studio">Open Studio</a>
+      <a className="btn btn-secondary" href="/billing">Plans & billing</a>
       <UserProfile routing="hash" />
       <GenerationAccount />
-      <TestBilling />
     </main>;
   }
 

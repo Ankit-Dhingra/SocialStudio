@@ -61,7 +61,7 @@ import { getOwnedJob, initJobs } from './modules/jobs/durable-jobs.js';
 import { executionConfig } from './modules/jobs/execution-config.js';
 import { generationAdminRouter } from './modules/jobs/admin-routes.js';
 import { initTrials, trialPolicy, trialRouter } from './modules/jobs/trials.js';
-import { availableGenerationCredits, initAdmission } from './modules/jobs/admission.js';
+import { availableGenerationCredits, generationCreditUsage, initAdmission } from './modules/jobs/admission.js';
 import { razorpayTestConfig } from './modules/payments/razorpay.js';
 import { initTestBilling } from './modules/payments/ledger.js';
 import { razorpayWebhook, testBillingRouter } from './modules/payments/routes.js';
@@ -95,6 +95,9 @@ if (authConfig) {
   app.use('/api/credits/trial', trialRouter(trial));
   app.get('/api/credits/balance', (_req, res, next) => {
     availableGenerationCredits(res.locals.studioAccount.clerkUserId).then(available => res.json({ available })).catch(next);
+  });
+  app.get('/api/credits/usage', (_req, res, next) => {
+    generationCreditUsage(res.locals.studioAccount.clerkUserId).then(usage => res.json(usage)).catch(next);
   });
   app.get('/api/pipeline/jobs/:id', (req, res, next) => {
     if (!/^[a-f0-9]{64}$/.test(req.params.id)) return res.status(404).json({ error: 'Job not found.' });

@@ -7,7 +7,8 @@ import mongoose from 'mongoose';
 import { initTestBilling, testBalance } from '../src/modules/payments/ledger.js';
 import { earnedCredits, razorpayTestConfig, validatePayment, validSignature, type RazorpayTestConfig } from '../src/modules/payments/razorpay.js';
 import { razorpayWebhook, testBillingRouter } from '../src/modules/payments/routes.js';
-import { admitGeneration, availableGenerationCredits, grantGenerationCredits, initAdmission, settleGeneration } from '../src/modules/jobs/admission.js';
+import { admitGeneration, availableGenerationCredits, generationCreditUsage, grantGenerationCredits, initAdmission,
+  settleGeneration } from '../src/modules/jobs/admission.js';
 import { claimJob, getOwnedJob, initJobs, updateJobLease } from '../src/modules/jobs/durable-jobs.js';
 import { createProject, initProjects } from '../src/modules/projects/repository.js';
 import { masterScriptService } from '../src/modules/ai-script/master-script-service.js';
@@ -25,6 +26,7 @@ test('payment signatures use the exact body and live-mode keys stay disabled', (
   assert.equal(validSignature(body, 'fake', secret), false);
   assert.equal(razorpayTestConfig({ RAZORPAY_KEY_ID: 'rzp_live_fixture' }), undefined);
   assert.throws(() => razorpayTestConfig({ RAZORPAY_TEST_ENABLED: 'true', RAZORPAY_KEY_ID: 'rzp_live_fixture' }), /test configuration/);
+  assert.throws(() => razorpayTestConfig({ NODE_ENV: 'production', RAZORPAY_TEST_ENABLED: 'true' }), /staging deployment/);
   assert.throws(() => validatePayment({ ...captured, amount: 1 }, { id: captured.order_id, amount: 5000 }), /stored order/);
   assert.throws(() => validatePayment({ ...captured, currency: 'USD' }, { id: captured.order_id, amount: 5000 }));
   const authorized = validatePayment({ ...captured, status: 'authorized', captured: false }, { id: captured.order_id, amount: 5000 });
@@ -50,6 +52,7 @@ test('generation admission atomically holds credits and budget and creates a dur
     const id = await admitGeneration(request, caps);
     assert.equal(await admitGeneration(request, caps), id);
     assert.equal(await availableGenerationCredits(ownerId), 6);
+    assert.deepEqual(await generationCreditUsage(ownerId), { available: 6, expired: 0, nextExpiry: expires, reserved: 4, used: 0 });
     assert.equal((await getOwnedJob(ownerId, id))?.status, 'queued');
     await assert.rejects(admitGeneration({ ...request, requestId: 'request-b', boundMicros: 1 }, caps));
     assert.equal(await availableGenerationCredits(ownerId), 6);
@@ -66,6 +69,8 @@ test('generation admission atomically holds credits and budget and creates a dur
     assert.equal(await settleGeneration(next, 50, true), true);
     assert.equal(await availableGenerationCredits(ownerId), 6);
     assert.equal(await availableGenerationCredits(ownerId, expires), 0);
+    assert.deepEqual(await generationCreditUsage(ownerId, expires), { available: 0, expired: 6, nextExpiry: null, reserved: 0, used: 4 });
+    assert.deepEqual(await generationCreditUsage('user_unrelated'), { available: 0, expired: 0, nextExpiry: null, reserved: 0, used: 0 });
   } finally {
     try { if (mongoose.connection.readyState === 1) await mongoose.connection.dropDatabase(); }
     finally { await mongoose.disconnect(); }
@@ -100,6 +105,11 @@ test('checkout, duplicate webhooks, refunds and disputes reconcile through Mongo
       { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
     const verify = JSON.stringify({ orderId: captured.order_id, paymentId: captured.id, signature: sign(`${captured.order_id}|${captured.id}`) });
     const checkout = (user = 'user_buyer') => post('/billing/verify', verify, { 'X-Test-Identity': user });
+    const list = async (user = 'user_buyer') => {
+      const response = await fetch(base + '/billing/orders', { headers: { 'X-Test-Identity': user } });
+      assert.equal(response.status, 200);
+      return (await response.json()).orders;
+    };
     const event = (event: string, id = 'same') => JSON.stringify({ event, id, payload: {
       payment: { entity: { id: captured.id } }, refund: { entity: { id: `rfnd_${id}`, payment_id: captured.id, amount: 2500, status: 'processed' } },
     } });
@@ -111,6 +121,8 @@ test('checkout, duplicate webhooks, refunds and disputes reconcile through Mongo
       assert.equal((await post('/billing/orders', newOrder, { 'X-Test-Identity': 'user_buyer' })).status, 201);
       assert.equal((await post('/billing/orders', newOrder, { 'X-Test-Identity': 'user_buyer' })).status, 200);
       assert.equal(createdOrders, 1);
+      assert.deepEqual(await list('user_other'), []);
+      assert.equal((await list())[0].state, 'pending');
       assert.equal((await checkout('user_other')).status, 404);
       assert.equal((await checkout()).status, 200);
       assert.equal(await testBalance('user_buyer'), 0);
@@ -121,6 +133,7 @@ test('checkout, duplicate webhooks, refunds and disputes reconcile through Mongo
       current = captured;
       assert.deepEqual((await Promise.all([webhook(capture), webhook(capture), checkout()])).map(response => response.status), [204, 204, 200]);
       assert.equal(await testBalance('user_buyer'), 20);
+      assert.equal((await list())[0].state, 'credited');
 
       const opened = dispute('created', 123);
       assert.deepEqual((await Promise.all([webhook(opened), webhook(opened)])).map(response => response.status), [204, 204]);
@@ -141,6 +154,11 @@ test('checkout, duplicate webhooks, refunds and disputes reconcile through Mongo
       current = { ...captured, status: 'refunded', amount_refunded: 5000 };
       assert.equal((await webhook(event('refund.processed', 'full'))).status, 204);
       assert.equal(await testBalance('user_buyer'), 0);
+      const [refunded] = await list();
+      assert.equal(refunded.state, 'refunded');
+      assert.equal(refunded.refunded, 5000);
+      assert.equal(refunded.credited, 0);
+      assert.equal(refunded.paymentId, undefined);
       const refresh = await post(`/billing/orders/${captured.order_id}/reconcile`, '{}', { 'X-Test-Identity': 'user_buyer' });
       assert.equal(refresh.status, 200);
       assert.equal((await refresh.json()).balance, 0);

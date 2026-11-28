@@ -19,6 +19,7 @@ const reservations = mongoose.model('GenerationReservation', new Schema({
   budgetBounds: Schema.Types.Mixed,
   actualMicros: Number, state: { type: String, enum: ['held', 'spent', 'released'], default: 'held' },
 }, { collection: 'generation_reservations', timestamps: true })
+  .index({ ownerId: 1, state: 1 })
   .index({ ownerId: 1 }, { unique: true, partialFilterExpression: { state: 'held' } }));
 
 export const initAdmission = () => Promise.all([grants.init(), budgets.init(), reservations.init()]);
@@ -39,6 +40,32 @@ export async function availableGenerationCredits(ownerId: string, now = new Date
     { $match: { ownerId, expiresAt: { $gt: now } } }, { $group: { _id: null, available: { $sum: '$available' } } },
   ]);
   return sum?.available ?? 0;
+}
+
+export async function generationCreditUsage(ownerId: string, now = new Date()) {
+  const [balances, utilization] = await Promise.all([
+    grants.aggregate<{ available: number; expired: number; nextExpiry: Date | null }>([
+      { $match: { ownerId, available: { $gt: 0 } } },
+      { $group: {
+        _id: null,
+        available: { $sum: { $cond: [{ $gt: ['$expiresAt', now] }, '$available', 0] } },
+        expired: { $sum: { $cond: [{ $lte: ['$expiresAt', now] }, '$available', 0] } },
+        nextExpiry: { $min: { $cond: [{ $gt: ['$expiresAt', now] }, '$expiresAt', null] } },
+      } },
+    ]),
+    reservations.aggregate<{ _id: 'held' | 'spent'; credits: number }>([
+      { $match: { ownerId, state: { $in: ['held', 'spent'] } } },
+      { $unwind: '$grantDebits' },
+      { $group: { _id: '$state', credits: { $sum: '$grantDebits.credits' } } },
+    ]),
+  ]);
+  return {
+    available: balances[0]?.available ?? 0,
+    expired: balances[0]?.expired ?? 0,
+    nextExpiry: balances[0]?.nextExpiry ?? null,
+    reserved: utilization.find(item => item._id === 'held')?.credits ?? 0,
+    used: utilization.find(item => item._id === 'spent')?.credits ?? 0,
+  };
 }
 
 type Admission = { ownerId: string; projectId: string; operation: StudioOperation; revision: number; requestId: string;
