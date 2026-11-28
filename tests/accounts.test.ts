@@ -12,9 +12,45 @@ import type { ScriptSession } from '../src/modules/ai-script/master-script-servi
 import { getProject, importProject, initProjects, replaceProject } from '../src/modules/projects/repository.js';
 import { claimJob, getOwnedJob, initJobs, reconcileJobs, recordJob, updateJobLease } from '../src/modules/jobs/durable-jobs.js';
 import { Queue } from 'bullmq';
+import { copyReviewedOwnerLibrary } from '../scripts/copy-reviewed-owner-library.js';
 
 import { fixtureOwnerEmail as email, fixtureOwnerId as ownerId, fixtureFrontendOrigin as frontendOrigin, signedSessions } from './fixtures/clerk-session.js';
 const mongoTestUrl = process.env.STUDIO_ACCOUNTS_TEST_MONGODB_URI;
+
+test('reviewed owner library copies only selected records atomically and safely replays', { skip: !mongoTestUrl }, async () => {
+  const client = new mongoose.mongo.MongoClient(mongoTestUrl!);
+  const name = `library_copy_${crypto.randomUUID().replaceAll('-', '')}`;
+  const source = client.db(`${name}_source`);
+  const destination = client.db(`${name}_destination`);
+  try {
+    const owner = { clerkUserId: ownerId, role: 'owner', status: 'active' };
+    await source.collection('users').insertMany([owner, { clerkUserId: 'user_fixture_member', role: 'member', status: 'active' }]);
+    let nextAsset = 0;
+    const projects = Array.from({ length: 9 }, (_, index) => {
+      const media = Array.from({ length: index < 5 ? 13 : 12 }, (_, asset) => ({
+        source: `/output/video-${asset}.mp4`,
+        key: `${(++nextAsset).toString(16).padStart(64, '0')}.mp4`,
+      }));
+      return { projectId: `session_copy_fixture_${index}`, ownerId, media,
+        session: { renderState: { mediaUrl: media[0].source } } };
+    });
+    await source.collection('projects').insertMany([...projects, { ...projects[0], projectId: 'session_unreviewed' }]);
+    const ids = projects.map(project => project.projectId);
+    const copy = (apply: boolean) => copyReviewedOwnerLibrary(source, destination, client, ownerId, ids, apply);
+    assert.deepEqual(await copy(false), { projects: 9, media: 113, pending: 9 });
+    assert.equal(await destination.collection('users').countDocuments(), 0);
+    assert.deepEqual(await copy(true), { projects: 9, media: 113, pending: 9 });
+    assert.equal(await destination.collection('users').countDocuments(), 1);
+    assert.equal(await destination.collection('projects').countDocuments(), 9);
+    assert.deepEqual(await copy(true), { projects: 9, media: 113, pending: 0 });
+    await destination.collection('projects').updateOne({ projectId: ids[0] }, { $set: { revision: 900 } });
+    await assert.rejects(copy(true), /conflicting records/);
+    assert.equal(await source.collection('projects').countDocuments(), 10);
+  } finally {
+    try { await Promise.all([source.dropDatabase(), destination.dropDatabase()]); }
+    finally { await client.close(); }
+  }
+});
 
 test('Clerk configuration fails closed for hosted Studio', () => {
   assert.equal(clerkConfig({ NODE_ENV: 'development' }), undefined);
