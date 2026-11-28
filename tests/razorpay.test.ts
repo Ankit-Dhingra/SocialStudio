@@ -27,6 +27,11 @@ test('payment signatures use the exact body and live-mode keys stay disabled', (
   assert.equal(razorpayTestConfig({ RAZORPAY_KEY_ID: 'rzp_live_fixture' }), undefined);
   assert.throws(() => razorpayTestConfig({ RAZORPAY_TEST_ENABLED: 'true', RAZORPAY_KEY_ID: 'rzp_live_fixture' }), /test configuration/);
   assert.throws(() => razorpayTestConfig({ NODE_ENV: 'production', RAZORPAY_TEST_ENABLED: 'true' }), /staging deployment/);
+  const creator = razorpayTestConfig({ NODE_ENV: 'production', SOCIALSTUDIO_DEPLOYMENT: 'staging',
+    RAZORPAY_TEST_ENABLED: 'true', RAZORPAY_KEY_ID: 'rzp_test_fixture', RAZORPAY_KEY_SECRET: 'fixture-secret',
+    RAZORPAY_WEBHOOK_SECRET: secret });
+  assert.equal(creator?.amount, 50_000);
+  assert.equal(creator?.credits, 500);
   assert.throws(() => validatePayment({ ...captured, amount: 1 }, { id: captured.order_id, amount: 5000 }), /stored order/);
   assert.throws(() => validatePayment({ ...captured, currency: 'USD' }, { id: captured.order_id, amount: 5000 }));
   const authorized = validatePayment({ ...captured, status: 'authorized', captured: false }, { id: captured.order_id, amount: 5000 });
@@ -117,6 +122,9 @@ test('checkout, duplicate webhooks, refunds and disputes reconcile through Mongo
     const dispute = (status: string, timestamp: number) => JSON.stringify({ event: `payment.dispute.${status}`,
       created_at: timestamp, payload: { dispute: { entity: { id: canonical.id, payment_id: captured.id } } } });
     try {
+      const plan = await fetch(base + '/billing/plan', { headers: { 'X-Test-Identity': 'user_buyer' } });
+      assert.equal(plan.status, 200);
+      assert.equal((await plan.json()).name, 'Creator');
       const newOrder = JSON.stringify({ requestId: randomUUID() });
       assert.equal((await post('/billing/orders', newOrder, { 'X-Test-Identity': 'user_buyer' })).status, 201);
       assert.equal((await post('/billing/orders', newOrder, { 'X-Test-Identity': 'user_buyer' })).status, 200);

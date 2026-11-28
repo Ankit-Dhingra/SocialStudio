@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Router, json, raw, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { attachTestOrder, findTestOrder, hasTestEvent, recentTestOrders, reconcileTestPayment, reserveTestOrder, testBalance } from './ledger.js';
-import { disputeId, disputeShape, orderId, paymentId, validSignature, type RazorpayTestConfig } from './razorpay.js';
+import { creatorPlan, disputeId, disputeShape, orderId, paymentId, validSignature, type RazorpayTestConfig } from './razorpay.js';
 
 const requestOrder = z.object({ requestId: z.string().uuid() }).strict();
 const checkout = z.object({ orderId, paymentId, signature: z.string().length(64) }).strict();
@@ -73,7 +73,7 @@ export function testBillingRouter(config: RazorpayTestConfig) {
   const router = Router();
   const owner = (res: Response): string => res.locals.studioAccount.clerkUserId;
 
-  router.get('/plan', handle(async (_req, res) => res.json({ mode: 'test', amount: config.amount, credits: config.credits,
+  router.get('/plan', handle(async (_req, res) => res.json({ mode: 'test', name: creatorPlan.name, amount: config.amount, credits: config.credits,
     currency: 'INR', balance: await testBalance(owner(res)) })));
   router.get('/orders', handle(async (_req, res) => res.json({ orders: await recentTestOrders(owner(res)) })));
 

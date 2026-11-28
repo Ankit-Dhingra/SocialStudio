@@ -170,6 +170,8 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
         <textarea id="visual-directive-json" value={text} rows={7} disabled={working} spellCheck={false}
           aria-invalid={issues.length > 0} placeholder="Paste the JSON response here" onChange={event => updateText(event.target.value)} />
         <div className="manual-visual-actions">
+          {clerkEnabled && <button className="btn btn-secondary" type="button" disabled={!canSubmit}
+            onClick={() => void submit('validate')}>{operation === 'validate' ? 'Validating JSON…' : 'Validate JSON'}</button>}
           <button className="btn btn-primary" type="submit" disabled={!canSubmit}>
             {operation === 'generate' ? <><LoaderCircle size={14} className="animate-spin" aria-hidden="true" /> {clerkEnabled ? 'Saving Visual Plan…' : 'Generating Visuals…'}</> : clerkEnabled ? 'Save Visual Plan' : 'Generate Visuals'}
           </button>

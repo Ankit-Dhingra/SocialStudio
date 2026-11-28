@@ -72,7 +72,8 @@ export function TestBilling() {
       await loadCheckout();
       const order = await post('/orders', { requestId: orderRequest.current });
       const checkout = new window.Razorpay({
-        key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency, name: 'SocialStudio test checkout',
+        key: order.keyId, order_id: order.orderId, amount: order.amount, currency: order.currency,
+        name: 'SocialStudio', description: `${plan.name} plan · Test Mode`,
         modal: { ondismiss: () => {
           setBusy(false);
           void refresh().catch(error => setStatus(error.message));
@@ -99,8 +100,9 @@ export function TestBilling() {
     {availability === 'loading' && !status && <p role="status">Checking checkout availability…</p>}
     {availability === 'disabled' && <p>Credit pack checkout is unavailable.</p>}
     {plan && availability === 'enabled' && <>
-      <h3>Razorpay test credit pack</h3>
-      <p>{plan.credits} test credits for {inr.format(plan.amount / 100)}. Test credits stay in the test wallet.</p>
+      <h3>{plan.name} plan</h3>
+      <p>{plan.credits} credits for {inr.format(plan.amount / 100)}</p>
+      <p>Razorpay Test Mode. Credits from this checkout stay in the test wallet.</p>
       <p><strong>{plan.balance} test credits available</strong></p>
       <button type="button" className="btn btn-primary" onClick={start} disabled={busy}>Open test checkout</button>
       <h3>Payment activity</h3>

@@ -1,6 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import Razorpay from 'razorpay';
 import { z } from 'zod';
+import creatorPlan from '../../../dashboard/src/creator-plan.json' with { type: 'json' };
+
+export { creatorPlan };
 
 export const paymentId = z.string().regex(/^pay_[a-zA-Z0-9]{3,64}$/);
 export const orderId = z.string().regex(/^order_[a-zA-Z0-9]{3,64}$/);
@@ -40,12 +43,11 @@ export function razorpayTestConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('Hosted Razorpay test checkout requires the staging deployment.');
   }
   const { RAZORPAY_KEY_ID: keyId, RAZORPAY_KEY_SECRET: keySecret, RAZORPAY_WEBHOOK_SECRET: webhookSecret } = env;
-  const amount = Number(env.RAZORPAY_TEST_PLAN_PAISA);
-  const credits = Number(env.RAZORPAY_TEST_PLAN_CREDITS);
-  if (!keyId?.startsWith('rzp_test_') || !keySecret || !webhookSecret || webhookSecret.length < 24 ||
-      !Number.isSafeInteger(amount) || amount < 100 || amount > 10_000_000 ||
-      !Number.isSafeInteger(credits) || credits < 1 || credits > 1_000_000) throw new Error('Invalid Razorpay test configuration.');
-  return { keyId, keySecret, webhookSecret, amount, credits, client: new Razorpay({ key_id: keyId, key_secret: keySecret }) };
+  if (!keyId?.startsWith('rzp_test_') || !keySecret || !webhookSecret || webhookSecret.length < 24) {
+    throw new Error('Invalid Razorpay test configuration.');
+  }
+  return { keyId, keySecret, webhookSecret, amount: creatorPlan.amount, credits: creatorPlan.credits,
+    client: new Razorpay({ key_id: keyId, key_secret: keySecret }) };
 }
 
 export type RazorpayTestConfig = NonNullable<ReturnType<typeof razorpayTestConfig>>;

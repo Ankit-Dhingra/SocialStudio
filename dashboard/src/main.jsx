@@ -1017,6 +1017,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
           </nav>
           <div className="studio-account-controls">
             <a className="btn btn-secondary" href="/demo">Explore Demo</a>
+            <a className="btn btn-secondary" href="/plans">Plans</a>
             {accountControls}
           </div>
         </div>

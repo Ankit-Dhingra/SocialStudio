@@ -4,6 +4,7 @@ import { registerPipelineTokenGetter } from './pipeline-api.js';
 import { DemoLibrary } from './DemoLibrary.jsx';
 import { BillingPage } from './BillingPage.jsx';
 import { GenerationAccount } from './GenerationAccount.jsx';
+import { Plans } from './Plans.jsx';
 
 function SignedInStudio({ Studio, userId, getToken }) {
   useLayoutEffect(() => registerPipelineTokenGetter(getToken), [getToken]);
@@ -46,7 +47,9 @@ function ClerkStudio({ Studio }) {
 }
 
 export function AuthShell({ Studio }) {
-  if (window.location.pathname.replace(/\/$/, '') === '/demo') return <DemoLibrary />;
+  const page = window.location.pathname.replace(/\/$/, '');
+  if (page === '/demo') return <DemoLibrary />;
+  if (page === '/plans') return <Plans />;
   const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   if (key) {
     return <ClerkProvider publishableKey={key} afterSignOutUrl="/">

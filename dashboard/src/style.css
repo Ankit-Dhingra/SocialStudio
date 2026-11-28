@@ -2763,6 +2763,8 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
 }
 
 .demo-library { max-width: 1080px; margin: 0 auto; }
+.demo-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.demo-access-note { color: var(--text-secondary); font-size: 13px; }
 .demo-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 24px 0; }
 .demo-layout { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr); gap: 24px; }
 .demo-player video { display: block; width: min(100%, 310px); max-height: 70vh; aspect-ratio: 9 / 16; object-fit: contain; background: #09090b; border-radius: 12px; }
@@ -2775,7 +2777,10 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
 .demo-reel-choice[aria-pressed='true'] { border-color: #38bdf8; }
 .demo-reel-choice img { object-fit: cover; border-radius: 4px; }
 .demo-reel-choice small { display: block; margin-top: 4px; color: var(--text-secondary); }
-@media (max-width: 700px) { .demo-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) {
+  .demo-layout { grid-template-columns: minmax(0, 1fr); }
+  .demo-player :is(.demo-poster, video) { margin-inline: auto; }
+}
 
 .billing-page { width: min(100%, 980px); margin-inline: auto; }
 .billing-page nav { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -2793,3 +2798,4 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
 .billing-table table { width: 100%; border-collapse: collapse; }
 .billing-table th, .billing-table td { padding: 8px; text-align: start; border-bottom: 1px solid #3f3f46; }
 .billing-state::first-letter { text-transform: uppercase; }
+.creator-plan-price { font-size: 28px; font-weight: 700; }
