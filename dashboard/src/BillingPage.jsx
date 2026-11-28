@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { pipelineFetch } from './pipeline-api.js';
 import { TestBilling } from './TestBilling.jsx';
+import { PlanFaq } from './Plans.jsx';
 
 const apiBase = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const number = new Intl.NumberFormat();
@@ -27,6 +28,7 @@ export function BillingPage() {
       <a className="btn btn-secondary" href="/account">Account</a>
     </nav>
     <h1>Plans & billing</h1>
+    <TestBilling />
     <section className="billing-panel" aria-labelledby="generation-credit-heading">
       <h2 id="generation-credit-heading">Generation credits</h2>
       {status && <p role="status">{status}</p>}
@@ -40,6 +42,6 @@ export function BillingPage() {
         {usage.nextExpiry && <p>Next credit expiry <time dateTime={usage.nextExpiry}>{date.format(new Date(usage.nextExpiry))}</time></p>}
       </>}
     </section>
-    <TestBilling />
+    <PlanFaq />
   </main>;
 }

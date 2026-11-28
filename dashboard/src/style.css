@@ -2799,3 +2799,46 @@ textarea.console-area:focus, input.text-field:focus, textarea.text-field:focus, 
 .billing-table th, .billing-table td { padding: 8px; text-align: start; border-bottom: 1px solid #3f3f46; }
 .billing-state::first-letter { text-transform: uppercase; }
 .creator-plan-price { font-size: 28px; font-weight: 700; }
+/* Public site and shared pricing components */
+.marketing-shell { min-height: 100vh; color: #f5f3ee; background: radial-gradient(ellipse at 78% 21%, #232019 0, transparent 42%), #080809; padding: 0 clamp(20px, 6vw, 96px) 80px; }
+.marketing-nav { max-width: 1240px; margin: auto; min-height: 78px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ffffff20; }
+.marketing-nav div, .marketing-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; }
+.marketing-nav a { text-decoration: none; color: #e7e3da; }
+.marketing-brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 750; }
+.marketing-brand svg, .marketing-kicker { color: #eac681; }
+.marketing-hero { max-width: 1240px; margin: auto; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, 0.7fr); gap: clamp(28px, 7vw, 100px); align-items: center; padding: clamp(54px, 9vw, 120px) 0 10px; }
+.marketing-kicker { font-size: .78rem; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+.marketing-hero h1, .pricing-heading h1 { font-size: clamp(3rem, 7.5vw, 7rem); line-height: .98; letter-spacing: -.07em; margin: 22px 0; }
+.marketing-hero h1 em { display: block; color: #eac681; font-family: Georgia, serif; font-weight: 400; }
+.marketing-intro { color: #c6c0b6; font-size: clamp(1rem, 2vw, 1.2rem); line-height: 1.65; max-width: 485px; margin: 24px 0 30px; }
+.marketing-primary, .marketing-secondary { min-height: 46px; display: inline-flex; justify-content: center; align-items: center; gap: 10px; border-radius: 8px; padding: 10px 17px; font: inherit; font-weight: 680; text-decoration: none; cursor: pointer; }
+.marketing-primary { background: #eac681; color: #101016; border: 1px solid #eac681; }
+.marketing-primary:hover { background: #f4d79f; color: #101016; }
+.marketing-primary:disabled { opacity: .65; cursor: wait; }
+.marketing-secondary { color: #f5f3ee; border: 1px solid #ffffff33; background: #141416; }
+.marketing-showcase { min-height: 420px; aspect-ratio: 4 / 5; display: grid; place-items: center; isolation: isolate; overflow: hidden; position: relative; border-radius: 24px; background: #17151a; border: 1px solid #ffffff30; color: white; text-decoration: none; }
+.marketing-showcase img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.marketing-showcase::after { content: ''; position: absolute; inset: 0; background: linear-gradient(transparent 35%, #080809e8); z-index: -1; }
+.marketing-showcase strong { position: absolute; left: 22px; right: 22px; bottom: 24px; font-size: 1.2rem; }
+.marketing-play { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; background: #eac681; color: #101016; }
+.pricing-heading { text-align: center; margin: 65px auto 35px; }
+.pricing-heading h1 { font-size: clamp(2.75rem, 6vw, 5rem); }
+.pricing-card { display: grid; gap: 14px; max-width: 480px; margin: 0 auto; padding: clamp(22px, 5vw, 38px); border: 1px solid #eac68165; border-radius: 20px; background: linear-gradient(145deg, #242019, #141416 55%); }
+.pricing-card h2, .pricing-card p { margin: 0; }
+.pricing-card p svg { vertical-align: middle; margin-right: 5px; color: #eac681; }
+.pricing-card .creator-plan-price { font-size: 2.65rem; font-weight: 750; }
+.pricing-card small, .pricing-note { font-size: .9rem; color: #c6c0b6; }
+.pricing-checkout .pricing-card { margin-left: 0; }
+.pricing-faq { max-width: 660px; margin: 50px auto 0; }
+.pricing-faq details { border-bottom: 1px solid #ffffff25; padding: 14px 4px; }
+.pricing-faq summary { cursor: pointer; }
+.pricing-faq p { color: #c6c0b6; line-height: 1.55; }
+.sidebar .studio-account-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 14px; margin-top: 14px; border-top: 1px solid #ffffff22; }
+@media (max-width: 760px) {
+  .marketing-hero { grid-template-columns: 1fr; }
+  .marketing-showcase { aspect-ratio: 4 / 3; min-height: 260px; }
+  .app-layout { display: block; }
+  .app-layout .sidebar { position: static; width: 100%; min-height: auto; height: auto; }
+  .sidebar-nav-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-layout > .main-content { min-width: 0; margin-left: 0; }
+}

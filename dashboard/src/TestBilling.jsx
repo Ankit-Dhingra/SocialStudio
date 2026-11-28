@@ -95,16 +95,19 @@ export function TestBilling() {
     } catch (error) { setStatus(error.message); setBusy(false); }
   }
 
-  return <section aria-label="Credit plans and payments" className="billing-panel">
-    <h2>Credit plans</h2>
+  return <section aria-label="Credit plans and payments" className="billing-panel pricing-checkout">
     {availability === 'loading' && !status && <p role="status">Checking checkout availability…</p>}
     {availability === 'disabled' && <p>Credit pack checkout is unavailable.</p>}
     {plan && availability === 'enabled' && <>
-      <h3>{plan.name} plan</h3>
-      <p>{plan.credits} credits for {inr.format(plan.amount / 100)}</p>
-      <p>Razorpay Test Mode. Credits from this checkout stay in the test wallet.</p>
-      <p><strong>{plan.balance} test credits available</strong></p>
-      <button type="button" className="btn btn-primary" onClick={start} disabled={busy}>Open test checkout</button>
+      <div className="pricing-card">
+        <h2>{plan.name} plan</h2>
+        <p className="creator-plan-price">{inr.format(plan.amount / 100)} <small>one-time</small></p>
+        <p>{plan.credits} credits per pack</p>
+        <p><strong>{plan.balance} credits available in your test wallet</strong></p>
+        <button type="button" className="marketing-primary" onClick={start} disabled={busy}>Continue to Razorpay</button>
+        <p className="pricing-note">Test payment. No real money is charged.</p>
+        {plan.balance > 0 && <a href="/studio" className="marketing-secondary">Open Studio</a>}
+      </div>
       <h3>Payment activity</h3>
       {orders.length ? <div className="billing-table"><table>
         <thead><tr><th scope="col">Date</th><th scope="col">Test amount</th><th scope="col">Credits added</th>

@@ -255,10 +255,22 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   const activeStageKey = userId ? `socialstudio_active_stage:${userId}` : 'socialstudio_active_stage';
   const activeSessionKey = userId ? `socialstudio_active_session:${userId}` : 'socialstudio_active_session';
 
-  function openSection(section) {
+  async function openSection(section) {
     if (section !== 'overview' && !canAccessStudio) {
       onStudioRequired?.();
       return;
+    }
+    if (section === 'create' && clerkEnabled) {
+      try {
+        const response = await pipelineFetch(toApiUrl('/api/billing/test/plan'));
+        if (!response.ok || (await response.json()).balance <= 0) {
+          window.location.assign('/billing');
+          return;
+        }
+      } catch {
+        window.location.assign('/billing');
+        return;
+      }
     }
     setActiveNav(section);
   }
@@ -1017,7 +1029,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
           </nav>
           <div className="studio-account-controls">
             <a className="btn btn-secondary" href="/demo">Explore Demo</a>
-            <a className="btn btn-secondary" href="/plans">Plans</a>
+            <a className="btn btn-secondary" href={clerkEnabled ? '/billing' : '/plans'}>Plans & billing</a>
             {accountControls}
           </div>
         </div>

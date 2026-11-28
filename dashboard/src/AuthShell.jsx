@@ -5,6 +5,7 @@ import { DemoLibrary } from './DemoLibrary.jsx';
 import { BillingPage } from './BillingPage.jsx';
 import { GenerationAccount } from './GenerationAccount.jsx';
 import { Plans } from './Plans.jsx';
+import { Landing } from './Landing.jsx';
 
 function SignedInStudio({ Studio, userId, getToken }) {
   useLayoutEffect(() => registerPipelineTokenGetter(getToken), [getToken]);
@@ -29,14 +30,21 @@ function SignedInStudio({ Studio, userId, getToken }) {
 function ClerkStudio({ Studio }) {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
   const { openSignIn, openSignUp } = useClerk();
-  const signIn = () => openSignIn({ forceRedirectUrl: '/studio' });
+  const page = window.location.pathname.replace(/\/$/, '');
+  const destination = page === '/billing' ? '/billing' : '/studio';
+  const signIn = () => openSignIn({ forceRedirectUrl: destination });
   const signUp = () => openSignUp({ forceRedirectUrl: '/studio' });
 
   useEffect(() => {
-    if (!isLoaded || isSignedIn || new URLSearchParams(window.location.search).get('signin') !== '1') return;
-    window.history.replaceState(null, '', '/');
-    openSignIn({ forceRedirectUrl: '/studio' });
-  }, [isLoaded, isSignedIn, openSignIn]);
+    const requested = new URLSearchParams(window.location.search).get('signin') === '1';
+    if (!isLoaded) return;
+    if (isSignedIn && requested) { window.location.replace(destination); return; }
+    if (isSignedIn || !requested) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    openSignIn({ forceRedirectUrl: destination });
+  }, [destination, isLoaded, isSignedIn, openSignIn]);
+
+  if (page === '') return <Landing onStart={isLoaded && !isSignedIn ? signIn : undefined} signedIn={isSignedIn} />;
 
   if (isSignedIn) return <SignedInStudio key={userId} Studio={Studio} userId={userId} getToken={getToken} />;
 
@@ -49,8 +57,8 @@ function ClerkStudio({ Studio }) {
 export function AuthShell({ Studio }) {
   const page = window.location.pathname.replace(/\/$/, '');
   if (page === '/demo') return <DemoLibrary />;
-  if (page === '/plans') return <Plans />;
   const key = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+  if (page === '/plans') return <Plans checkoutHref={key ? '/billing?signin=1' : undefined} />;
   if (key) {
     return <ClerkProvider publishableKey={key} afterSignOutUrl="/">
       <ClerkStudio Studio={Studio} />
@@ -58,5 +66,5 @@ export function AuthShell({ Studio }) {
   }
 
   if (import.meta.env.VITE_PORTFOLIO_ONLY !== 'true' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return <Studio />;
-  return <Studio canAccessStudio={false} accountControls={<span role="status">Sign-in is unavailable.</span>} />;
+  return <Landing />;
 }
