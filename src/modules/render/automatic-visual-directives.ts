@@ -4,6 +4,7 @@ import ranks from 'js-tiktoken/ranks/o200k_base';
 import { z } from 'zod';
 import type { ScriptSession } from '../ai-script/master-script-service.js';
 import { GroqProvider, GroqRateLimitError, GroqRequestError } from '../ai-script/groq-provider.js';
+import { ProviderExecutionStopped } from '../jobs/provider-guard.js';
 import { describeResponseSchema } from './describe-response-schema.js';
 import { directiveRange, directiveSequenceSchema, type DirectiveSequence } from './visual-directive-compiler.js';
 import { DirectiveError, prepareVisualImport, readVisualDirectiveJson, visualPromptContext, type DirectiveIssue, type VerifyNarration } from './visual-directives.js';
@@ -230,6 +231,10 @@ export async function prepareAutomaticVisuals(session: ScriptSession, options: {
       issues = await call(range, feedback);
     } catch (error) {
       if (error instanceof DirectiveError && error.status === 409) throw error;
+      if (error instanceof ProviderExecutionStopped) {
+        const status = error.reason === 'quote' || error.reason === 'window' ? 429 : 503;
+        throw new AutomaticVisualError([issue(range, error.message)], draft.report, status);
+      }
       if (error instanceof GroqRateLimitError && depth < 2 && (error.retryAfterMs ?? 5000) <= 65000) {
         update('Groq is rate limited. Waiting before retrying…');
         await delay((error.retryAfterMs ?? 5000) + 250);

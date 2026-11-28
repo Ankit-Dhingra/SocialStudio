@@ -364,6 +364,18 @@ test('automatic Groq retains accepted ranges and compiles through the canonical 
     const target = [directiveRange(missing).from, directiveRange(missing).through];
     assert.deepEqual(ranges, [[0, saved.timeline.segments.length - 1], target, target]);
     assert.deepEqual(collected.report.attempts.flatMap(attempt => attempt.responses), [200, 429, 200]);
+    const { ProviderExecutionStopped } = await import('../src/modules/jobs/provider-guard.js');
+    let stoppedCalls = 0;
+    globalThis.fetch = async () => {
+      stoppedCalls++;
+      throw new ProviderExecutionStopped('window');
+    };
+    await assert.rejects(prepareAutomaticVisuals(initial), (error: unknown) => {
+      assert(error instanceof Error && 'status' in error);
+      assert.equal(error.status, 429);
+      return true;
+    });
+    assert.equal(stoppedCalls, 1);
   } finally {
     globalThis.fetch = nativeFetch;
     process.env = originalEnv;

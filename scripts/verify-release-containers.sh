@@ -102,10 +102,14 @@ ready_worker() {
 }
 retry ready_worker "$generation" generation
 retry ready_worker "$renderer" render
-docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}' "$api" "$generation" "$renderer"
+stats="$(docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}' "$api" "$generation" "$renderer")"
+while IFS= read -r line; do
+  printf '::notice title=Container memory and CPU::%s\n' "$line"
+done <<<"$stats"
 
 docker stop -t 20 "$api" "$generation" "$renderer" >/dev/null
 for container in "$api" "$generation" "$renderer"; do
   test "$(docker inspect --format '{{.State.ExitCode}}' "$container")" = 0
 done
 docker logs "$api" 2>&1 | grep -F '[API] Shutdown complete.'
+printf '%s\n' '::notice title=Release readiness::API health and readiness, anonymous rejection, worker startup, and SIGTERM shutdown verified.'

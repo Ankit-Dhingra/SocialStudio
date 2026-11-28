@@ -3,6 +3,7 @@ name: Release container check
 on:
   push:
     branches: [codex/production-saas]
+    paths-ignore: ['Docs/**']
 
 permissions:
   contents: read

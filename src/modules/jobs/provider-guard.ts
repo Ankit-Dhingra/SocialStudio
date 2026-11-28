@@ -5,6 +5,18 @@ import { generationPaused } from './generation-control.js';
 
 type Spending = Partial<Record<Provider | 'compute', number>>;
 const scope = new AsyncLocalStorage<ReturnType<typeof createProviderScope>>();
+const stopMessages = {
+  quote: 'The provider request is outside the authorized quote.',
+  window: 'The reserved spending window expired.',
+  paused: 'Generation is paused.',
+  reconciliation: 'Provider outcome requires reconciliation.',
+};
+
+export class ProviderExecutionStopped extends Error {
+  constructor(readonly reason: keyof typeof stopMessages) {
+    super(stopMessages[reason]);
+  }
+}
 
 function usageFields(data: unknown): Record<string, number> {
   if (!data || typeof data !== 'object') return {};
@@ -47,12 +59,13 @@ export function createProviderScope(jobId: string, leaseId: string, quote: Execu
     async request(provider: Provider, input: Parameters<typeof fetch>[0], init?: RequestInit) {
       const limit = quote.providers[provider];
       const count = attempts[provider] ?? 0;
-      if (unresolved || pending || !limit || count >= limit.attempts) throw new Error('The provider request is outside the authorized quote.');
-    if (new Date().toISOString().slice(0, 10) !== reservedDay) throw new Error('The reserved spending window expired.');
+      if (unresolved || pending) throw new ProviderExecutionStopped('reconciliation');
+      if (new Date().toISOString().slice(0, 10) !== reservedDay) throw new ProviderExecutionStopped('window');
+      if (!limit || count >= limit.attempts) throw new ProviderExecutionStopped('quote');
       pending = true;
       const id = randomUUID();
       try {
-        if (await generationPaused()) throw new Error('Generation is paused.');
+        if (await generationPaused()) throw new ProviderExecutionStopped('paused');
       } catch (error) {
         pending = false;
         throw error;
@@ -79,11 +92,11 @@ export function createProviderScope(jobId: string, leaseId: string, quote: Execu
         if (estimatedMicros > limit.microsPerCall) unresolved = true;
         if (!await recordProviderResponse(jobId, leaseId, id, response.status, usage, estimatedMicros, measured ? 'usage' : 'ceiling')) unresolved = true;
         costs[provider] = (costs[provider] ?? 0) + estimatedMicros;
-        if (unresolved) throw new Error('Provider outcome requires reconciliation.');
+        if (unresolved) throw new ProviderExecutionStopped('reconciliation');
         return response;
       } catch {
         unresolved = true;
-        throw new Error('Provider outcome requires reconciliation.');
+        throw new ProviderExecutionStopped('reconciliation');
       } finally {
         pending = false;
       }

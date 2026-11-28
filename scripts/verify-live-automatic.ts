@@ -49,10 +49,12 @@ async function verify() {
   const leaseId = job.leaseId;
   const scope = createProviderScope(id, leaseId, quote, job.createdAt.toISOString().slice(0, 10));
   const heartbeat = setInterval(() => void updateJobLease(id, leaseId, 'renew').catch(() => undefined), 15_000);
+  heartbeat.unref();
   const started = Date.now();
   let lastDraft: AutomaticVisualDraft | undefined;
   let report: AutomaticVisualReport | undefined;
   let quality: ReturnType<typeof performMediaQA> | undefined;
+  let stopReason: string | undefined;
   let completed = false;
   try {
     const result = await withProviderScope(scope, () => prepareAutomaticVisuals(session, {
@@ -69,7 +71,10 @@ async function verify() {
     quality = performMediaQA(render, session.timeline);
     completed = quality.passed;
   } catch (error) {
-    if (error instanceof AutomaticVisualError) report = error.report;
+    if (error instanceof AutomaticVisualError) {
+      report = error.report;
+      stopReason = error.issues[0]?.message;
+    }
   } finally {
     const accepted = new Set<number>();
     for (const sequence of lastDraft?.sequences ?? []) {
@@ -84,16 +89,17 @@ async function verify() {
       output: total.output + (call.usage?.outputTokens ?? 0),
     }), { input: 0, output: 0 });
     const prior = new Set<number>();
-    const repairAttempts = report?.attempts.filter(attempt => {
+    const repairAttempts = report?.attempts.filter(attempt => attempt.responses.length > 0).filter(attempt => {
       const scenes = Array.from({ length: attempt.through - attempt.from + 1 }, (_, i) => attempt.from + i);
       const repeated = scenes.some(index => prior.has(index));
       scenes.forEach(index => prior.add(index));
       return repeated;
     }).length;
-    const details = { completed, acceptedScenes: [...accepted].sort((a, b) => a - b), failedScenes, repairAttempts,
+    const details = { completed, acceptedScenes: [...accepted].sort((a, b) => a - b), failedScenes, repairAttempts, stopReason,
       calls, tokens, estimatedMicros: scope.costs.groq ?? 0, reservedMicros: ceiling,
       elapsedMs: Date.now() - started, mediaQA: quality };
     await writeFile(path.join(output, 'report.json'), JSON.stringify(details, null, 2));
+    if (!completed && lastDraft) await writeFile(path.join(output, 'accepted-draft.json'), JSON.stringify(lastDraft, null, 2));
     console.log(JSON.stringify(details));
     console.log(output);
     if (scope.requiresReview()) await reviewExecution(id, leaseId);
