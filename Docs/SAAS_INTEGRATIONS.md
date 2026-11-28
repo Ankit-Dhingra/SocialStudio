@@ -52,6 +52,8 @@ The `socialstudio-queue` instance is in the existing SocialStudio workspace, Pro
 
 Render's failed November 14 deploy at `7a42314` recorded an application runtime exit with status 1. The deploy page no longer contains the detailed logs. The seven-day Hobby retention period had passed at inspection, so the failing exception is unavailable. The older running deployment was left in place. [Failed deploy](https://dashboard.render.com/web/srv-dbq93doae00c73ab8lt0/deploys/dep-dbsa5m6417fc73fa4oa0) · [Render log retention](https://render.com/docs/logging#retention-period)
 
+For isolated hosted portfolio-only rollout (`SOCIALSTUDIO_DEPLOYMENT=portfolio` with `NODE_ENV=production`), the API boots without Clerk, MongoDB, Redis, Razorpay, or workers, serves `/health`, `/ready`, and `/api/demo/reels` using `DEMO_PUBLIC_VIDEO_BASE_URL` and `DEMO_PUBLIC_IMAGE_BASE_URL`, restricts CORS to `FRONTEND_URL` when set, and rejects all other `/api/*` requests with HTTP `403`. It refuses to start if `STUDIO_GENERATION_ENABLED=true`, `STUDIO_TRIALS_ENABLED=true`, or `RAZORPAY_TEST_ENABLED=true`.
+
 For isolated hosted verification, run the API image with `NODE_ENV=production` and `SOCIALSTUDIO_DEPLOYMENT=staging`. Set `FRONTEND_URL` to the exact HTTPS staging frontend origin, supply the Clerk development keys and the verified `OWNER_CLERK_USER_ID`, and keep generation and trials disabled. Only the pinned owner can access staging project APIs. TLS verification and MFA for administrator actions apply in staging. For production, omit the staging setting and configure the Clerk production instance. Keep preview and production builds scoped to their respective Clerk credentials and origins.
 
 ## Razorpay test mode
