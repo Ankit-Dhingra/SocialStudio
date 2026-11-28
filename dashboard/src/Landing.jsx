@@ -37,10 +37,14 @@ export function Landing({ studioHref }) {
         <h1>Make complex ideas <em>worth watching.</em></h1>
         <p className="marketing-intro">A workspace for turning technical scripts into short video explainers. Organize your drafts, plan your visuals, and review finished reels.</p>
         <div className="marketing-actions">
-          <a className="marketing-primary" href={studioHref || preview + '/studio'}>Get started <ArrowRight size={17} /></a>
-          <a className="marketing-secondary" href="/demo"><Play size={16} /> Watch demo</a>
+          {studioHref
+            ? <a className="marketing-primary" href={studioHref}>Get started <ArrowRight size={17} /></a>
+            : <a className="marketing-primary" href="/demo"><Play size={16} /> Watch demo</a>}
+          {studioHref
+            ? <a className="marketing-secondary" href="/demo"><Play size={16} /> Watch demo</a>
+            : <a className="marketing-secondary" href={preview + '/studio'}>Owner sign-in <ArrowRight size={17} /></a>}
         </div>
-        {!studioHref && <p className="pricing-note">Studio access is by invitation. The demo is open to everyone.</p>}
+        {!studioHref && <p className="pricing-note">Owner sign-in requires access to the private Vercel preview.</p>}
       </div>
       <a className="marketing-showcase" href="/demo" aria-label="Watch sample reels">
         {poster && <img src={poster.startsWith('/') ? apiBase + poster : poster} alt="" />}
