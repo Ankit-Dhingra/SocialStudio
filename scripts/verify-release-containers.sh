@@ -90,9 +90,8 @@ retry docker exec "$api" node -e '
 worker_config='{"caps":{"dailyMicros":100,"monthlyMicros":100,"userDailyMicros":100,"providerDailyMicros":100},"operations":{"render":{"credits":1,"computeMicros":1,"providers":{}},"refine":{"credits":1,"computeMicros":0,"providers":{"groq":{"attempts":1,"microsPerCall":1}}}}}'
 worker=(
   -e STUDIO_GENERATION_ENABLED=true -e "STUDIO_GENERATION_CONFIG=$worker_config"
-  -e PRIVATE_MEDIA_DRIVER=r2 -e R2_ACCOUNT_ID=00000000000000000000000000000000
-  -e R2_ACCESS_KEY_ID=release-fixture -e R2_SECRET_ACCESS_KEY=release-fixture
-  -e R2_PRIVATE_BUCKET=release-private-fixture -e R2_DEMO_BUCKET=release-demo-fixture
+  -e PRIVATE_MEDIA_DRIVER=cloudinary -e CLOUDINARY_CLOUD_NAME=release-fixture
+  -e CLOUDINARY_API_KEY=123456789012345 -e CLOUDINARY_API_SECRET=release-fixture
 )
 docker run -d --name "$generation" "${common[@]}" "${worker[@]}" "${suffix}:generation" >/dev/null
 docker run -d --name "$renderer" "${common[@]}" "${worker[@]}" "${suffix}:renderer" >/dev/null

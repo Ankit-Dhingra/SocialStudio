@@ -47,4 +47,24 @@ test('the guest demo only serves cataloged files and supports video seeking', as
 test('an external demo media prefix cannot embed credentials or use insecure HTTP', () => {
   assert.throws(() => demoRouter({ publicBaseUrl: 'http://media.example.test/demo' }), /HTTPS/);
   assert.throws(() => demoRouter({ publicBaseUrl: 'https://user:secret@media.example.test/demo' }), /HTTPS/);
+  assert.throws(() => demoRouter({ videoBaseUrl: 'https://media.example.test/demo' }), /requires both/);
+});
+
+test('the guest catalog uses separate Cloudinary delivery paths for videos and thumbnails', async () => {
+  const app = express();
+  app.use('/api/demo', demoRouter({ videoBaseUrl: 'https://res.cloudinary.com/fixture/video/upload/socialstudio-demo/',
+    imageBaseUrl: 'https://res.cloudinary.com/fixture/image/upload/socialstudio-demo' }));
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  try {
+    const { reels } = await (await fetch(`${base}/api/demo/reels`)).json();
+    assert.equal(reels.length, 5);
+    assert.equal(reels[0].videoUrl, 'https://res.cloudinary.com/fixture/video/upload/socialstudio-demo/whatsapp-v2.mp4');
+    assert.equal(reels[0].thumbnailUrl, 'https://res.cloudinary.com/fixture/image/upload/socialstudio-demo/whatsapp-v2.jpg');
+    assert.equal((await fetch(`${base}/api/demo/media/whatsapp-v2.mp4`)).status, 404);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
 });

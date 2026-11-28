@@ -6,7 +6,7 @@ The local creator workflow and the currently running Render deployment are indep
 
 Complete the development Clerk steps in [Set up the Studio owner](OWNER_SETUP.md). Begin with the local MongoDB URL already configured for the owner check.
 
-The verified Clerk development owner and the nine completed projects are now in the existing Atlas `socialstudio` database. The scoped Atlas connection is stored separately from the original local owner verification settings. The cloud project records were verified through the real owner’s Studio session on loopback. Private media still needs to be copied after R2 is activated.
+The verified Clerk development owner and the nine completed projects are now in the existing Atlas `socialstudio` database. The scoped Atlas connection is stored separately from the original local owner verification settings. The cloud project records were verified through the real owner’s Studio session on loopback. Copy private media only after verifying Cloudinary staging playback and project isolation.
 
 Atlas now has `socialstudio.users` in the existing free `Cluster0` in the DevTinder project. In **Database & Network Access → Database Users → Add New Database User**, create a dedicated `socialstudio_app` password user. Under **Specific Privileges**, grant `readWrite` on the `socialstudio` database. Restrict the user to `Cluster0` if the dashboard offers resource restriction. Keep the generated password in a password manager or the deployment secret store. Open **Cluster0 → Connect → Drivers** and configure `MONGODB_URI` with `/socialstudio` as the database and the scoped credentials. URL-encode the password if needed. Add only an explicitly approved deployment IP range if the existing access list does not permit the connection. [Atlas database users](https://www.mongodb.com/docs/atlas/security-add-mongodb-users/)
 
@@ -21,15 +21,16 @@ node --env-file=.env.socialstudio-clerk.local --import tsx scripts/migrate-owner
 
 Omit `--copy-media` when migrating metadata only. Check the reported media count against the selected project before switching its delivery path. Media references whose source files are missing are left unavailable. Production rejects MongoDB connections that disable TLS or certificate and hostname verification.
 
-## Cloudflare R2
+## Cloudinary media
 
-1. Open **Cloudflare Dashboard → R2 Object Storage**. Review the subscription screen. It listed $0 due on activation and possible monthly usage charges. The account holder must approve and complete this activation.
-2. Create two buckets, `socialstudio-private` and `socialstudio-demo`. Keep the private bucket off public URLs and public custom domains. Create bucket-scoped Object Read and Write S3 credentials for the private bucket and store the account ID, access key ID, and secret in the backend environment.
-3. Set `PRIVATE_MEDIA_DRIVER=r2`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PRIVATE_BUCKET`, and `R2_DEMO_BUCKET`. The application signs authorized private reads for 15 minutes. Use `PRIVATE_MEDIA_DRIVER=local` and a strong `PRIVATE_MEDIA_SIGNING_KEY` for local testing.
-4. Run `npm run demo:prepare`. Upload the five MP4s and five JPEGs from the staging directory to the demo bucket under their existing names. Connect a dedicated public custom domain to the demo bucket and use its HTTPS origin or prefix as `DEMO_PUBLIC_BASE_URL`. A production custom domain avoids the managed `r2.dev` development URL's rate limits.
-5. Add an object expiration rule matching only `tmp-` on the private bucket. The local equivalent is `npm run media:cleanup`, which only removes expired local `tmp-` objects. Confirm the expiration time against the worker retry window before applying the cloud rule.
+1. Use the Cloudinary Image & Video API Free plan for owner staging. Create a Media Library User key and grant it Contributor on the staging asset folder through the Cloudinary Admin API. In the backend and worker secret stores, set `PRIVATE_MEDIA_DRIVER=cloudinary`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. Use the same `CLOUDINARY_PRIVATE_PREFIX` on the API and workers, matching the assigned asset folder. The default is `socialstudio-private`. Use `PRIVATE_MEDIA_DRIVER=local` and a strong `PRIVATE_MEDIA_SIGNING_KEY` for loopback testing.
+2. Upload a synthetic video through the driver. Its original and derivatives use the authenticated delivery type. Confirm an unsigned URL and an expired URL are denied, authorized playback and seeking work, and another Studio account cannot obtain a project link. Links expire after 15 minutes. The driver applies the Free plan limits of 100 MB per video or audio upload and 10 MB per image. Review upload sizes and available credits before copying saved media.
+3. For guest demos, run `npm run demo:prepare`. Upload only the five approved MP4s and five JPEGs with public IDs `socialstudio-demo/<reel-id>` using public upload delivery. Set `DEMO_PUBLIC_VIDEO_BASE_URL=https://res.cloudinary.com/<cloud-name>/video/upload/socialstudio-demo` and `DEMO_PUBLIC_IMAGE_BASE_URL=https://res.cloudinary.com/<cloud-name>/image/upload/socialstudio-demo`. Verify guest playback and seeking before publishing the catalog.
+4. Monitor the shared Free plan credit balance during staging. R2 is disabled in the application. The local `npm run media:cleanup` command only removes expired local `tmp-` objects.
 
-[Cloudflare S3 credentials](https://developers.cloudflare.com/r2/get-started/s3/) · [Public bucket access](https://developers.cloudflare.com/r2/buckets/public-buckets/) · [Object lifecycles](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
+The live staging check on November 28, 2026 used the scoped Contributor key and a synthetic MP4. Cloudinary accepted authenticated upload, returned the original bytes on a signed download, supported byte-range seeking, and denied unsigned and expired links. Browser playback through the signed-in Studio and migration of saved media remain staging checks.
+
+[Cloudinary Free plan](https://cloudinary.com/pricing/compare-plans) · [Authenticated media](https://cloudinary.com/documentation/control_access_to_media) · [Billing and credits](https://cloudinary.com/documentation/billing_and_plans)
 
 ## Render Key Value
 

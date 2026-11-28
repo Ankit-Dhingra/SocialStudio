@@ -76,7 +76,8 @@ let draining = false;
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: authConfig?.frontendOrigin ?? '*' }));
-app.use('/api/demo', demoRouter({ directory: process.env.DEMO_MEDIA_DIR, publicBaseUrl: process.env.DEMO_PUBLIC_BASE_URL }));
+app.use('/api/demo', demoRouter({ directory: process.env.DEMO_MEDIA_DIR, publicBaseUrl: process.env.DEMO_PUBLIC_BASE_URL,
+  videoBaseUrl: process.env.DEMO_PUBLIC_VIDEO_BASE_URL, imageBaseUrl: process.env.DEMO_PUBLIC_IMAGE_BASE_URL }));
 if (privateMedia?.router) app.use('/api/private-media', privateMedia.router);
 if (testBilling) app.use('/api/billing/test/webhook', razorpayWebhook(testBilling));
 
