@@ -204,7 +204,8 @@ export function ManualVisualImport({ sessionId, narrationKey, toApiUrl, onGenera
             <button className="btn btn-secondary" type="button" disabled={!context || working} onClick={() => download('visual-prompt.md', context.prompt, 'text/markdown')}>Download Prompt</button>
             <button className="btn btn-secondary" type="button" disabled={!context || working} onClick={() => download('visual-context.json', JSON.stringify({ job: context.job, specification: context.specification, artDirection: context.artDirection }, null, 2), 'application/json')}>Download Context JSON</button>
             <button className="btn btn-secondary" type="button" disabled={loading || working} onClick={refresh}>Refresh Context</button>
-            <button className="btn btn-secondary" type="button" disabled={!canSubmit} onClick={() => submit('validate')}>Validate JSON</button>
+            {!clerkEnabled && <button className="btn btn-secondary" type="button" disabled={!canSubmit}
+              onClick={() => submit('validate')}>Validate JSON</button>}
             <label className={`btn btn-secondary manual-visual-upload${working ? ' is-disabled' : ''}`}>
               Upload JSON <input type="file" accept=".json,application/json" disabled={working} onChange={async event => {
                 const file = event.target.files?.[0];
