@@ -306,7 +306,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   const [qaReport, setQaReport] = useState(null);
 
   // Video Preview Modal for Overview Library
-  const [previewModalUrl, setPreviewModalUrl] = useState('');
+  const [reelPreview, setReelPreview] = useState(null);
 
   // Save as Draft Notification Toast
   const [draftToast, setDraftToast] = useState(null);
@@ -436,6 +436,21 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
       }
     } catch (err) {
       console.error('Failed to delete session:', err);
+    }
+  }
+
+  async function openReelPreview(reel) {
+    const pending = { reel, url: '', loading: true, error: '' };
+    setReelPreview(pending);
+    try {
+      const details = clerkEnabled ? await hostedProject(toApiUrl, reel.id) : null;
+      const url = clerkEnabled ? details?.renderState?.mediaUrl : reel.mediaUrl;
+      if (!url) throw new Error('This reel has no playable export yet.');
+      setReelPreview(current => current === pending ? { ...pending, url, loading: false } : current);
+    } catch (error) {
+      setReelPreview(current => current === pending
+        ? { ...pending, loading: false, error: error.message || 'The reel could not be opened.' }
+        : current);
     }
   }
 
@@ -1212,7 +1227,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
-                          onClick={() => setPreviewModalUrl(sess.mediaUrl)}
+                          onClick={() => openReelPreview(sess)}
                           style={{ flex: 1, gap: 6 }}
                         >
                           <Play size={12} fill="#09090b" />
@@ -1480,7 +1495,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
-                        onClick={() => setPreviewModalUrl(sess.mediaUrl)}
+                        onClick={() => openReelPreview(sess)}
                         style={{ flex: 1, gap: 6 }}
                       >
                         <Play size={12} fill="#09090b" />
@@ -2701,10 +2716,10 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
       {/* =========================================================================
           PREVIEW VIDEO MODAL (FROM OVERVIEW)
           ========================================================================= */}
-      {previewModalUrl && (
+      {reelPreview && (
         <div
           className="still-lightbox-overlay"
-          onClick={() => setPreviewModalUrl('')}
+          onClick={() => setReelPreview(null)}
           style={{ zIndex: 100 }}
         >
           <div
@@ -2717,22 +2732,26 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => setPreviewModalUrl('')}
+                onClick={() => setReelPreview(null)}
               >
                 <X size={14} />
               </button>
             </div>
             <div style={{ padding: 16, background: '#000', display: 'flex', justifyContent: 'center' }}>
-              <video
-                src={toApiUrl(previewModalUrl)}
+              {reelPreview.loading && <p role="status">Loading reel…</p>}
+              {reelPreview.error && <p role="alert">{reelPreview.error}</p>}
+              {reelPreview.url && !reelPreview.error && <video
+                src={toApiUrl(reelPreview.url)}
                 controls
                 autoPlay
+                onError={() => setReelPreview(current => current === reelPreview
+                  ? { ...current, error: 'The video could not play. Try opening a fresh link.' } : current)}
                 style={{
                   width: '100%',
                   maxHeight: '75vh',
                   borderRadius: 8,
                 }}
-              />
+              />}
             </div>
             <div
               style={{
@@ -2743,19 +2762,24 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 gap: 8,
               }}
             >
-              <a
-                href={toApiUrl(previewModalUrl)}
+              {reelPreview.url && !reelPreview.error && <a
+                href={toApiUrl(reelPreview.url)}
                 download="reel.mp4"
                 className="btn btn-primary btn-sm"
                 style={{ gap: 6 }}
               >
                 <Download size={13} />
                 <span>Download MP4</span>
-              </a>
+              </a>}
+              {reelPreview.error && (
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => openReelPreview(reelPreview.reel)}>
+                  Try again
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
-                onClick={() => setPreviewModalUrl('')}
+                onClick={() => setReelPreview(null)}
               >
                 Close
               </button>

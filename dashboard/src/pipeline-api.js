@@ -39,7 +39,7 @@ async function readResult(response) {
 }
 
 export async function hostedProject(toApiUrl, id) {
-  return readResult(await pipelineFetch(toApiUrl(`/api/pipeline/script/${encodeURIComponent(id)}`)));
+  return readResult(await pipelineFetch(toApiUrl(`/api/pipeline/script/${encodeURIComponent(id)}`), { cache: 'no-store' }));
 }
 
 export async function runHostedJob(toApiUrl, input, onStatus) {
