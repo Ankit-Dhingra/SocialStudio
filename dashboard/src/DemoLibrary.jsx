@@ -31,6 +31,7 @@ export function DemoLibrary() {
 
   const selected = reels?.find(reel => reel.id === selectedId);
   const clerkEnabled = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+  const localStudio = import.meta.env.VITE_PORTFOLIO_ONLY !== 'true' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
 
   return <main className="main-content demo-library">
     <a className="btn btn-secondary" href="/">SocialStudio</a>
@@ -39,9 +40,13 @@ export function DemoLibrary() {
         <h1>Explore Demo</h1>
         <p>Watch finished examples from Behind The Tech. Demo reels are pre-rendered.</p>
       </div>
-      <a className="btn btn-primary" href={clerkEnabled ? '/?signin=1' : '/studio'}>
-        {clerkEnabled ? 'Sign in to create' : 'Open Studio'}
-      </a>
+      {clerkEnabled || localStudio ? (
+        <a className="btn btn-primary" href={clerkEnabled ? '/?signin=1' : '/studio'}>
+          {clerkEnabled ? 'Sign in to create' : 'Open Studio'}
+        </a>
+      ) : (
+        <span className="btn btn-secondary" role="status">Studio sign-in unavailable</span>
+      )}
     </header>
     {error && <p role="alert">The demo library is temporarily unavailable.</p>}
     {!error && !reels && <p role="status">Loading demo reels…</p>}

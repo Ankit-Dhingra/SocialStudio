@@ -15,6 +15,23 @@ export function studioMongoUri(env: NodeJS.ProcessEnv) {
   return mongodbUri;
 }
 
+export function portfolioConfig(env: NodeJS.ProcessEnv) {
+  if (env.SOCIALSTUDIO_DEPLOYMENT !== 'portfolio') return undefined;
+  if (env.STUDIO_GENERATION_ENABLED === 'true' || env.STUDIO_TRIALS_ENABLED === 'true' || env.RAZORPAY_TEST_ENABLED === 'true') {
+    throw new Error('Portfolio mode keeps generation, trials, and payments disabled.');
+  }
+  const rawFrontend = env.FRONTEND_URL?.trim();
+  if (!rawFrontend) return { frontendOrigin: undefined as string | undefined };
+  const productionRuntime = env.NODE_ENV === 'production';
+  const frontend = new URL(rawFrontend);
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(frontend.hostname);
+  if (frontend.origin !== rawFrontend.replace(/\/$/, '') ||
+    (frontend.protocol !== 'https:' && !(local && frontend.protocol === 'http:' && !productionRuntime))) {
+    throw new Error('FRONTEND_URL must be a valid application origin.');
+  }
+  return { frontendOrigin: frontend.origin };
+}
+
 export function clerkConfig(env: NodeJS.ProcessEnv) {
   const productionRuntime = env.NODE_ENV === 'production';
   const staging = env.SOCIALSTUDIO_DEPLOYMENT === 'staging';

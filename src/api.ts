@@ -49,7 +49,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { pool, queue, connection } from './core.js';
-import { clerkConfig } from './modules/accounts/auth-config.js';
+import { clerkConfig, portfolioConfig } from './modules/accounts/auth-config.js';
 import { requireOwner, studioAuthentication } from './modules/accounts/auth-middleware.js';
 import { connectAccounts } from './modules/accounts/users.js';
 import { demoRouter } from './modules/demo/routes.js';
@@ -66,7 +66,9 @@ import { razorpayTestConfig } from './modules/payments/razorpay.js';
 import { initTestBilling } from './modules/payments/ledger.js';
 import { razorpayWebhook, testBillingRouter } from './modules/payments/routes.js';
 
-const authConfig = clerkConfig(process.env);
+const portfolio = portfolioConfig(process.env);
+const authConfig = portfolio ? undefined : clerkConfig(process.env);
+const hostedClosed = Boolean(authConfig || portfolio);
 const privateMedia = authConfig ? privateMediaFromEnv() : undefined;
 const testBilling = authConfig ? razorpayTestConfig() : undefined;
 const generation = authConfig ? executionConfig() : undefined;
@@ -75,7 +77,7 @@ let redisHealth: ReturnType<typeof monitorRedis> | undefined;
 let draining = false;
 export const app = express();
 app.disable('x-powered-by');
-app.use(cors({ origin: authConfig?.frontendOrigin ?? '*' }));
+app.use(cors({ origin: authConfig?.frontendOrigin ?? portfolio?.frontendOrigin ?? '*' }));
 app.use('/api/demo', demoRouter({ directory: process.env.DEMO_MEDIA_DIR, publicBaseUrl: process.env.DEMO_PUBLIC_BASE_URL,
   videoBaseUrl: process.env.DEMO_PUBLIC_VIDEO_BASE_URL, imageBaseUrl: process.env.DEMO_PUBLIC_IMAGE_BASE_URL }));
 if (privateMedia?.router) app.use('/api/private-media', privateMedia.router);
@@ -107,13 +109,18 @@ if (authConfig) {
   app.use('/api', (_req, res) => {
     res.status(403).json({ error: 'This operation is unavailable in the hosted Studio.' });
   });
+} else if (portfolio) {
+  app.use('/api', (_req, res) => {
+    res.set('Cache-Control', 'private, no-store');
+    res.status(403).json({ error: 'Studio sign-in and generation are unavailable in portfolio mode.' });
+  });
 }
 
 const jsonBody = express.json({ limit: '50kb' });
 app.use((req, res, next) => /^\/api\/pipeline\/manual-visual\//i.test(req.path) ? next() : jsonBody(req, res, next));
 
 // Serve rendered videos and media assets
-if (!authConfig) {
+if (!hostedClosed) {
   for (const directory of ['runs', 'previews', 'generated-reel-visuals']) {
     app.use(`/media/${directory}`, express.static(path.resolve('media', directory)));
   }
@@ -150,6 +157,10 @@ if (authConfig) app.get('/ready', async (_req, res) => {
   } catch {
     return res.status(503).json({ status: 'unavailable', database: 'unavailable' });
   }
+});
+else if (portfolio) app.get('/ready', (_req, res) => {
+  if (draining) return res.status(503).json({ status: 'draining' });
+  return res.json({ status: 'ready', mode: 'portfolio' });
 });
 
 // Deep health check endpoint (validates Postgres & Redis connectivity)
@@ -1409,7 +1420,7 @@ if (fs.existsSync(dashboardDist)) {
 // Error middleware
 app.use((err: any, _req: any, res: any, next: any) => {
   if (res.headersSent) return next(err);
-  if (authConfig) {
+  if (hostedClosed) {
     if (err.status === 413) return res.status(413).json({ error: 'Request body is too large.' });
     if (err.status === 400) return res.status(400).json({ error: 'Invalid request body.' });
     console.error('[API] Unhandled request error.');
@@ -1432,8 +1443,8 @@ export const server =
     ? null
     : app.listen(port, process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', () => {
         console.log(`🚀 SocialStudio API running at http://localhost:${port}`);
-        if (process.env.REDIS_URL && (generation || process.env.REDIS_HEALTH_CHECK === 'true')) redisHealth = monitorRedis(connection);
-        if (authConfig) return;
+        if (authConfig && process.env.REDIS_URL && (generation || process.env.REDIS_HEALTH_CHECK === 'true')) redisHealth = monitorRedis(connection);
+        if (hostedClosed) return;
 
         // Auto-initialize DB schema if needed on startup
         try {
@@ -1456,7 +1467,7 @@ export const server =
         }
       });
 
-if (authConfig && server) {
+if (hostedClosed && server) {
   const stop = () => {
     if (draining) return;
     draining = true;
@@ -1465,8 +1476,10 @@ if (authConfig && server) {
     deadline.unref();
     server.close(async () => {
       clearTimeout(deadline);
-      connection.disconnect();
-      await Promise.allSettled([queue.close(), pool.end(), mongoose.disconnect()]);
+      if (authConfig) {
+        connection.disconnect();
+        await Promise.allSettled([queue.close(), pool.end(), mongoose.disconnect()]);
+      }
       console.log('[API] Shutdown complete.');
     });
   };

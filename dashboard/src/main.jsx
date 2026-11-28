@@ -1088,8 +1088,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                     <Volume2 size={16} />
                   </div>
                 </div>
-                <div className="stat-value">{clerkEnabled ? 'Saved audio' : 'Sarvam Neural'}</div>
-                <div className="stat-subtext">{clerkEnabled ? 'Voiceover generation unavailable' : 'sunny_hi_reels • Hinglish'}</div>
+                <div className="stat-value">{clerkEnabled || !canAccessStudio ? 'Saved audio' : 'Sarvam Neural'}</div>
+                <div className="stat-subtext">{clerkEnabled || !canAccessStudio ? 'Voiceover generation unavailable' : 'sunny_hi_reels • Hinglish'}</div>
               </div>
 
               <div className="stat-card">
@@ -1115,17 +1115,21 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                     <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#fafafa' }}>Create New Reel</h3>
                   </div>
                   <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                    {clerkEnabled ? 'Paste a script and save it as a draft.' :
-                      'Generate dynamic system design scripts or paste your own 7-key prompt with multi-stage audio synthesis.'}
+                    {!canAccessStudio && !clerkEnabled
+                      ? 'Studio sign-in and generation are unavailable in portfolio mode. Watch finished examples in Explore Demo.'
+                      : clerkEnabled
+                        ? 'Paste a script and save it as a draft.'
+                        : 'Generate dynamic system design scripts or paste your own 7-key prompt with multi-stage audio synthesis.'}
                   </p>
                 </div>
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
                   onClick={() => openSection('create')}
+                  disabled={!canAccessStudio && !onStudioRequired}
                   style={{ width: '100%', gap: 6 }}
                 >
-                  <span>Open Studio</span>
+                  <span>{!canAccessStudio && !onStudioRequired ? 'Sign-in Unavailable' : 'Open Studio'}</span>
                   <ArrowRight size={13} />
                 </button>
               </div>
@@ -1271,11 +1275,12 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => setActiveNav('create')}
+                  onClick={() => openSection('create')}
+                  disabled={!canAccessStudio && !onStudioRequired}
                   style={{ marginTop: 6, gap: 6 }}
                 >
                   <PlusCircle size={13} />
-                  <span>Create Your First Reel</span>
+                  <span>{!canAccessStudio && !onStudioRequired ? 'Sign-in Unavailable' : 'Create Your First Reel'}</span>
                 </button>
               </div>
             )}
@@ -1305,8 +1310,9 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                   type="button"
                   className="btn btn-primary"
                   onClick={() => {
+                    if (!canAccessStudio) { openSection('create'); return; }
                     handleStartNewReel();
-                    setActiveNav('create');
+                    openSection('create');
                   }}
                   style={{ height: 38, padding: '0 18px', gap: 8 }}
                 >
@@ -1330,7 +1336,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => setActiveNav('create')}
+                  onClick={() => openSection('create')}
                   style={{ marginTop: 6, gap: 6 }}
                 >
                   <PlusCircle size={13} />
@@ -1436,7 +1442,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => setActiveNav('create')}
+                  onClick={() => openSection('create')}
                   style={{ height: 38, padding: '0 18px', gap: 8 }}
                 >
                   <PlusCircle size={15} />
@@ -1459,7 +1465,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => setActiveNav('create')}
+                  onClick={() => openSection('create')}
                   style={{ marginTop: 6, gap: 6 }}
                 >
                   <PlusCircle size={13} />

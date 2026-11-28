@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import test from 'node:test';
 import express from 'express';
 import mongoose from 'mongoose';
-import { clerkConfig, type ClerkConfig } from '../src/modules/accounts/auth-config.js';
+import { clerkConfig, portfolioConfig, type ClerkConfig } from '../src/modules/accounts/auth-config.js';
 import { requireOwner, studioAuthentication } from '../src/modules/accounts/auth-middleware.js';
 import { accountProfile, connectAccounts, getStudioUser, OwnerIdentityMismatch, type StudioAccount, VerifiedEmailRequired,
   verifiedOwnerGoogleSubjectHash } from '../src/modules/accounts/users.js';
@@ -43,6 +43,16 @@ test('Clerk configuration fails closed for hosted Studio', () => {
   assert.throws(() => clerkConfig({ ...staging, MONGODB_URI: 'mongodb://localhost/studio' }), /verified certificates/);
   assert.throws(() => clerkConfig({ ...staging, STUDIO_GENERATION_ENABLED: 'true' }), /generation and trials disabled/);
   assert.throws(() => clerkConfig({ ...staging, NODE_ENV: 'development' }), /production runtime/);
+  assert.equal(portfolioConfig({ NODE_ENV: 'production' }), undefined);
+  assert.deepEqual(portfolioConfig({ NODE_ENV: 'production', SOCIALSTUDIO_DEPLOYMENT: 'portfolio' }), { frontendOrigin: undefined });
+  assert.deepEqual(portfolioConfig({ NODE_ENV: 'production', SOCIALSTUDIO_DEPLOYMENT: 'portfolio',
+    FRONTEND_URL: 'https://social-studio-olive.vercel.app/' }), { frontendOrigin: 'https://social-studio-olive.vercel.app' });
+  assert.throws(() => portfolioConfig({ NODE_ENV: 'production', SOCIALSTUDIO_DEPLOYMENT: 'portfolio',
+    FRONTEND_URL: 'http://localhost:5173' }), /application origin/);
+  assert.throws(() => portfolioConfig({ NODE_ENV: 'production', SOCIALSTUDIO_DEPLOYMENT: 'portfolio',
+    STUDIO_GENERATION_ENABLED: 'true' }), /disabled/);
+  assert.throws(() => portfolioConfig({ NODE_ENV: 'production', SOCIALSTUDIO_DEPLOYMENT: 'portfolio',
+    RAZORPAY_TEST_ENABLED: 'true' }), /disabled/);
 });
 
 test('owner eligibility requires a verified Clerk email, linked verified Google identity, and an optional pinned ID', () => {
@@ -109,6 +119,84 @@ test('Clerk session verification gates owner actions and isolates session owners
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test('portfolio production mode serves public demo and closes all protected endpoints without Clerk or Atlas', async () => {
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, ['--import', 'tsx', '-e', `
+    import('./src/api.ts').then(({ server }) => {
+      const announce = () => console.log('READY_URL=http://127.0.0.1:' + server.address().port);
+      if (server.listening) announce(); else server.once('listening', announce);
+    });
+  `], {
+    env: {
+      ...process.env,
+      NODE_ENV: 'production',
+      SOCIALSTUDIO_DEPLOYMENT: 'portfolio',
+      PORT: '0',
+      FRONTEND_URL: 'https://social-studio-olive.vercel.app',
+      DEMO_PUBLIC_VIDEO_BASE_URL: 'https://res.cloudinary.com/fixture/video/upload/socialstudio-demo',
+      DEMO_PUBLIC_IMAGE_BASE_URL: 'https://res.cloudinary.com/fixture/image/upload/socialstudio-demo',
+      REDIS_URL: 'redis://stale-legacy-host:6379',
+      START_WORKER: 'true',
+      CLERK_PUBLISHABLE_KEY: '',
+      CLERK_SECRET_KEY: '',
+      MONGODB_URI: '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk.toString(); });
+  child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+  try {
+    const base = await new Promise<string>((resolve, reject) => {
+      const deadline = setTimeout(() => reject(new Error(`Portfolio server did not start: ${stdout}\n${stderr}`)), 15_000);
+      child.stdout.on('data', () => {
+        const match = /READY_URL=(http:\/\/127\.0\.0\.1:\d+)/.exec(stdout);
+        if (match) { clearTimeout(deadline); resolve(match[1]); }
+      });
+      child.once('exit', code => {
+        clearTimeout(deadline);
+        reject(new Error(`Portfolio server exited early (${code}): ${stdout}\n${stderr}`));
+      });
+    });
+
+    const health = await fetch(`${base}/health`);
+    assert.equal(health.status, 200);
+    const ready = await fetch(`${base}/ready`);
+    assert.equal(ready.status, 200);
+    assert.deepEqual(await ready.json(), { status: 'ready', mode: 'portfolio' });
+
+    const reelsRes = await fetch(`${base}/api/demo/reels`, { headers: { Origin: 'https://social-studio-olive.vercel.app' } });
+    assert.equal(reelsRes.status, 200);
+    assert.equal(reelsRes.headers.get('access-control-allow-origin'), 'https://social-studio-olive.vercel.app');
+    const { reels } = await reelsRes.json() as { reels: Array<{ id: string }> };
+    assert.equal(reels.length, 5);
+
+    for (const [route, method] of [
+      ['/api/account', 'GET'],
+      ['/api/credits/balance', 'GET'],
+      ['/api/pipeline/sessions', 'GET'],
+      ['/api/pipeline/jobs', 'POST'],
+      ['/api/pipeline/render', 'POST'],
+      ['/api/videos', 'GET'],
+      ['/api/health', 'GET'],
+    ] as const) {
+      const closed = await fetch(`${base}${route}`, { method });
+      assert.equal(closed.status, 403, `${method} ${route} should be closed in portfolio mode`);
+    }
+    assert.equal((await fetch(`${base}/output/old-video.mp4`)).status, 404);
+  } finally {
+    if (child.exitCode === null) {
+      child.kill();
+      await new Promise<void>(resolve => {
+        if (child.exitCode !== null) return resolve();
+        const t = setTimeout(resolve, 3000);
+        child.once('exit', () => { clearTimeout(t); resolve(); });
+      });
+    }
   }
 });
 

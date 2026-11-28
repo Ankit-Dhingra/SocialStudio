@@ -52,6 +52,6 @@ export function AuthShell({ Studio }) {
     </ClerkProvider>;
   }
 
-  if (['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return <Studio />;
+  if (import.meta.env.VITE_PORTFOLIO_ONLY !== 'true' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return <Studio />;
   return <Studio canAccessStudio={false} accountControls={<span role="status">Sign-in is unavailable.</span>} />;
 }

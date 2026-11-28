@@ -25,9 +25,10 @@ pool.on('error', (err) => {
   console.warn('[Postgres Warning]:', err.message);
 });
 
+const portfolioMode = process.env.SOCIALSTUDIO_DEPLOYMENT === 'portfolio';
 let hasLoggedRedisWarning = false;
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-if (process.env.NODE_ENV === 'production' && process.env.REDIS_URL) {
+const redisUrl = portfolioMode ? 'redis://127.0.0.1:6379' : (process.env.REDIS_URL || 'redis://localhost:6379');
+if (!portfolioMode && process.env.NODE_ENV === 'production' && process.env.REDIS_URL) {
   const connectionUrl = configuredUrl(redisUrl, 'REDIS_URL');
   if (connectionUrl.protocol !== 'rediss:' && !(connectionUrl.protocol === 'redis:' && /^red-[a-z0-9]+$/.test(connectionUrl.hostname))) {
     throw new Error('Production Redis requires TLS or a Render private Key Value address.');
@@ -35,7 +36,8 @@ if (process.env.NODE_ENV === 'production' && process.env.REDIS_URL) {
 }
 export const connection = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
-  retryStrategy: () => 30000,
+  lazyConnect: portfolioMode,
+  retryStrategy: portfolioMode ? () => null : () => 30000,
   enableOfflineQueue: false,
   tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: true } : undefined,
 });
