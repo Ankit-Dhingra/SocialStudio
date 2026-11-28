@@ -1,0 +1,20 @@
+name: Release container check
+
+on:
+  push:
+    branches: [codex/production-saas]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Build and verify API and worker images
+        run: bash scripts/verify-release-containers.sh
