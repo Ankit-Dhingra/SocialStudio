@@ -26,6 +26,15 @@ function assertKey(key: string) {
   if (!keyPattern.test(key)) throw new Error('Invalid private media key.');
 }
 
+function cloudinaryUploadLimit(value: string | undefined, maximum: number, setting: string) {
+  if (value === undefined || value === '') return maximum;
+  const limit = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(limit) || limit < 1 || limit > maximum) {
+    throw new Error(`${setting} must be a positive byte count up to ${maximum}.`);
+  }
+  return limit;
+}
+
 export function localPrivateMedia(root: string, signingSecret: string, clock = Date.now): PrivateMedia {
   if (signingSecret.length < 32) throw new Error('PRIVATE_MEDIA_SIGNING_KEY must contain at least 32 characters.');
   root = path.resolve(root);
@@ -102,6 +111,10 @@ export function privateMediaFromEnv(env: NodeJS.ProcessEnv = process.env): Priva
   }
   const credentials = { cloud_name: cloudName, api_key: apiKey, api_secret: apiSecret };
   const deliveryType = 'authenticated' as const;
+  const imageUploadLimit = cloudinaryUploadLimit(env.CLOUDINARY_MAX_IMAGE_UPLOAD_BYTES, cloudinaryImageBytes,
+    'CLOUDINARY_MAX_IMAGE_UPLOAD_BYTES');
+  const videoUploadLimit = cloudinaryUploadLimit(env.CLOUDINARY_MAX_VIDEO_UPLOAD_BYTES, cloudinaryVideoBytes,
+    'CLOUDINARY_MAX_VIDEO_UPLOAD_BYTES');
 
   function asset(key: string) {
     assertKey(key);
@@ -170,7 +183,7 @@ export function privateMediaFromEnv(env: NodeJS.ProcessEnv = process.env): Priva
     },
     async put(key, source, _contentType) {
       const entry = asset(key);
-      await checkSource(source, entry.maxBytes);
+      await checkSource(source, entry.resourceType === 'video' ? videoUploadLimit : imageUploadLimit);
       const result = await cloudinary.uploader.upload(path.resolve(source), {
         ...credentials, type: deliveryType, resource_type: entry.resourceType,
         public_id: entry.publicId, asset_folder: prefix, overwrite: false,

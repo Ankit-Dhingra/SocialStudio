@@ -5,7 +5,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { clerkConfig, type ClerkConfig } from '../src/modules/accounts/auth-config.js';
 import { requireOwner, studioAuthentication } from '../src/modules/accounts/auth-middleware.js';
-import { accountProfile, connectAccounts, getStudioUser, type StudioAccount, VerifiedEmailRequired } from '../src/modules/accounts/users.js';
+import { accountProfile, connectAccounts, getStudioUser, OwnerIdentityMismatch, type StudioAccount, VerifiedEmailRequired,
+  verifiedOwnerGoogleSubjectHash } from '../src/modules/accounts/users.js';
 import { ownerFor, ownsSession } from '../src/modules/pipeline/session-owner.js';
 import type { ScriptSession } from '../src/modules/ai-script/master-script-service.js';
 import { getProject, importProject, initProjects, replaceProject } from '../src/modules/projects/repository.js';
@@ -28,6 +29,10 @@ test('Clerk configuration fails closed for hosted Studio', () => {
   assert.throws(() => clerkConfig(live), /verified certificates/);
   assert.throws(() => clerkConfig({ ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio?tlsAllowInvalidCertificates=true' }), /verified certificates/);
   assert.doesNotThrow(() => clerkConfig({ ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio' }));
+  const production = { ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio' };
+  assert.equal(clerkConfig(production)?.ownerAdminDisabled, true);
+  assert.equal(clerkConfig({ ...production, STUDIO_PRODUCTION_OWNER_ADMIN_ENABLED: 'true' })?.ownerAdminDisabled, false);
+  assert.throws(() => clerkConfig({ ...production, OWNER_PRIOR_CLERK_USER_ID: ownerId }), /distinct pinned Clerk IDs/);
   const staging = { ...config, SOCIALSTUDIO_DEPLOYMENT: 'staging', OWNER_CLERK_USER_ID: ownerId,
     MONGODB_URI: 'mongodb+srv://atlas.example.test/studio' };
   assert.equal(clerkConfig(staging)?.stagingOwnerOnly, true);
@@ -70,6 +75,7 @@ test('Clerk session verification gates owner actions and isolates session owners
   });
   app.get('/api/reel', (req, res) => res.sendStatus(reel && ownsSession(req, reel) ? 200 : 404));
   app.get('/api/admin', requireOwner(config), (_req, res) => res.sendStatus(200));
+  app.get('/api/production-admin', requireOwner({ ...config, ownerAdminDisabled: true }), (_req, res) => res.sendStatus(200));
   app.get('/staging/account', ...studioAuthentication({ ...config, stagingOwnerOnly: true, ownerClerkUserId: ownerId },
     async clerkUserId => ({ clerkUserId, role: 'owner', status: 'active' } as StudioAccount)),
   (_req, res) => res.sendStatus(200));
@@ -88,16 +94,18 @@ test('Clerk session verification gates owner actions and isolates session owners
     assert.equal(await request('/api/admin'), 401);
     const member = token('user_member');
     assert.equal(await request('/api/admin', token('user_member', 0, 'https://other.example.test')), 401);
+    assert.equal(await request('/api/admin', token(ownerId, 1, frontendOrigin, 'https://other.clerk.accounts.dev')), 401);
     assert.equal(await request('/api/admin', member), 403);
     assert.equal(await request('/api/admin', token(ownerId)), 403);
     assert.equal(await request('/api/admin', token(ownerId, 1)), 200);
+    assert.equal(await request('/api/production-admin', token(ownerId, 1)), 403);
     assert.equal(await request('/staging/account', member), 403);
     assert.equal(await request('/staging/account', token(ownerId, 1)), 200);
     assert.equal(await request('/api/reel', member, 'POST'), 201);
     assert.equal(await request('/api/reel', member), 200);
     assert.equal(await request('/api/reel', token(ownerId, 1)), 404);
     assert.equal(await request('/api/reel', token('user_suspended')), 403);
-    assert.deepEqual(requestedUsers, ['user_member', ownerId, ownerId, 'user_member', 'user_member', ownerId, 'user_suspended']);
+    assert.deepEqual(requestedUsers, ['user_member', ownerId, ownerId, ownerId, 'user_member', 'user_member', ownerId, 'user_suspended']);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
@@ -114,7 +122,8 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
   const profile = async (id: string) => ({
     id, firstName: 'Studio', lastName: 'Tester',
     primaryEmailAddress: { emailAddress: email, verification: { status: 'verified' } },
-    externalAccounts: [{ provider: 'google', emailAddress: email, verification: { status: 'verified' } }],
+    externalAccounts: [{ provider: 'google', providerUserId: 'verified-google-subject', emailAddress: email,
+      verification: { status: 'verified' } }],
   } as Parameters<typeof accountProfile>[0]);
 
   try {
@@ -188,6 +197,17 @@ test('MongoDB stores one account per Clerk ID, one owner, and no signup entitlem
       assert.equal(migrated?.session.ownerDigest, undefined);
       assert.equal(migrated?.session.job.status, 'failed');
       assert.equal(migrated?.session.renderState.status, 'idle');
+      const productionId = 'user_productionowner';
+      const mapping = { ...config, ownerClerkUserId: productionId, priorOwnerId: ownerId,
+        ownerGoogleSubjectHash: verifiedOwnerGoogleSubjectHash(await profile(ownerId), ownerId, email) };
+      const mapped = await getStudioUser(productionId, mapping, profile);
+      assert.equal(String(mapped._id), String(savedOwner._id));
+      assert.equal((await getProject(mapped.clerkUserId, legacy.id))?.projectId, legacy.id);
+      await assert.rejects(getStudioUser(ownerId, mapping, profile), OwnerIdentityMismatch);
+      await assert.rejects(getStudioUser(productionId, { ...mapping, ownerGoogleSubjectHash: '0'.repeat(64) }, profile),
+        OwnerIdentityMismatch);
+      await assert.rejects(getStudioUser('user_other', { ...mapping, ownerClerkUserId: 'user_other' }, profile),
+        OwnerIdentityMismatch);
       const recorded = await recordJob('user_other', createdSessionId!, 'visuals', 1, 'fixture-request');
       const same = await recordJob('user_other', createdSessionId!, 'visuals', 1, 'fixture-request');
       assert(recorded && same);

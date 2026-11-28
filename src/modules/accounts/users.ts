@@ -1,4 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
+import { createHash } from 'node:crypto';
 import { clerkClient } from '@clerk/express';
 import type { ClerkConfig } from './auth-config.js';
 
@@ -24,8 +25,20 @@ export async function connectAccounts(uri: string) {
 }
 
 export class VerifiedEmailRequired extends Error {}
+export class OwnerIdentityMismatch extends Error {}
 
 type ClerkProfile = Awaited<ReturnType<typeof clerkClient.users.getUser>>;
+
+export function verifiedOwnerGoogleSubjectHash(profile: ClerkProfile, id: string, ownerEmail: string) {
+  const primary = profile.primaryEmailAddress;
+  const google = profile.externalAccounts.filter(account => ['google', 'oauth_google'].includes(account.provider) &&
+    account.verification?.status === 'verified' && account.emailAddress.trim().toLowerCase() === ownerEmail);
+  if (profile.id !== id || primary?.verification?.status !== 'verified' ||
+    primary.emailAddress.trim().toLowerCase() !== ownerEmail || google.length !== 1 || !google[0].providerUserId) {
+    throw new OwnerIdentityMismatch();
+  }
+  return createHash('sha256').update(google[0].providerUserId).digest('hex');
+}
 
 export function accountProfile(profile: ClerkProfile, config: Pick<ClerkConfig, 'ownerEmail' | 'ownerClerkUserId'>) {
   const primary = profile.primaryEmailAddress;
@@ -45,8 +58,29 @@ export function accountProfile(profile: ClerkProfile, config: Pick<ClerkConfig, 
 
 export async function getStudioUser(clerkUserId: string, config: ClerkConfig,
   loadProfile = (id: string) => clerkClient.users.getUser(id)) {
+  if (config.priorOwnerId && config.ownerGoogleSubjectHash) {
+    if (clerkUserId === config.priorOwnerId) throw new OwnerIdentityMismatch();
+    if (clerkUserId === config.ownerClerkUserId) {
+      const profile = await loadProfile(clerkUserId);
+      if (verifiedOwnerGoogleSubjectHash(profile, clerkUserId, config.ownerEmail) !== config.ownerGoogleSubjectHash) {
+        throw new OwnerIdentityMismatch();
+      }
+      // Refuse to collapse an existing second Studio account into the original owner account.
+      const [owner, duplicate] = await Promise.all([
+        StudioUser.findOne({ clerkUserId: config.priorOwnerId, role: 'owner', status: 'active', email: config.ownerEmail }),
+        StudioUser.exists({ clerkUserId }),
+      ]);
+      if (!owner || duplicate) throw new OwnerIdentityMismatch();
+      return owner;
+    }
+  }
   const existing = await StudioUser.findOne({ clerkUserId });
-  if (existing) return existing;
+  if (existing) {
+    if (existing.role === 'owner' && config.ownerClerkUserId && clerkUserId !== config.ownerClerkUserId) {
+      throw new OwnerIdentityMismatch();
+    }
+    return existing;
+  }
 
   const profile = await loadProfile(clerkUserId);
   if (profile.id !== clerkUserId) throw new Error('Clerk profile identifier mismatch.');

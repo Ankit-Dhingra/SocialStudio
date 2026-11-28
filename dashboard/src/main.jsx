@@ -267,7 +267,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   const [stage, setStage] = useState(1);
 
   // Script Mode: 'ai' (Generate AI) or 'paste' (Paste Script)
-  const [scriptMode, setScriptMode] = useState('ai');
+  const [scriptMode, setScriptMode] = useState(clerkEnabled ? 'paste' : 'ai');
   const [customScriptText, setCustomScriptText] = useState('');
   const [pasteSuccess, setPasteSuccess] = useState(false);
 
@@ -295,7 +295,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   const [generatingStills, setGeneratingStills] = useState(false);
   const [automaticVisualJob, setAutomaticVisualJob] = useState('');
   const [automaticVisualProgress, setAutomaticVisualProgress] = useState(null);
-  const [visualMode, setVisualMode] = useState('automatic');
+  const [visualMode, setVisualMode] = useState(clerkEnabled ? 'manual' : 'automatic');
   const [visualPreviewError, setVisualPreviewError] = useState(null);
   const [selectedStill, setSelectedStill] = useState(null);
   const [selectedMotionFrame, setSelectedMotionFrame] = useState(null);
@@ -810,7 +810,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
   }
 
   useEffect(() => {
-    setVisualMode(session?.visualAssets?.source === 'manual' ? 'manual' : 'automatic');
+    setVisualMode(clerkEnabled || session?.visualAssets?.source === 'manual' ? 'manual' : 'automatic');
   }, [session?.id, session?.visualAssets?.source]);
 
   function acceptVisualPreviews(data) {
@@ -1088,8 +1088,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                     <Volume2 size={16} />
                   </div>
                 </div>
-                <div className="stat-value">Sarvam Neural</div>
-                <div className="stat-subtext">sunny_hi_reels • Hinglish</div>
+                <div className="stat-value">{clerkEnabled ? 'Saved audio' : 'Sarvam Neural'}</div>
+                <div className="stat-subtext">{clerkEnabled ? 'Voiceover generation unavailable' : 'sunny_hi_reels • Hinglish'}</div>
               </div>
 
               <div className="stat-card">
@@ -1115,7 +1115,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                     <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#fafafa' }}>Create New Reel</h3>
                   </div>
                   <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                    Generate dynamic system design scripts or paste your own 7-key prompt with multi-stage audio synthesis.
+                    {clerkEnabled ? 'Paste a script and save it as a draft.' :
+                      'Generate dynamic system design scripts or paste your own 7-key prompt with multi-stage audio synthesis.'}
                   </p>
                 </div>
                 <button
@@ -1608,7 +1609,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 >
                   <div className="timeline-step-circle">{stage > 1 ? <Check size={13} strokeWidth={2.5} /> : '1'}</div>
                   <div className="timeline-step-text">
-                    <span className="timeline-step-title">1. Generate Script</span>
+                    <span className="timeline-step-title">{clerkEnabled ? '1. Paste Script' : '1. Generate Script'}</span>
                     <span className="timeline-step-sub">7-Key Master Prompt</span>
                   </div>
                 </button>
@@ -1624,8 +1625,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 >
                   <div className="timeline-step-circle">{stage > 2 ? <Check size={13} strokeWidth={2.5} /> : '2'}</div>
                   <div className="timeline-step-text">
-                    <span className="timeline-step-title">2. Generate Voiceover</span>
-                    <span className="timeline-step-sub">Sarvam AI sunny_hi</span>
+                    <span className="timeline-step-title">{clerkEnabled ? '2. Voiceover' : '2. Generate Voiceover'}</span>
+                    <span className="timeline-step-sub">{clerkEnabled ? 'Saved narration' : 'Sarvam AI sunny_hi'}</span>
                   </div>
                 </button>
 
@@ -1657,7 +1658,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                   <div className="timeline-step-circle">4</div>
                   <div className="timeline-step-text">
                     <span className="timeline-step-title">4. Final 1080×1920 MP4</span>
-                    <span className="timeline-step-sub">Render & Export</span>
+                    <span className="timeline-step-sub">{clerkEnabled ? 'Saved export' : 'Render & Export'}</span>
                   </div>
                 </button>
               </nav>
@@ -1667,14 +1668,14 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {/* SCRIPT SUB-SWITCHER: GENERATE AI vs PASTE SCRIPT */}
                   <div className="script-mode-switcher">
-                    <button
+                    {!clerkEnabled && <button
                       type="button"
                       className={`script-mode-btn ${scriptMode === 'ai' ? 'active' : ''}`}
                       onClick={() => setScriptMode('ai')}
                     >
                       <Sparkles size={13} />
                       <span>Generate Script (AI)</span>
-                    </button>
+                    </button>}
                     <button
                       type="button"
                       className={`script-mode-btn ${scriptMode === 'paste' ? 'active' : ''}`}
@@ -2060,7 +2061,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                               </div>
 
                               {/* AI Refine Prompt */}
-                              <div style={{ padding: 12, background: '#141417', borderRadius: 8, border: '1px solid #222226' }}>
+                              {!clerkEnabled && <div style={{ padding: 12, background: '#141417', borderRadius: 8, border: '1px solid #222226' }}>
                                 <span className="input-label" style={{ marginBottom: 6, display: 'block' }}>Or Refine with AI Prompt:</span>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                   <input
@@ -2082,7 +2083,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                                     <span>Refine</span>
                                   </button>
                                 </div>
-                              </div>
+                              </div>}
                             </div>
                           )}
 
@@ -2201,12 +2202,13 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                         </div>
                         <div>
                           <div className="voiceover-status-title">
-                            {activeAudio ? 'Voiceover Synthesized & Synced' : 'Ready to Synthesize Spoken Narration'}
+                            {activeAudio ? 'Voiceover Synthesized & Synced' :
+                              clerkEnabled ? 'Voiceover generation unavailable' : 'Ready to Synthesize Spoken Narration'}
                           </div>
                           <div className="voiceover-status-sub">
                             {activeAudio
                               ? `Master track duration: ~${Math.round(activeAudio.totalDurationSec || 0)}s • ${scenes.length} cuts synchronized`
-                              : session?.voiceoverNeedsRefresh
+                              : session?.voiceoverNeedsRefresh && !clerkEnabled
                                 ? 'Original narration restored. Generate a new voiceover to update the reel.'
                                 : `Estimated duration: ~${totalTargetSec}s • ${scenes.length} storyboard scenes`}
                           </div>
@@ -2224,7 +2226,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                           <span>Save as Draft</span>
                         </button>
 
-                        <button
+                        {!clerkEnabled && <button
                           type="button"
                           className="btn btn-primary"
                           disabled={audioSynthesizing}
@@ -2237,7 +2239,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                             <Volume2 size={14} />
                           )}
                           <span>{audioSynthesizing ? 'Synthesizing Audio...' : activeAudio ? 'Re-Synthesize Audio' : 'Synthesize Voiceover'}</span>
-                        </button>
+                        </button>}
 
                         <button
                           type="button"
@@ -2425,8 +2427,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                             Review camera moves and cuts with the saved voiceover, or inspect individual frames.
                           </p>
                           <div className="visual-mode-switch" role="group" aria-label="Visual generation mode">
-                            <button type="button" aria-pressed={visualMode === 'automatic'} disabled={generatingStills}
-                              onClick={() => setVisualMode('automatic')}>Automatic (Groq)</button>
+                            {!clerkEnabled && <button type="button" aria-pressed={visualMode === 'automatic'} disabled={generatingStills}
+                              onClick={() => setVisualMode('automatic')}>Automatic (Groq, experimental)</button>}
                             <button type="button" aria-pressed={visualMode === 'manual'} disabled={generatingStills}
                               onClick={() => setVisualMode('manual')}>Manual (Import JSON)</button>
                           </div>
@@ -2436,7 +2438,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                         </div>
 
                         <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 24, alignItems: 'center' }}>
-                          {(visualMode === 'automatic' || (clerkEnabled && session?.visualAssets?.source === 'manual')) && <button
+                          {!clerkEnabled && visualMode === 'automatic' && <button
                             type="button"
                             className="btn btn-primary"
                             disabled={generatingStills}
@@ -2448,7 +2450,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                             ) : (
                               <Camera size={13} />
                             )}
-                            <span>{generatingStills ? 'Generating Visuals…' : visualMode === 'manual' ? 'Generate Scene Previews' : 'Generate Visuals'}</span>
+                            <span>{generatingStills ? 'Generating Visuals…' : 'Generate Visuals'}</span>
                           </button>}
 
                           <button
@@ -2461,7 +2463,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                             <span>Save as Draft</span>
                           </button>
 
-                          <button
+                          {!clerkEnabled && <button
                             type="button"
                             className="btn btn-emerald"
                             disabled={generatingStills || awaitingManualVisuals}
@@ -2470,7 +2472,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                           >
                             <span>Next: Render Video</span>
                             <ArrowRight size={13} />
-                          </button>
+                          </button>}
                         </div>
                         {visualMode === 'automatic' && automaticVisualJob === session?.id && (
                           <p role="status" style={{ marginTop: -12, marginBottom: 20, color: 'var(--text-secondary)' }}>
@@ -2493,7 +2495,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                       )}
                       {!!session?.visualAssets?.unresolvedScenes?.length && (
                         <p role="status" className="text-sm text-amber-200">
-                          Visual planning is incomplete for scenes {session.visualAssets.unresolvedScenes.map(index => index + 1).join(', ')}. Generate Stills retries the flagged scenes.
+                          Visual planning is incomplete for scenes {session.visualAssets.unresolvedScenes.map(index => index + 1).join(', ')}.
+                          {!clerkEnabled && ' Generate Stills retries the flagged scenes.'}
                         </p>
                       )}
                       {session?.visualAssets?.review?.status === 'unavailable' && (
@@ -2535,6 +2538,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                       {session?.id && !awaitingManualVisuals && (!clerkEnabled || session.visualAssets?.fingerprint) && <MotionPreview
                         key={`${session.id}:${audioResult?.fullAudioUrl || session.audioResult?.fullAudioUrl || ''}:${session.visualAssets?.fingerprint || ''}`}
                         sessionId={session.id} scenes={session.storyboard?.scenes ?? []} toApiUrl={toApiUrl}
+                        canGenerate={!clerkEnabled}
                         visualRevision={session.visualAssets?.fingerprint}
                         onProject={setSession}
                         onReviewedRevision={setReviewedVisualRevision}
@@ -2589,11 +2593,12 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                         Stage 4: 1080×1920 MP4 Video Export
                       </h3>
                       <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                        Hardware-accelerated Remotion rendering with locked audio and strict Media QA verification.
+                        {clerkEnabled ? 'Play or download the saved export.' :
+                          'Hardware-accelerated Remotion rendering with locked audio and strict Media QA verification.'}
                       </p>
                     </div>
 
-                    <button
+                    {!clerkEnabled && <button
                       type="button"
                       className="btn btn-primary"
                       disabled={rendering || Boolean(session?.visualAssets?.unresolvedScenes?.length)}
@@ -2607,10 +2612,10 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                     >
                       {rendering ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
                       <span>{rendering ? `Rendering (${renderProgress}%)` : 'Start Render'}</span>
-                    </button>
+                    </button>}
                   </div>
 
-                  {!!session?.visualAssets?.unresolvedScenes?.length && (
+                  {!clerkEnabled && !!session?.visualAssets?.unresolvedScenes?.length && (
                     <p role="status" className="text-sm text-amber-200">Return to visual previews and retry the flagged scenes to enable export.</p>
                   )}
 
@@ -2655,7 +2660,8 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                         <video
                           src={toApiUrl(renderedMediaUrl)}
                           controls
-                          autoPlay
+                          autoPlay={!clerkEnabled}
+                          preload={clerkEnabled ? 'none' : undefined}
                           loop
                           style={{
                             width: '100%',

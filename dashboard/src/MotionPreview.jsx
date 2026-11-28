@@ -5,7 +5,7 @@ import { clerkEnabled, hostedProject, pipelineFetch, runHostedJob } from './pipe
 const cameras = ['locked', 'push-in', 'pull-back', 'track-left', 'track-right', 'rise'];
 const reviewNames = { hook: 'Opening', transition: 'Into the explanation', ending: 'Ending' };
 
-export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision, visualRevision, onProject }) {
+export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision, visualRevision, onProject, canGenerate = true }) {
   const [sceneIndex, setSceneIndex] = useState(0);
   const [scope, setScope] = useState('hook');
   const [preview, setPreview] = useState(null);
@@ -117,7 +117,7 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
 
   return (
     <section className="motion-preview" aria-label="Motion preview">
-      <div className="motion-preview-controls">
+      {canGenerate && <div className="motion-preview-controls">
         <label>
           Starting scene
           <select value={sceneIndex} onChange={event => setSceneIndex(Number(event.target.value))} disabled={busy || Boolean(reviewNames[scope])}>
@@ -137,12 +137,13 @@ export function MotionPreview({ sessionId, scenes, toApiUrl, onReviewedRevision,
         <button type="button" className="btn btn-primary" onClick={() => void generate()} disabled={busy}>
           <Play size={14} /> {busy ? 'Preparing preview…' : 'Generate Motion Preview'}
         </button>
-      </div>
+      </div>}
       {busy && <p role="status">{uploading ? 'Saving app screenshot…' : job?.status === 'rendering' ? `Rendering with saved voiceover… ${job.progress}%` : 'Directing scenes from the script…'}</p>}
       {error && <p role="alert" className="motion-preview-error">{error}</p>}
       {preview && (
         <div className="motion-preview-review">
-          <video key={preview.mediaUrl} ref={video} src={toApiUrl(preview.mediaUrl)} controls playsInline preload="metadata" />
+          <video key={preview.mediaUrl} ref={video} src={toApiUrl(preview.mediaUrl)} controls playsInline
+            preload={clerkEnabled ? 'none' : 'metadata'} />
           <div>
             <h4>Shot list</h4>
             <p>{reviewNames[preview.scope] ?? `Scene ${preview.sceneIndex + 1}`} · {preview.durationSec.toFixed(1)}s</p>

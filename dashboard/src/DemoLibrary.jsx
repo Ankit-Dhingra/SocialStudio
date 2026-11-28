@@ -11,6 +11,7 @@ function runtime(seconds) {
 export function DemoLibrary() {
   const [reels, setReels] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [playing, setPlaying] = useState(false);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -47,8 +48,12 @@ export function DemoLibrary() {
     {reels?.length === 0 && <p role="status">Demo reels are not available yet.</p>}
     {selected && <div className="demo-layout">
       <section className="demo-player" aria-labelledby="demo-reel-title">
-        <video key={selected.id} aria-label={selected.title} src={mediaUrl(selected.videoUrl)} poster={mediaUrl(selected.thumbnailUrl)}
-          controls playsInline preload="metadata" />
+        {playing ? <video key={selected.id} aria-label={selected.title} src={mediaUrl(selected.videoUrl)}
+          poster={mediaUrl(selected.thumbnailUrl)} controls playsInline autoPlay /> :
+          <button className="demo-poster" type="button" onClick={() => setPlaying(true)}>
+            <img src={mediaUrl(selected.thumbnailUrl)} alt="" />
+            <span>Play {selected.title}</span>
+          </button>}
         <div aria-live="polite">
           <h2 id="demo-reel-title">{selected.title}</h2>
           <p>{selected.description}</p>
@@ -56,7 +61,12 @@ export function DemoLibrary() {
       </section>
       <section className="demo-reel-list" aria-label="Demo reel selection">
         {reels.map(reel => <button className="demo-reel-choice" type="button" key={reel.id}
-          aria-pressed={reel.id === selectedId} onClick={() => setSelectedId(reel.id)}>
+          aria-pressed={reel.id === selectedId} onClick={() => {
+            if (reel.id !== selectedId) {
+              setSelectedId(reel.id);
+              setPlaying(false);
+            }
+          }}>
           <img src={mediaUrl(reel.thumbnailUrl)} alt="" width="54" height="96" />
           <span><strong>{reel.title}</strong><small>{reel.category} · {runtime(reel.durationSeconds)}</small></span>
         </button>)}

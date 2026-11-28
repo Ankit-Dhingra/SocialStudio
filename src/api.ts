@@ -143,7 +143,8 @@ if (authConfig) app.get('/ready', async (_req, res) => {
   try {
     if (!mongoose.connection.db) throw new Error('Database is unavailable.');
     await mongoose.connection.db.command({ ping: 1 }, { timeoutMS: 2_000 });
-    const redis = redisHealth?.read().status ?? (generation ? 'unavailable' : 'disabled');
+    const redis = redisHealth?.read().status ??
+      (generation || process.env.REDIS_HEALTH_CHECK === 'true' ? 'unavailable' : 'disabled');
     if (redis !== 'disabled' && redis !== 'ok') return res.status(503).json({ status: 'unavailable', database: 'ok', redis });
     return res.json({ status: 'ready', database: 'ok', redis });
   } catch {

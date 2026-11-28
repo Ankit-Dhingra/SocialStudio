@@ -35,6 +35,14 @@ export function clerkConfig(env: NodeJS.ProcessEnv) {
   const publishableKey = env.CLERK_PUBLISHABLE_KEY!.trim();
   const secretKey = env.CLERK_SECRET_KEY!.trim();
   const ownerClerkUserId = env.OWNER_CLERK_USER_ID?.trim() || undefined;
+  const priorOwnerId = env.OWNER_PRIOR_CLERK_USER_ID?.trim();
+  const ownerGoogleSubjectHash = env.OWNER_GOOGLE_SUBJECT_HASH?.trim();
+  if ((priorOwnerId || ownerGoogleSubjectHash) &&
+    (!productionRuntime || staging || !priorOwnerId || !ownerClerkUserId || priorOwnerId === ownerClerkUserId ||
+      !/^user_[a-zA-Z0-9]+$/.test(priorOwnerId) || !/^user_[a-zA-Z0-9]+$/.test(ownerClerkUserId) ||
+      !/^[a-f0-9]{64}$/.test(ownerGoogleSubjectHash ?? ''))) {
+    throw new Error('Production owner migration requires distinct pinned Clerk IDs and a verified Google subject hash.');
+  }
   if (staging) {
     if (!publishableKey.startsWith('pk_test_') || !secretKey.startsWith('sk_test_') || !ownerClerkUserId) {
       throw new Error('Hosted staging requires Clerk development keys and a pinned owner.');
@@ -56,6 +64,8 @@ export function clerkConfig(env: NodeJS.ProcessEnv) {
     ownerEmail: env.OWNER_EMAIL!.trim().toLowerCase(),
     ownerClerkUserId,
     requireOwnerMfa: productionRuntime || env.OWNER_REQUIRE_MFA === 'true',
+    ...(priorOwnerId && ownerGoogleSubjectHash && { priorOwnerId, ownerGoogleSubjectHash }),
+    ...((productionRuntime && !staging) && { ownerAdminDisabled: env.STUDIO_PRODUCTION_OWNER_ADMIN_ENABLED !== 'true' }),
     ...(staging && { stagingOwnerOnly: true }),
   };
 }

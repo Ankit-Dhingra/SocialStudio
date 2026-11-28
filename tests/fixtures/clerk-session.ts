@@ -13,11 +13,11 @@ export function signedSessions() {
     secretKey: 'sk_test_mock', jwtKey: publicKey.export({ format: 'pem', type: 'spki' }).toString(),
     mongodbUri: 'unused', ownerEmail: fixtureOwnerEmail, ownerClerkUserId: fixtureOwnerId, requireOwnerMfa: true,
   };
-  const token = (sub: string, secondFactorAge = -1, azp = fixtureFrontendOrigin) => {
+  const token = (sub: string, secondFactorAge = -1, azp = fixtureFrontendOrigin, iss = `https://${clerkHostname}`) => {
     const now = Math.floor(Date.now() / 1000);
     const header = { alg: 'RS256', typ: 'JWT', kid: 'studio-test', cat: 'cl_B7d4PD111AAA' };
     const claims = { sub, azp, sid: `sess_${sub}`, sts: 'active', fva: [0, secondFactorAge],
-      iss: `https://${clerkHostname}`, iat: now, nbf: now - 5, exp: now + 60, v: 2 };
+      iss, iat: now, nbf: now - 5, exp: now + 60, v: 2 };
     const message = [header, claims].map(part => Buffer.from(JSON.stringify(part)).toString('base64url')).join('.');
     return `${message}.${sign('RSA-SHA256', Buffer.from(message), privateKey).toString('base64url')}`;
   };

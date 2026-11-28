@@ -14,6 +14,8 @@
     "export:visual-source-pack": "tsx scripts/export-visual-source-pack.ts",
     "demo:prepare": "tsx scripts/prepare-demo-media.ts",
     "media:cleanup": "tsx scripts/clean-temporary-media.ts",
+    "media:cloudinary-usage": "tsx scripts/cloudinary-usage.ts",
+    "owner:verify-production": "tsx scripts/verify-owner-identity.ts",
     "bundle:remotion": "tsx scripts/bundle-remotion.ts",
     "preview:design": "tsx scripts/render-design-showcase.ts",
     "start": "tsx src/api.ts"

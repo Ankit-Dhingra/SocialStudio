@@ -50,6 +50,8 @@ test('production requires configured Cloudinary credentials when private media i
   assert.throws(() => privateMediaFromEnv({ NODE_ENV: 'production', PRIVATE_MEDIA_DRIVER: 'local' }), /Cloudinary/);
   assert.throws(() => privateMediaFromEnv({ PRIVATE_MEDIA_DRIVER: 'r2' }), /Cloudinary/);
   assert.throws(() => privateMediaFromEnv({ ...cloudinaryEnv, CLOUDINARY_API_SECRET: '' }), /invalid or missing/);
+  assert.throws(() => privateMediaFromEnv({ ...cloudinaryEnv, CLOUDINARY_MAX_VIDEO_UPLOAD_BYTES: '100000001' }),
+    /CLOUDINARY_MAX_VIDEO_UPLOAD_BYTES/);
 });
 
 test('Cloudinary uploads authenticated media and signs bounded reads', async t => {
@@ -86,6 +88,9 @@ test('Cloudinary uploads authenticated media and signs bounded reads', async t =
         ? new Response('m', { status: 206, headers: { 'content-range': 'bytes 0-0/5' } })
         : new Response('media'));
     await storage.verify!(key);
+    const capped = privateMediaFromEnv({ ...cloudinaryEnv, CLOUDINARY_MAX_VIDEO_UPLOAD_BYTES: '4' })!;
+    await assert.rejects(capped.put(key, source, 'video/mp4'), /source size/);
+    await capped.verify!(key);
     const destination = path.join(root, 'download.mp4');
     await storage.get!(key, destination);
     assert.equal(await readFile(destination, 'utf8'), 'media');
