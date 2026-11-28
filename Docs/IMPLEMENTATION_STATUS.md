@@ -252,3 +252,9 @@ No new charges or subscriptions were approved. The release changes are committed
 ### Dedicated Atlas cluster provisioned
 
 After the owner freed Atlas capacity, the CLI created `SocialStudio` on the Free M0 tier in AWS `US_EAST_1` within the dedicated SocialStudio project. Atlas confirmed the cluster is available. Automatic approval review blocked creation of the scoped database user and a four-hour workstation IP entry pending explicit authorization. The copy of the nine reviewed projects and 113 existing media bindings remains pending those access grants.
+
+### Dedicated SocialStudio library migrated
+
+After explicit owner approval, Atlas confirmed the dedicated application user's only role is `readWrite` on `socialstudio` and its only scope is the new `SocialStudio` cluster. The migration workstation received a single-address entry with a four-hour expiry. Connections were saved in ignored local files.
+
+The dry run matched all nine reviewed projects and 113 media bindings. The transaction copied one owner account and nine project records to the dedicated database. Independent readback confirmed one owner, all nine projects and 113 bindings. Every signed Cloudinary export passed a byte-range check, and an unrelated owner ID could not retrieve any of the projects. The migration read the DevTinder source without writing to it. Render still lists only the public production API. Hosted staging and Razorpay Test Mode remain pending the separate service and approval to configure its private secret store.
