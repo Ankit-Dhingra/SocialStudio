@@ -6,7 +6,7 @@ The local creator workflow and the currently running Render deployment are indep
 
 Complete the development Clerk steps in [Set up the Studio owner](OWNER_SETUP.md). Begin with the local MongoDB URL already configured for the owner check.
 
-The verified Clerk development owner and the nine completed projects are now in the existing Atlas `socialstudio` database. The scoped Atlas connection is stored separately from the original local owner verification settings. The cloud project records were verified through the real owner’s Studio session on loopback. Copy private media only after verifying Cloudinary staging playback and project isolation.
+The verified Clerk development owner and the nine completed projects are now in the existing Atlas `socialstudio` database. The scoped Atlas connection is stored separately from the original local owner verification settings. The nine reviewed projects have 113 authenticated Cloudinary media links. Readback verified all nine signed exports and an unrelated owner could not retrieve the records.
 
 Atlas now has `socialstudio.users` in the existing free `Cluster0` in the DevTinder project. In **Database & Network Access → Database Users → Add New Database User**, create a dedicated `socialstudio_app` password user. Under **Specific Privileges**, grant `readWrite` on the `socialstudio` database. Restrict the user to `Cluster0` if the dashboard offers resource restriction. Keep the generated password in a password manager or the deployment secret store. Open **Cluster0 → Connect → Drivers** and configure `MONGODB_URI` with `/socialstudio` as the database and the scoped credentials. URL-encode the password if needed. Add only an explicitly approved deployment IP range if the existing access list does not permit the connection. [Atlas database users](https://www.mongodb.com/docs/atlas/security-add-mongodb-users/)
 
@@ -28,7 +28,9 @@ Omit `--copy-media` when migrating metadata only. Check the reported media count
 3. For guest demos, run `npm run demo:prepare`. Upload only the five approved MP4s and five JPEGs with public IDs `socialstudio-demo/<reel-id>` using public upload delivery. Set `DEMO_PUBLIC_VIDEO_BASE_URL=https://res.cloudinary.com/<cloud-name>/video/upload/socialstudio-demo` and `DEMO_PUBLIC_IMAGE_BASE_URL=https://res.cloudinary.com/<cloud-name>/image/upload/socialstudio-demo`. Verify guest playback and seeking before publishing the catalog.
 4. Monitor the shared Free plan credit balance during staging. R2 is disabled in the application. The local `npm run media:cleanup` command only removes expired local `tmp-` objects.
 
-The live staging check on November 28, 2026 used the scoped Contributor key and a synthetic MP4. Cloudinary accepted authenticated upload, returned the original bytes on a signed download, supported byte-range seeking, and denied unsigned and expired links. Browser playback through the signed-in Studio and migration of saved media remain staging checks.
+The live staging check on November 28, 2026 used the scoped Contributor key and a synthetic MP4. Cloudinary accepted authenticated upload and a repeat with overwrite disabled, returned the original bytes on a signed download, supported byte-range seeking, and denied unsigned and expired links. The signed-in owner received the synthetic link from the loopback Studio API. An anonymous project list request returned 401.
+
+All five approved originals and their thumbnails are published on Cloudinary Free. The guest demo catalog returned five reels and every listed asset returned valid CDN byte ranges. Production catalog configuration remains pending.
 
 [Cloudinary Free plan](https://cloudinary.com/pricing/compare-plans) · [Authenticated media](https://cloudinary.com/documentation/control_access_to_media) · [Billing and credits](https://cloudinary.com/documentation/billing_and_plans)
 
@@ -71,5 +73,5 @@ Keep `STUDIO_TRIALS_ENABLED=false`. An isolated test can enable claims with `STU
 
 1. Verify the intended owner with the Clerk development keys and recent MFA. Verify the scoped Atlas connection and migrate only reviewed owner projects.
 2. Start the existing API image in isolated Linux staging and verify managed Redis, graceful termination, and memory headroom. Verify the two workers independently and keep generation private.
-3. Once approved and configured, verify private R2 reads and test-mode Razorpay checkout and webhooks. Upload the five approved demo reels and verify public guest browser playback.
+3. Verify signed-in Cloudinary playback and public guest playback in the staging Studio. Verify test-mode Razorpay checkout and webhooks once the staging API is reachable.
 4. Complete the bounded saved-project live Groq test and verify its generated MP4. Review spend and optimize render capacity on the intended host before reconsidering public paid generation.
