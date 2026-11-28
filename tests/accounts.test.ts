@@ -28,6 +28,16 @@ test('Clerk configuration fails closed for hosted Studio', () => {
   assert.throws(() => clerkConfig(live), /verified certificates/);
   assert.throws(() => clerkConfig({ ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio?tlsAllowInvalidCertificates=true' }), /verified certificates/);
   assert.doesNotThrow(() => clerkConfig({ ...live, MONGODB_URI: 'mongodb+srv://atlas.example.test/studio' }));
+  const staging = { ...config, SOCIALSTUDIO_DEPLOYMENT: 'staging', OWNER_CLERK_USER_ID: ownerId,
+    MONGODB_URI: 'mongodb+srv://atlas.example.test/studio' };
+  assert.equal(clerkConfig(staging)?.stagingOwnerOnly, true);
+  assert.equal(clerkConfig(staging)?.requireOwnerMfa, true);
+  assert.throws(() => clerkConfig({ ...staging, OWNER_CLERK_USER_ID: '' }), /pinned owner/);
+  assert.throws(() => clerkConfig({ ...staging, ...live }), /Clerk development keys/);
+  assert.throws(() => clerkConfig({ ...staging, FRONTEND_URL: 'http://localhost:5173' }), /application origin/);
+  assert.throws(() => clerkConfig({ ...staging, MONGODB_URI: 'mongodb://localhost/studio' }), /verified certificates/);
+  assert.throws(() => clerkConfig({ ...staging, STUDIO_GENERATION_ENABLED: 'true' }), /generation and trials disabled/);
+  assert.throws(() => clerkConfig({ ...staging, NODE_ENV: 'development' }), /production runtime/);
 });
 
 test('owner eligibility requires a verified Clerk email, linked verified Google identity, and an optional pinned ID', () => {
@@ -60,6 +70,9 @@ test('Clerk session verification gates owner actions and isolates session owners
   });
   app.get('/api/reel', (req, res) => res.sendStatus(reel && ownsSession(req, reel) ? 200 : 404));
   app.get('/api/admin', requireOwner(config), (_req, res) => res.sendStatus(200));
+  app.get('/staging/account', ...studioAuthentication({ ...config, stagingOwnerOnly: true, ownerClerkUserId: ownerId },
+    async clerkUserId => ({ clerkUserId, role: 'owner', status: 'active' } as StudioAccount)),
+  (_req, res) => res.sendStatus(200));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -78,6 +91,8 @@ test('Clerk session verification gates owner actions and isolates session owners
     assert.equal(await request('/api/admin', member), 403);
     assert.equal(await request('/api/admin', token(ownerId)), 403);
     assert.equal(await request('/api/admin', token(ownerId, 1)), 200);
+    assert.equal(await request('/staging/account', member), 403);
+    assert.equal(await request('/staging/account', token(ownerId, 1)), 200);
     assert.equal(await request('/api/reel', member, 'POST'), 201);
     assert.equal(await request('/api/reel', member), 200);
     assert.equal(await request('/api/reel', token(ownerId, 1)), 404);

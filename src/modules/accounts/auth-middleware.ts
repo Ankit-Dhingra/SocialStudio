@@ -24,7 +24,13 @@ export function studioAuthentication(config: ClerkConfig, loadAccount = getStudi
       if (!auth.isAuthenticated || !auth.userId || auth.sessionClaims.azp !== config.frontendOrigin) {
         return res.status(401).json({ error: 'Sign in to continue.' });
       }
+      if (config.stagingOwnerOnly && auth.userId !== config.ownerClerkUserId) {
+        return res.status(403).json({ error: 'Hosted staging is restricted to the Studio owner.' });
+      }
       const account = await loadAccount(auth.userId, config);
+      if (config.stagingOwnerOnly && account.role !== 'owner') {
+        return res.status(403).json({ error: 'Hosted staging is restricted to the Studio owner.' });
+      }
       if (account.status !== 'active') return res.status(403).json({ error: 'This account is unavailable.' });
       res.locals.studioAccount = account;
       res.locals.studioMfaAge = auth.factorVerificationAge?.[1];

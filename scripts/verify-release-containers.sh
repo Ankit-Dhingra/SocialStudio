@@ -6,19 +6,20 @@ network="${suffix}-net"
 mongo="${suffix}-mongo"
 redis="${suffix}-redis"
 api="${suffix}-api"
+staging="${suffix}-staging"
 generation="${suffix}-generation"
 renderer="${suffix}-renderer"
 fixtures="$(mktemp -d)"
 
 cleanup() {
   local exit_code=$?
-  for container in "$api" "$generation" "$renderer"; do
+  for container in "$api" "$staging" "$generation" "$renderer"; do
     if docker inspect "$container" >/dev/null 2>&1; then
       printf '\nContainer log for %s\n' "$container"
       docker logs "$container" || true
     fi
   done
-  docker rm -f "$api" "$generation" "$renderer" "$mongo" "$redis" >/dev/null 2>&1 || true
+  docker rm -f "$api" "$staging" "$generation" "$renderer" "$mongo" "$redis" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   find "$fixtures" -maxdepth 1 -type f -delete
   rmdir "$fixtures"
@@ -75,7 +76,8 @@ docker run -d --name "$api" --memory 512m "${common[@]}" \
   -e FRONTEND_URL=https://studio.example.invalid -e OWNER_EMAIL=owner@example.invalid \
   -e STUDIO_GENERATION_ENABLED=false -e REDIS_HEALTH_CHECK=true "${suffix}:api" >/dev/null
 
-retry docker exec "$api" node -e '
+check_api() {
+  docker exec "$1" node -e '
   const assert = require("node:assert/strict");
   (async () => {
     const base = "http://127.0.0.1:4000";
@@ -86,6 +88,17 @@ retry docker exec "$api" node -e '
     assert.equal((await fetch(base + "/api/account")).status, 401);
     console.log("API health, MongoDB TLS, Redis readiness and anonymous authorization verified.");
   })().catch(() => process.exit(1));'
+}
+retry check_api "$api"
+
+staging_publishable="pk_test_$(printf '%s' 'clerk.example.invalid$' | base64 -w0)"
+docker run -d --name "$staging" --memory 512m "${common[@]}" \
+  -e SOCIALSTUDIO_DEPLOYMENT=staging -e "CLERK_PUBLISHABLE_KEY=$staging_publishable" \
+  -e CLERK_SECRET_KEY=sk_test_release_fixture -e FRONTEND_URL=https://staging.example.invalid \
+  -e OWNER_EMAIL=owner@example.invalid -e OWNER_CLERK_USER_ID=user_release_fixture \
+  -e STUDIO_GENERATION_ENABLED=false -e STUDIO_TRIALS_ENABLED=false \
+  -e REDIS_HEALTH_CHECK=true "${suffix}:api" >/dev/null
+retry check_api "$staging"
 
 worker_config='{"caps":{"dailyMicros":100,"monthlyMicros":100,"userDailyMicros":100,"providerDailyMicros":100},"operations":{"render":{"credits":1,"computeMicros":1,"providers":{}},"refine":{"credits":1,"computeMicros":0,"providers":{"groq":{"attempts":1,"microsPerCall":1}}}}}'
 worker=(
@@ -101,14 +114,15 @@ ready_worker() {
 }
 retry ready_worker "$generation" generation
 retry ready_worker "$renderer" render
-stats="$(docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}' "$api" "$generation" "$renderer")"
+stats="$(docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}' "$api" "$staging" "$generation" "$renderer")"
 while IFS= read -r line; do
   printf '::notice title=Container memory and CPU::%s\n' "$line"
 done <<<"$stats"
 
-docker stop -t 20 "$api" "$generation" "$renderer" >/dev/null
-for container in "$api" "$generation" "$renderer"; do
+docker stop -t 20 "$api" "$staging" "$generation" "$renderer" >/dev/null
+for container in "$api" "$staging" "$generation" "$renderer"; do
   test "$(docker inspect --format '{{.State.ExitCode}}' "$container")" = 0
 done
 docker logs "$api" 2>&1 | grep -F '[API] Shutdown complete.'
+docker logs "$staging" 2>&1 | grep -F '[API] Shutdown complete.'
 printf '%s\n' '::notice title=Release readiness::API health and readiness, anonymous rejection, worker startup, and SIGTERM shutdown verified.'
