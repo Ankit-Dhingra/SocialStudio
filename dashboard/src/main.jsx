@@ -252,28 +252,45 @@ function getSceneVisualMeta(type) {
 function App({ canAccessStudio = true, onStudioRequired, accountControls, userId }) {
   // Sidebar Navigation: 'overview' or 'create'
   const [activeNav, setActiveNav] = useState('overview');
+  const [createStatus, setCreateStatus] = useState('');
+  const navigationRequest = useRef(0);
   const activeStageKey = userId ? `socialstudio_active_stage:${userId}` : 'socialstudio_active_stage';
   const activeSessionKey = userId ? `socialstudio_active_session:${userId}` : 'socialstudio_active_session';
 
-  async function openSection(section) {
+  async function openSection(section, reset = false) {
+    const request = ++navigationRequest.current;
+    setCreateStatus('');
     if (section !== 'overview' && !canAccessStudio) {
       onStudioRequired?.();
       return;
     }
     if (section === 'create' && clerkEnabled) {
+      setCreateStatus('Checking credit balance…');
       try {
-        const response = await pipelineFetch(toApiUrl('/api/billing/test/plan'));
-        if (!response.ok || (await response.json()).balance <= 0) {
+        const response = await pipelineFetch(toApiUrl('/api/billing/test/plan'), { cache: 'no-store' });
+        if (!response.ok) throw new Error('Checkout unavailable.');
+        const { balance } = await response.json();
+        if (!Number.isFinite(balance)) throw new Error('Invalid credit balance.');
+        if (request !== navigationRequest.current) return;
+        if (balance <= 0) {
           window.location.assign('/billing');
           return;
         }
       } catch {
-        window.location.assign('/billing');
+        if (request === navigationRequest.current) setCreateStatus('Couldn’t check credits. Select Create Reel to retry.');
         return;
       }
     }
+    setCreateStatus('');
+    if (reset) handleStartNewReel();
     setActiveNav(section);
   }
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('create') !== '1') return;
+    window.history.replaceState(null, '', '/studio');
+    void openSection('create');
+  }, []);
 
   // Create Reel Timeline Stepper: 1: Script, 2: Voiceover, 3: Visuals, 4: Render
   const [stage, setStage] = useState(1);
@@ -971,12 +988,12 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
             <div className="sidebar-logo">
               <Zap size={16} fill="#09090b" />
             </div>
-            <span className="sidebar-brand-title">SocialStudio</span>
+            <a href="/" className="sidebar-brand-title">SocialStudio</a>
           </div>
 
           {/* MENU SECTION */}
           <div className="sidebar-menu-label">Workspace</div>
-          <nav className="sidebar-nav-list">
+          <nav className="sidebar-nav-list" aria-label="Studio workspace">
             <button
               type="button"
               className={`sidebar-nav-item ${activeNav === 'overview' ? 'active' : ''}`}
@@ -1039,6 +1056,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
           MAIN CONTENT VIEWPORT
           ========================================================================= */}
       <main className="main-content">
+        {createStatus && <p className="studio-notice" role="status">{createStatus}</p>}
         {/* =====================================================================
             VIEW 1: OVERVIEW & ANALYTICS (Clean workspace overview)
             ===================================================================== */}
@@ -1051,7 +1069,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                   Studio Overview
                 </h1>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-                  High-retention developer reel production engine & media library.
+                  Manage your drafts, visual plans, and finished reels.
                 </p>
               </div>
 
@@ -1322,11 +1340,7 @@ function App({ canAccessStudio = true, onStudioRequired, accountControls, userId
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => {
-                    if (!canAccessStudio) { openSection('create'); return; }
-                    handleStartNewReel();
-                    openSection('create');
-                  }}
+                  onClick={() => void openSection('create', true)}
                   style={{ height: 38, padding: '0 18px', gap: 8 }}
                 >
                   <PlusCircle size={15} />

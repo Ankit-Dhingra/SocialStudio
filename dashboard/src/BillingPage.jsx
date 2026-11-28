@@ -27,7 +27,11 @@ export function BillingPage() {
       <a className="btn btn-secondary" href="/studio">Studio</a>
       <a className="btn btn-secondary" href="/account">Account</a>
     </nav>
-    <h1>Plans & billing</h1>
+    <header className="billing-heading">
+      <p className="marketing-kicker">Studio billing</p>
+      <h1>Plans & billing</h1>
+      <p>Buy a Creator credit pack and track your payment status here.</p>
+    </header>
     <TestBilling />
     <section className="billing-panel" aria-labelledby="generation-credit-heading">
       <h2 id="generation-credit-heading">Generation credits</h2>

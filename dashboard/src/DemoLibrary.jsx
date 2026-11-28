@@ -45,7 +45,7 @@ export function DemoLibrary() {
         <p>SocialStudio turns technical scripts into short explainers. Browse five finished reels from Behind The Tech.</p>
       </div>
       {clerkEnabled || localStudio ? (
-        <a className="btn btn-primary" href={clerkEnabled ? '/?signin=1' : '/studio'}>
+        <a className="btn btn-primary" href={'/studio'}>
           {clerkEnabled ? 'Sign in to create' : 'Open Studio'}
         </a>
       ) : (

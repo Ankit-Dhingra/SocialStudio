@@ -25,7 +25,7 @@ export function Plans({ checkoutHref }) {
       <h2 id="creator-plan-heading">{creatorPlan.name}</h2>
       <p className="creator-plan-price">{price} <small>one-time</small></p>
       <p><Check size={17} /> {creatorPlan.credits} credits per pack</p>
-      <a className="marketing-primary" href={checkoutHref || preview + '/billing?signin=1'}>Continue to checkout <ArrowRight size={17} /></a>
+      <a className="marketing-primary" href={checkoutHref || preview + '/billing'}>{checkoutHref ? 'Continue to checkout' : 'Sign in to Studio billing'} <ArrowRight size={17} /></a>
       <p className="pricing-note">Checkout is currently available to invited Studio users.</p>
     </section>
     <PlanFaq />
